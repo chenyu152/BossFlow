@@ -12,6 +12,7 @@ from backend.storage.paths import BASE_DIR
 DATA_DIR = BASE_DIR / "data"
 PIPELINE_PATH = DATA_DIR / "pipeline.md"
 REPORTS_DIR = BASE_DIR / "reports" / "jobs"
+RESUMES_DIR = BASE_DIR / "output" / "resumes"
 DECISION_STATUSES = {"needs_llm", "needs_review", "ready_to_greet", "greeted", "skipped"}
 
 
@@ -112,6 +113,10 @@ def _item_from_line(line: str, status: str) -> dict[str, Any] | None:
         "llmFitLevel": meta.get("llmFitLevel", ""),
         "llmRecommendation": meta.get("llmRecommendation", ""),
         "greetingReady": meta.get("greetingReady", ""),
+        "resumeSuggestionId": meta.get("resumeSuggestionId", ""),
+        "resumeSuggestionPath": meta.get("resumeSuggestionPath", ""),
+        "resumeSuggestionJsonPath": meta.get("resumeSuggestionJsonPath", ""),
+        "resumeSuggestedAt": meta.get("resumeSuggestedAt", ""),
         "decisionStatus": meta.get("decisionStatus") or ("needs_review" if meta.get("reportPath") else "needs_llm"),
         "raw": line,
     }
@@ -283,6 +288,27 @@ def _safe_delete_report(path_value: str) -> list[str]:
     return deleted
 
 
+def _safe_delete_resume_artifact(path_value: str) -> list[str]:
+    if not path_value:
+        return []
+    deleted: list[str] = []
+    resumes_root = RESUMES_DIR.resolve()
+    candidates = [Path(path_value)]
+    if candidates[0].suffix.lower() == ".md":
+        candidates.append(candidates[0].with_suffix(".json"))
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resumes_root != resolved and resumes_root not in resolved.parents:
+            continue
+        if resolved.exists() and resolved.is_file():
+            resolved.unlink()
+            deleted.append(str(resolved))
+    return deleted
+
+
 def _safe_report_path(path_value: str) -> Path:
     if not path_value:
         raise HTTPException(status_code=404, detail="Pipeline item has no report")
@@ -323,6 +349,7 @@ def delete_pipeline_item(source_key: str) -> dict[str, Any]:
     updated: list[str] = []
     removed = False
     deleted_reports: list[str] = []
+    deleted_resume_artifacts: list[str] = []
     for line in lines:
         meta = _metadata_from_line(line)
         if meta.get("sourceKey") != source_key:
@@ -330,7 +357,14 @@ def delete_pipeline_item(source_key: str) -> dict[str, Any]:
             continue
         removed = True
         deleted_reports.extend(_safe_delete_report(str(meta.get("reportPath") or "")))
+        deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeSuggestionPath") or "")))
     if not removed:
-        return {"ok": False, "deleted": False, "deletedReports": [], **read_pipeline()}
+        return {"ok": False, "deleted": False, "deletedReports": [], "deletedResumeArtifacts": [], **read_pipeline()}
     PIPELINE_PATH.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")
-    return {"ok": True, "deleted": True, "deletedReports": deleted_reports, **read_pipeline()}
+    return {
+        "ok": True,
+        "deleted": True,
+        "deletedReports": deleted_reports,
+        "deletedResumeArtifacts": deleted_resume_artifacts,
+        **read_pipeline(),
+    }

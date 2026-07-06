@@ -113,6 +113,10 @@ export type PipelineItem = {
   llmFitLevel: string;
   llmRecommendation: string;
   greetingReady: string;
+  resumeSuggestionId: string;
+  resumeSuggestionPath: string;
+  resumeSuggestionJsonPath: string;
+  resumeSuggestedAt: string;
   decisionStatus: DecisionStatus;
   raw: string;
 };
@@ -182,6 +186,7 @@ export type PipelineDeleteResponse = PipelineResponse & {
   ok: boolean;
   deleted: boolean;
   deletedReports: string[];
+  deletedResumeArtifacts?: string[];
 };
 
 export type PipelineReportResponse = {
@@ -205,6 +210,16 @@ export type LlmEvaluatePipelineResponse = {
     greetingReady: string;
   };
   pipeline: PipelineResponse;
+};
+
+export type ResumeSuggestionResponse = {
+  ok: boolean;
+  sourceKey: string;
+  resumeSuggestionId: string;
+  suggestionPath: string;
+  jsonPath?: string;
+  content: string;
+  pipeline?: PipelineResponse;
 };
 
 export type TaskStatusResponse = {

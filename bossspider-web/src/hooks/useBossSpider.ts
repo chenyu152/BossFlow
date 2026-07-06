@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { parseLog } from '../utils';
-import type { ConfigPatch, ConfigPayload, Job, PipelineResponse, Status } from '../types';
+import type { ConfigPatch, ConfigPayload, Job, PipelineResponse, ResumeSuggestionResponse, Status } from '../types';
 
 export function useBossSpider() {
   const [status, setStatus] = useState<Status>('ready');
@@ -23,6 +23,7 @@ export function useBossSpider() {
   const [loading, setLoading] = useState(false);
   const [jobScoringIds, setJobScoringIds] = useState<number[]>([]);
   const [llmEvaluatingKeys, setLlmEvaluatingKeys] = useState<string[]>([]);
+  const [resumeSuggestingKeys, setResumeSuggestingKeys] = useState<string[]>([]);
   const firstStatusLoad = useRef(true);
 
   const parsedLogs = useMemo(() => logs.map(parseLog), [logs]);
@@ -263,6 +264,31 @@ export function useBossSpider() {
     }
   }, [showNotice]);
 
+  const generateResumeSuggestions = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
+    setResumeSuggestingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
+    showNotice('定制简历建议生成中，可能需要几十秒');
+    try {
+      const data = await bossApi.generateResumeSuggestions(sourceKey);
+      if (data.pipeline) setPipeline(data.pipeline);
+      showNotice(`定制简历建议已生成：${data.resumeSuggestionId}`);
+      return data;
+    } catch (error) {
+      showNotice(`定制简历建议生成失败：${(error as Error).message}`);
+      return null;
+    } finally {
+      setResumeSuggestingKeys((keys) => keys.filter((key) => key !== sourceKey));
+    }
+  }, [showNotice]);
+
+  const loadResumeSuggestion = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
+    try {
+      return await bossApi.getResumeSuggestion(sourceKey);
+    } catch (error) {
+      showNotice(`加载定制简历建议失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
   const updatePipelineStatus = useCallback(async (sourceKey: string, decisionStatus: string) => {
     try {
       const data = await bossApi.updatePipelineStatus(sourceKey, decisionStatus);
@@ -279,7 +305,8 @@ export function useBossSpider() {
     try {
       const data = await bossApi.deletePipelineItem(sourceKey);
       setPipeline(data);
-      showNotice(`已删除 Pipeline 条目${data.deletedReports.length ? `，同时删除报告 ${data.deletedReports.length} 个` : ''}`);
+      const deletedResumeCount = data.deletedResumeArtifacts?.length || 0;
+      showNotice(`已删除 Pipeline 条目${data.deletedReports.length ? `，同时删除报告 ${data.deletedReports.length} 个` : ''}${deletedResumeCount ? `，简历建议 ${deletedResumeCount} 个` : ''}`);
       return true;
     } catch (error) {
       showNotice(`删除失败：${(error as Error).message}`);
@@ -309,6 +336,7 @@ export function useBossSpider() {
     loading,
     jobScoringIds,
     llmEvaluatingKeys,
+    resumeSuggestingKeys,
     isRunning,
     setJobSearch,
     setSortJobsByScore,
@@ -334,6 +362,8 @@ export function useBossSpider() {
     llmEvaluatePipelineItem,
     loadJobDetail,
     loadPipelineReport,
+    generateResumeSuggestions,
+    loadResumeSuggestion,
     updatePipelineStatus,
     deletePipelineItem,
   };

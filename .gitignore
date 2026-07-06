@@ -22,6 +22,9 @@ bossspider-web/node_modules/
 reports/jobs/
 reports/**/*.md
 reports/**/*.json
+output/resumes/
+output/**/*.md
+output/**/*.json
 data/pipeline.md
 data/*.json
 *.sqlite

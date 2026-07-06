@@ -1,9 +1,9 @@
-import { ArrowDownWideNarrow, BookOpenText, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, BookOpenText, FileText, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DetailItem } from '../components/DetailItem';
-import type { DecisionStatus, Job, PipelineItem, PipelineReportResponse, PipelineResponse } from '../types';
+import type { DecisionStatus, Job, PipelineItem, PipelineReportResponse, PipelineResponse, ResumeSuggestionResponse } from '../types';
 
 const DECISION_LABELS: Record<DecisionStatus, string> = {
   needs_llm: '待精评',
@@ -71,10 +71,13 @@ export function Pipeline({
   onScoreAll,
   onLlmEvaluate,
   llmEvaluatingKeys,
+  resumeSuggestingKeys,
   sortByLlmScore,
   setSortByLlmScore,
   onLoadJobDetail,
   onLoadReport,
+  onGenerateResumeSuggestions,
+  onLoadResumeSuggestion,
   onUpdateStatus,
   onDeleteItem,
 }: {
@@ -84,10 +87,13 @@ export function Pipeline({
   onScoreAll: () => void;
   onLlmEvaluate: (sourceKey: string) => void;
   llmEvaluatingKeys: string[];
+  resumeSuggestingKeys: string[];
   sortByLlmScore: boolean;
   setSortByLlmScore: (value: boolean | ((current: boolean) => boolean)) => void;
   onLoadJobDetail: (project: string, jobId: number) => Promise<Job | null>;
   onLoadReport: (sourceKey: string) => Promise<PipelineReportResponse | null>;
+  onGenerateResumeSuggestions: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
+  onLoadResumeSuggestion: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
   onUpdateStatus: (sourceKey: string, decisionStatus: string) => Promise<boolean>;
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
 }) {
@@ -97,14 +103,18 @@ export function Pipeline({
   const [selectedSourceKey, setSelectedSourceKey] = useState('');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [report, setReport] = useState<PipelineReportResponse | null>(null);
+  const [resumeSuggestion, setResumeSuggestion] = useState<ResumeSuggestionResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(false);
   const evaluatingSet = new Set(llmEvaluatingKeys);
+  const suggestingSet = new Set(resumeSuggestingKeys);
 
   const selectedItem = useMemo(
     () => pending.find((item) => item.sourceKey === selectedSourceKey) || null,
     [pending, selectedSourceKey],
   );
+  const isSelectedResumeSuggesting = selectedItem ? suggestingSet.has(selectedItem.sourceKey) : false;
 
   const displayedPending = useMemo(() => {
     const filtered = statusFilter === 'all'
@@ -119,6 +129,7 @@ export function Pipeline({
       setSelectedSourceKey('');
       setSelectedJob(null);
       setReport(null);
+      setResumeSuggestion(null);
     }
   }, [selectedItem, selectedSourceKey]);
 
@@ -133,6 +144,7 @@ export function Pipeline({
     setSelectedSourceKey(item.sourceKey);
     setSelectedJob(null);
     setReport(null);
+    setResumeSuggestion(null);
     if (!item.project || !item.jobId) return;
     setDetailLoading(true);
     try {
@@ -158,6 +170,32 @@ export function Pipeline({
     }
   };
 
+  const viewResumeSuggestion = async () => {
+    if (!selectedItem?.resumeSuggestionPath) return;
+    if (resumeSuggestion?.sourceKey === selectedItem.sourceKey) {
+      setResumeSuggestion(null);
+      return;
+    }
+    setResumeLoading(true);
+    try {
+      const data = await onLoadResumeSuggestion(selectedItem.sourceKey);
+      if (data) setResumeSuggestion(data);
+    } finally {
+      setResumeLoading(false);
+    }
+  };
+
+  const generateResumeSuggestion = async () => {
+    if (!selectedItem) return;
+    setResumeLoading(true);
+    try {
+      const data = await onGenerateResumeSuggestions(selectedItem.sourceKey);
+      if (data) setResumeSuggestion(data);
+    } finally {
+      setResumeLoading(false);
+    }
+  };
+
   const changeStatus = async (sourceKey: string, decisionStatus: DecisionStatus) => {
     await onUpdateStatus(sourceKey, decisionStatus);
   };
@@ -170,6 +208,7 @@ export function Pipeline({
       setSelectedSourceKey('');
       setSelectedJob(null);
       setReport(null);
+      setResumeSuggestion(null);
     }
   };
 
@@ -425,6 +464,44 @@ export function Pipeline({
                 </div>
               )}
 
+              <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-indigo-400">Resume</span>
+                  {selectedItem.resumeSuggestionId && (
+                    <span className="text-xs font-semibold text-indigo-200">{selectedItem.resumeSuggestionId}</span>
+                  )}
+                </div>
+                <div className="text-xs leading-relaxed text-zinc-400">
+                  Generate JD-specific resume suggestions first. This will not change cv.md.
+                </div>
+                {selectedItem.resumeSuggestedAt && (
+                  <div className="text-[10px] text-zinc-500">Generated {selectedItem.resumeSuggestedAt}</div>
+                )}
+                {selectedItem.resumeSuggestionPath && (
+                  <div className="break-all text-[10px] text-zinc-500">{selectedItem.resumeSuggestionPath}</div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={generateResumeSuggestion}
+                    disabled={isSelectedResumeSuggesting || resumeLoading}
+                    className="inline-flex items-center gap-2 rounded border border-indigo-800/70 bg-indigo-950/40 px-2.5 py-1.5 text-xs font-medium text-indigo-200 hover:bg-indigo-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
+                  >
+                    {isSelectedResumeSuggesting || resumeLoading ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+                    {selectedItem.resumeSuggestionPath ? 'Regenerate suggestions' : 'Generate suggestions'}
+                  </button>
+                  {selectedItem.resumeSuggestionPath && (
+                    <button
+                      onClick={viewResumeSuggestion}
+                      disabled={resumeLoading}
+                      className="inline-flex items-center gap-2 rounded border border-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-50 transition-colors"
+                    >
+                      {resumeLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
+                      View suggestions
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <div className="text-xs text-zinc-500 mb-1">Category</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -488,6 +565,45 @@ export function Pipeline({
               <article className="max-w-none text-sm leading-7 text-zinc-300 [&_h1]:mb-5 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:text-zinc-100 [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:border-b [&_h2]:border-zinc-800 [&_h2]:pb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-100 [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-zinc-100 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_strong]:text-zinc-100 [&_code]:rounded [&_code]:bg-zinc-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-emerald-300 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-zinc-800 [&_pre]:bg-zinc-900 [&_pre]:p-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-zinc-800 [&_th]:bg-zinc-900 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-zinc-100 [&_td]:border [&_td]:border-zinc-800 [&_td]:px-3 [&_td]:py-2 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-700 [&_blockquote]:pl-4 [&_blockquote]:text-zinc-400">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {report.content}
+                </ReactMarkdown>
+              </article>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resumeSuggestion && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5"
+          onClick={() => setResumeSuggestion(null)}
+        >
+          <div
+            className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <FileText size={16} className="text-indigo-400" />
+                  <h3 className="truncate text-base font-semibold text-zinc-100">
+                    Resume Suggestions {resumeSuggestion.resumeSuggestionId}
+                  </h3>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                  <span className="max-w-3xl truncate">{resumeSuggestion.suggestionPath}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setResumeSuggestion(null)}
+                className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="overflow-auto px-8 py-6">
+              <article className="max-w-none text-sm leading-7 text-zinc-300 [&_h1]:mb-5 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:text-zinc-100 [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:border-b [&_h2]:border-zinc-800 [&_h2]:pb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-100 [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-zinc-100 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_strong]:text-zinc-100 [&_code]:rounded [&_code]:bg-zinc-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-indigo-300 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-zinc-800 [&_pre]:bg-zinc-900 [&_pre]:p-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-zinc-800 [&_th]:bg-zinc-900 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-zinc-100 [&_td]:border [&_td]:border-zinc-800 [&_td]:px-3 [&_td]:py-2 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-indigo-700 [&_blockquote]:pl-4 [&_blockquote]:text-zinc-400">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {resumeSuggestion.content}
                 </ReactMarkdown>
               </article>
             </div>

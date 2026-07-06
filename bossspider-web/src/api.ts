@@ -8,6 +8,7 @@ import type {
   PipelineReportResponse,
   PipelineResponse,
   ProjectListResponse,
+  ResumeSuggestionResponse,
   ScoreJobsResponse,
   ScorePipelineResponse,
   TaskStatusResponse,
@@ -118,6 +119,17 @@ export const bossApi = {
       method: 'POST',
       body: JSON.stringify({ sourceKey }),
     });
+  },
+
+  generateResumeSuggestions(sourceKey: string) {
+    return request<ResumeSuggestionResponse>('/api/resume/suggestions', {
+      method: 'POST',
+      body: JSON.stringify({ sourceKey }),
+    });
+  },
+
+  getResumeSuggestion(sourceKey: string) {
+    return request<ResumeSuggestionResponse>(`/api/resume/suggestion?sourceKey=${encodeURIComponent(sourceKey)}`);
   },
 
   getTaskStatus() {

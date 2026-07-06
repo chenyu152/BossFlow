@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
+from backend.schemas.resume import ResumeSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
 from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
@@ -21,6 +22,7 @@ from backend.services.project_service import (
     save_form_config,
     stats_for_project,
 )
+from backend.services.resume_service import generate_resume_suggestions, read_resume_suggestion
 from backend.services.task_service import TaskManager
 from crawler.boss import load_config
 
@@ -124,6 +126,16 @@ def score_pipeline(payload: ScorePipelineRequest):
 @app.post("/api/pipeline/llm-evaluate")
 def llm_evaluate_pipeline(payload: LlmEvaluatePipelineItemRequest):
     return llm_evaluate_pipeline_item(payload.sourceKey)
+
+
+@app.post("/api/resume/suggestions")
+def create_resume_suggestions(payload: ResumeSuggestionRequest):
+    return generate_resume_suggestions(payload.sourceKey)
+
+
+@app.get("/api/resume/suggestion")
+def get_resume_suggestion(sourceKey: str):
+    return read_resume_suggestion(sourceKey)
 
 
 @app.post("/api/tasks/crawl")
