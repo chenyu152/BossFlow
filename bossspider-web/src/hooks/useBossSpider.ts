@@ -254,6 +254,15 @@ export function useBossSpider() {
     }
   }, [showNotice]);
 
+  const loadPipelineReport = useCallback(async (sourceKey: string) => {
+    try {
+      return await bossApi.getPipelineReport(sourceKey);
+    } catch (error) {
+      showNotice(`加载报告失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
   const updatePipelineStatus = useCallback(async (sourceKey: string, decisionStatus: string) => {
     try {
       const data = await bossApi.updatePipelineStatus(sourceKey, decisionStatus);
@@ -324,6 +333,7 @@ export function useBossSpider() {
     scoreAllPipeline,
     llmEvaluatePipelineItem,
     loadJobDetail,
+    loadPipelineReport,
     updatePipelineStatus,
     deletePipelineItem,
   };

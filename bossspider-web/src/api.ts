@@ -5,6 +5,7 @@ import type {
   JobsResponse,
   LlmEvaluatePipelineResponse,
   PipelineDeleteResponse,
+  PipelineReportResponse,
   PipelineResponse,
   ProjectListResponse,
   ScoreJobsResponse,
@@ -64,6 +65,10 @@ export const bossApi = {
 
   getPipeline() {
     return request<PipelineResponse>('/api/pipeline');
+  },
+
+  getPipelineReport(sourceKey: string) {
+    return request<PipelineReportResponse>(`/api/pipeline/report?sourceKey=${encodeURIComponent(sourceKey)}`);
   },
 
   addJobsToPipeline(project: string, jobIds: number[]) {

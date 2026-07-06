@@ -1,7 +1,9 @@
-import { ArrowDownWideNarrow, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, BookOpenText, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { DetailItem } from '../components/DetailItem';
-import type { DecisionStatus, Job, PipelineItem, PipelineResponse } from '../types';
+import type { DecisionStatus, Job, PipelineItem, PipelineReportResponse, PipelineResponse } from '../types';
 
 const DECISION_LABELS: Record<DecisionStatus, string> = {
   needs_llm: '待精评',
@@ -72,6 +74,7 @@ export function Pipeline({
   sortByLlmScore,
   setSortByLlmScore,
   onLoadJobDetail,
+  onLoadReport,
   onUpdateStatus,
   onDeleteItem,
 }: {
@@ -84,6 +87,7 @@ export function Pipeline({
   sortByLlmScore: boolean;
   setSortByLlmScore: (value: boolean | ((current: boolean) => boolean)) => void;
   onLoadJobDetail: (project: string, jobId: number) => Promise<Job | null>;
+  onLoadReport: (sourceKey: string) => Promise<PipelineReportResponse | null>;
   onUpdateStatus: (sourceKey: string, decisionStatus: string) => Promise<boolean>;
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
 }) {
@@ -92,7 +96,9 @@ export function Pipeline({
   const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all');
   const [selectedSourceKey, setSelectedSourceKey] = useState('');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [report, setReport] = useState<PipelineReportResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
   const evaluatingSet = new Set(llmEvaluatingKeys);
 
   const selectedItem = useMemo(
@@ -112,6 +118,7 @@ export function Pipeline({
     if (selectedSourceKey && !selectedItem) {
       setSelectedSourceKey('');
       setSelectedJob(null);
+      setReport(null);
     }
   }, [selectedItem, selectedSourceKey]);
 
@@ -125,6 +132,7 @@ export function Pipeline({
   const selectItem = async (item: PipelineItem) => {
     setSelectedSourceKey(item.sourceKey);
     setSelectedJob(null);
+    setReport(null);
     if (!item.project || !item.jobId) return;
     setDetailLoading(true);
     try {
@@ -132,6 +140,21 @@ export function Pipeline({
       if (job) setSelectedJob(job);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const viewReport = async () => {
+    if (!selectedItem?.reportPath) return;
+    if (report?.sourceKey === selectedItem.sourceKey) {
+      setReport(null);
+      return;
+    }
+    setReportLoading(true);
+    try {
+      const data = await onLoadReport(selectedItem.sourceKey);
+      if (data) setReport(data);
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -144,10 +167,11 @@ export function Pipeline({
     const ok = window.confirm('Delete this pipeline item and its generated LLM report?');
     if (!ok) return;
     if (await onDeleteItem(selectedItem.sourceKey)) {
-      setSelectedSourceKey('');
-      setSelectedJob(null);
-    }
-  };
+              setSelectedSourceKey('');
+              setSelectedJob(null);
+              setReport(null);
+            }
+          };
 
   return (
     <div className="h-full flex flex-col">
@@ -374,7 +398,19 @@ export function Pipeline({
                   </div>
                   {selectedItem.llmFitLevel && <div className="text-xs text-emerald-400">{selectedItem.llmFitLevel}</div>}
                   {selectedItem.llmRecommendation && <div className="text-xs leading-relaxed text-zinc-300">{selectedItem.llmRecommendation}</div>}
-                  {selectedItem.reportPath && <div className="break-all text-[10px] text-zinc-500">{selectedItem.reportPath}</div>}
+                  {selectedItem.reportPath && (
+                    <>
+                      <div className="break-all text-[10px] text-zinc-500">{selectedItem.reportPath}</div>
+                      <button
+                        onClick={viewReport}
+                        disabled={reportLoading}
+                        className="inline-flex items-center gap-2 rounded border border-emerald-900/70 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50 transition-colors"
+                      >
+                        {reportLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
+                        View report
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -407,6 +443,38 @@ export function Pipeline({
       {pipeline?.path && (
         <div className="mt-3 text-xs text-zinc-600 truncate">
           Source file: {pipeline.path}
+        </div>
+      )}
+
+      {report && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5">
+          <div className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <BookOpenText size={16} className="text-emerald-400" />
+                  <h3 className="truncate text-base font-semibold text-zinc-100">{report.title || `Report ${report.reportId}`}</h3>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                  {report.reportId && <span>Report {report.reportId}</span>}
+                  <span className="max-w-3xl truncate">{report.reportPath}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setReport(null)}
+                className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="overflow-auto px-8 py-6">
+              <article className="max-w-none text-sm leading-7 text-zinc-300 [&_h1]:mb-5 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:text-zinc-100 [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:border-b [&_h2]:border-zinc-800 [&_h2]:pb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-100 [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-zinc-100 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_strong]:text-zinc-100 [&_code]:rounded [&_code]:bg-zinc-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-emerald-300 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-zinc-800 [&_pre]:bg-zinc-900 [&_pre]:p-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-zinc-800 [&_th]:bg-zinc-900 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-zinc-100 [&_td]:border [&_td]:border-zinc-800 [&_td]:px-3 [&_td]:py-2 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-700 [&_blockquote]:pl-4 [&_blockquote]:text-zinc-400">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {report.content}
+                </ReactMarkdown>
+              </article>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -184,6 +184,15 @@ export type PipelineDeleteResponse = PipelineResponse & {
   deletedReports: string[];
 };
 
+export type PipelineReportResponse = {
+  ok: boolean;
+  sourceKey: string;
+  reportId: string;
+  reportPath: string;
+  title: string;
+  content: string;
+};
+
 export type LlmEvaluatePipelineResponse = {
   ok: boolean;
   reportId: string;

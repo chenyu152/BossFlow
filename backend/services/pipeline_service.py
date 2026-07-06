@@ -283,6 +283,39 @@ def _safe_delete_report(path_value: str) -> list[str]:
     return deleted
 
 
+def _safe_report_path(path_value: str) -> Path:
+    if not path_value:
+        raise HTTPException(status_code=404, detail="Pipeline item has no report")
+    reports_root = REPORTS_DIR.resolve()
+    try:
+        resolved = Path(path_value).resolve()
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Invalid report path") from exc
+    if reports_root != resolved and reports_root not in resolved.parents:
+        raise HTTPException(status_code=403, detail="Report path is outside the reports directory")
+    if resolved.suffix.lower() != ".md":
+        raise HTTPException(status_code=400, detail="Only Markdown reports can be viewed")
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Report file not found")
+    return resolved
+
+
+def read_pipeline_report(source_key: str) -> dict[str, Any]:
+    item = find_pipeline_item(source_key)
+    if not item:
+        raise HTTPException(status_code=404, detail=f"Pipeline item not found: {source_key}")
+    report_path = _safe_report_path(str(item.get("reportPath") or ""))
+    content = report_path.read_text(encoding="utf-8")
+    return {
+        "ok": True,
+        "sourceKey": source_key,
+        "reportId": item.get("reportId", ""),
+        "reportPath": str(report_path),
+        "title": f"{item.get('company') or ''} - {item.get('title') or ''}".strip(" -"),
+        "content": content,
+    }
+
+
 def delete_pipeline_item(source_key: str) -> dict[str, Any]:
     ensure_pipeline_file()
     text = PIPELINE_PATH.read_text(encoding="utf-8")

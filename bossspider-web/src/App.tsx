@@ -180,6 +180,7 @@ export default function App() {
                 sortByLlmScore={boss.sortPipelineByLlmScore}
                 setSortByLlmScore={boss.setSortPipelineByLlmScore}
                 onLoadJobDetail={boss.loadJobDetail}
+                onLoadReport={boss.loadPipelineReport}
                 onUpdateStatus={boss.updatePipelineStatus}
                 onDeleteItem={boss.deletePipelineItem}
               />

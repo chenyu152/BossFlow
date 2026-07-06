@@ -12,7 +12,7 @@ from backend.services.crawler_service import process_partial_task, start_crawl_t
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
 from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
 from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
-from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, update_pipeline_item_status
+from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
 from backend.services.project_service import (
     config_payload,
     default_project_name,
@@ -88,6 +88,11 @@ def score_job_rows(payload: ScoreJobsRequest):
 @app.get("/api/pipeline")
 def get_pipeline():
     return read_pipeline()
+
+
+@app.get("/api/pipeline/report")
+def get_pipeline_report(sourceKey: str):
+    return read_pipeline_report(sourceKey)
 
 
 @app.post("/api/pipeline/jobs")
