@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownWideNarrow, CheckSquare, Download, ListPlus, Loader2, RefreshCw, Search, Square, Wand2, X } from 'lucide-react';
 import { DetailItem } from '../components/DetailItem';
+import { JobDescription } from '../components/JobDescription';
 import type { Job } from '../types';
 
 export function Jobs({
@@ -450,12 +451,7 @@ export function Jobs({
                   ))}
                 </div>
               </div>
-              <div>
-                <div className="text-xs text-zinc-500 mb-1">Description</div>
-                <div className="text-sm text-zinc-400 leading-relaxed bg-zinc-900/50 p-3 rounded border border-zinc-800/50 whitespace-pre-wrap">
-                  {selectedJob.desc || 'No description.'}
-                </div>
-              </div>
+              <JobDescription text={selectedJob.desc} />
               {selectedJob.url && (
                 <div>
                   <a href={selectedJob.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline">

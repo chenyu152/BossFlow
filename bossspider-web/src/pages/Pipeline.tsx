@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DetailItem } from '../components/DetailItem';
+import { JobDescription } from '../components/JobDescription';
 import type { DecisionStatus, Job, PipelineItem, PipelineReportResponse, PipelineResponse, ResumeSuggestionResponse } from '../types';
 
 const DECISION_LABELS: Record<DecisionStatus, string> = {
@@ -511,12 +512,7 @@ export function Pipeline({
                 </div>
               </div>
 
-              <div>
-                <div className="text-xs text-zinc-500 mb-1">Description</div>
-                <div className="text-sm text-zinc-400 leading-relaxed bg-zinc-900/50 p-3 rounded border border-zinc-800/50 whitespace-pre-wrap">
-                  {selectedJob?.desc || 'No description loaded.'}
-                </div>
-              </div>
+              <JobDescription text={selectedJob?.desc} />
 
               {(selectedJob?.url || selectedItem.url) && (
                 <a href={selectedJob?.url || selectedItem.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline">
