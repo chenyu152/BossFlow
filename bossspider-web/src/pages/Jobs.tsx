@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownWideNarrow, CheckSquare, Download, ListPlus, Loader2, RefreshCw, Search, Square, Wand2, X } from 'lucide-react';
 import { DetailItem } from '../components/DetailItem';
 import type { Job } from '../types';
@@ -30,16 +30,40 @@ export function Jobs({
 }) {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const dragStateRef = useRef<{
+    active: boolean;
+    anchorIndex: number;
+    baseIds: Set<number>;
+    moved: boolean;
+    mode: 'add' | 'remove';
+  }>({
+    active: false,
+    anchorIndex: -1,
+    baseIds: new Set(),
+    moved: false,
+    mode: 'add',
+  });
+  const suppressRowClickRef = useRef(false);
+  const [dragRange, setDragRange] = useState<{ start: number; end: number } | null>(null);
 
   const displayJobs = useMemo(() => {
     if (!sortByScore) return jobs;
     return [...jobs].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
   }, [jobs, sortByScore]);
+  const totalPages = Math.max(1, Math.ceil(displayJobs.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageEnd = Math.min(pageStart + pageSize, displayJobs.length);
+  const pageJobs = displayJobs.slice(pageStart, pageEnd);
   const selectedJobs = jobs.filter((job) => selectedIds.has(job.id));
-  const allVisibleSelected = displayJobs.length > 0 && displayJobs.every((job) => selectedIds.has(job.id));
-  const visibleIds = displayJobs.map((job) => job.id);
+  const allVisibleSelected = pageJobs.length > 0 && pageJobs.every((job) => selectedIds.has(job.id));
+  const visibleIds = pageJobs.map((job) => job.id);
+  const allIds = displayJobs.map((job) => job.id);
   const scoringSet = new Set(scoringJobIds);
   const scoringVisible = visibleIds.some((id) => scoringSet.has(id));
+  const scoringAll = allIds.some((id) => scoringSet.has(id));
   const scoringSelected = selectedJobs.some((job) => scoringSet.has(job.id));
 
   useEffect(() => {
@@ -49,6 +73,32 @@ export function Jobs({
     }
     setSelectedIds((current) => new Set([...current].filter((id) => jobs.some((job) => job.id === id))));
   }, [jobs, selectedJob]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, sortByScore, pageSize]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    const stopDrag = () => {
+      const drag = dragStateRef.current;
+      if (!drag.active) return;
+      if (drag.moved) {
+        suppressRowClickRef.current = true;
+        window.setTimeout(() => {
+          suppressRowClickRef.current = false;
+        }, 0);
+      }
+      dragStateRef.current = { active: false, anchorIndex: -1, baseIds: new Set(), moved: false, mode: 'add' };
+      setDragRange(null);
+    };
+
+    window.addEventListener('mouseup', stopDrag);
+    return () => window.removeEventListener('mouseup', stopDrag);
+  }, []);
 
   const toggleJob = (jobId: number) => {
     setSelectedIds((current) => {
@@ -62,10 +112,73 @@ export function Jobs({
   const toggleAllVisible = () => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (allVisibleSelected) displayJobs.forEach((job) => next.delete(job.id));
-      else displayJobs.forEach((job) => next.add(job.id));
+      if (allVisibleSelected) pageJobs.forEach((job) => next.delete(job.id));
+      else pageJobs.forEach((job) => next.add(job.id));
       return next;
     });
+  };
+
+  const isInteractiveTarget = (target: EventTarget | null) => (
+    target instanceof HTMLElement
+    && Boolean(target.closest('button, a, input, select, textarea'))
+  );
+
+  const beginRowDrag = (event: React.MouseEvent, index: number) => {
+    if (event.button !== 0 || isInteractiveTarget(event.target)) return;
+    event.preventDefault();
+    const job = pageJobs[index];
+    dragStateRef.current = {
+      active: true,
+      anchorIndex: index,
+      baseIds: new Set(selectedIds),
+      moved: false,
+      mode: job && selectedIds.has(job.id) ? 'remove' : 'add',
+    };
+  };
+
+  const beginSelectionDrag = (event: React.MouseEvent, index: number) => {
+    event.stopPropagation();
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const job = pageJobs[index];
+    dragStateRef.current = {
+      active: true,
+      anchorIndex: index,
+      baseIds: new Set(selectedIds),
+      moved: false,
+      mode: job && selectedIds.has(job.id) ? 'remove' : 'add',
+    };
+  };
+
+  const updateRowDrag = (index: number) => {
+    const drag = dragStateRef.current;
+    if (!drag.active || drag.anchorIndex < 0) return;
+    if (index === drag.anchorIndex && !drag.moved) return;
+    drag.moved = true;
+    const start = Math.min(drag.anchorIndex, index);
+    const end = Math.max(drag.anchorIndex, index);
+    setDragRange({ start, end });
+    setSelectedIds(() => {
+      const next = new Set(drag.baseIds);
+      for (let cursor = start; cursor <= end; cursor += 1) {
+        const job = pageJobs[cursor];
+        if (!job) continue;
+        if (drag.mode === 'add') next.add(job.id);
+        else next.delete(job.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectionCell = (event: React.MouseEvent, jobId: number) => {
+    event.stopPropagation();
+    if (suppressRowClickRef.current) return;
+    toggleJob(jobId);
+  };
+
+  const openJobDetails = (job: Job) => {
+    if (suppressRowClickRef.current) return;
+    setSelectedJob(job);
   };
 
   const riskText = (risk?: string) => {
@@ -77,8 +190,8 @@ export function Jobs({
 
   return (
     <div className="h-full flex flex-col relative">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-2 text-zinc-500" size={14} />
             <input
@@ -102,7 +215,15 @@ export function Jobs({
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
           >
             {scoringVisible ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            Score visible
+            Score page
+          </button>
+          <button
+            onClick={() => onScoreJobs(allIds)}
+            disabled={!allIds.length || scoringAll}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
+          >
+            {scoringAll ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+            Score all
           </button>
           <button
             onClick={() => onScoreJobs(selectedJobs.map((job) => job.id))}
@@ -140,13 +261,63 @@ export function Jobs({
         </button>
       </div>
 
-      <div className="flex-1 border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex">
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+        <div>
+          Showing {displayJobs.length ? pageStart + 1 : 0}-{pageEnd} / {displayJobs.length.toLocaleString()}
+          {selectedJobs.length > 0 && <span className="ml-2 text-indigo-300">Selected {selectedJobs.length}</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <span>Rows</span>
+          <select
+            value={pageSize}
+            onChange={(event) => setPageSize(Number(event.target.value))}
+            className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 outline-none focus:border-indigo-600"
+          >
+            {[100, 200, 500].map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={safePage <= 1}
+            className="rounded border border-zinc-800 px-2 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
+          >
+            Prev
+          </button>
+          <span>Page {safePage} / {totalPages}</span>
+          <button
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={safePage >= totalPages}
+            className="rounded border border-zinc-800 px-2 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex">
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+          <table className="w-full table-fixed text-left text-xs select-none">
+            <colgroup>
+              <col className="w-[4%]" />
+              <col className="w-[4%]" />
+              <col className="w-[22%]" />
+              <col className="w-[22%]" />
+              <col className="w-[7%]" />
+              <col className="w-[10%]" />
+              <col className="w-[12%]" />
+              <col className="w-[6%]" />
+              <col className="w-[8%]" />
+              <col className="w-[5%]" />
+            </colgroup>
             <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800 shadow-sm z-10">
               <tr>
-                <th className="px-4 py-2.5 font-medium text-zinc-400 w-12">
-                  <button onClick={toggleAllVisible} className="text-zinc-500 hover:text-zinc-200 transition-colors" title={allVisibleSelected ? 'Unselect visible jobs' : 'Select visible jobs'}>
+                <th className="font-medium text-zinc-400 w-12">
+                  <button
+                    onClick={toggleAllVisible}
+                    className="flex h-full w-full items-center px-4 py-2.5 text-zinc-500 hover:bg-indigo-950/20 hover:text-zinc-200 transition-colors"
+                    title={allVisibleSelected ? 'Unselect visible jobs' : 'Select visible jobs'}
+                  >
                     {allVisibleSelected ? <CheckSquare size={15} /> : <Square size={15} />}
                   </button>
                 </th>
@@ -162,27 +333,35 @@ export function Jobs({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
-              {displayJobs.map((job, index) => {
+              {pageJobs.map((job, index) => {
                 const isScoring = scoringSet.has(job.id);
                 return (
-                <tr key={job.id} onClick={() => setSelectedJob(job)} className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${selectedJob?.id === job.id ? 'bg-zinc-800/60' : ''} ${isScoring ? 'bg-indigo-950/20' : ''}`}>
-                  <td className="px-4 py-2 text-zinc-500">
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleJob(job.id);
-                      }}
-                      className="text-zinc-500 hover:text-indigo-300 transition-colors"
+                <tr
+                  key={job.id}
+                  onMouseDown={(event) => beginRowDrag(event, index)}
+                  onMouseEnter={() => updateRowDrag(index)}
+                  onClick={() => openJobDetails(job)}
+                  className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${selectedJob?.id === job.id ? 'bg-zinc-800/60' : ''} ${isScoring ? 'bg-indigo-950/20' : ''} ${dragRange && index >= dragRange.start && index <= dragRange.end ? 'bg-indigo-950/30' : ''}`}
+                >
+                  <td
+                    onMouseDown={(event) => beginSelectionDrag(event, index)}
+                    onMouseEnter={() => updateRowDrag(index)}
+                    onClick={(event) => toggleSelectionCell(event, job.id)}
+                    className="px-4 py-2 text-zinc-500 hover:bg-indigo-950/25 hover:text-indigo-300 cursor-pointer transition-colors"
+                    title={selectedIds.has(job.id) ? 'Unselect job' : 'Select job'}
+                  >
+                    <span
+                      className="inline-flex text-zinc-500 transition-colors"
                       title={selectedIds.has(job.id) ? 'Unselect job' : 'Select job'}
                     >
                       {selectedIds.has(job.id) ? <CheckSquare size={15} className="text-indigo-400" /> : <Square size={15} />}
-                    </button>
+                    </span>
                   </td>
-                  <td className="px-4 py-2 text-zinc-500 font-mono" title={`DB ID: ${job.id}`}>{index + 1}</td>
-                  <td className="px-4 py-2 font-medium text-zinc-200">{job.title}</td>
-                  <td className="px-4 py-2 text-zinc-300">{job.company}</td>
-                  <td className="px-4 py-2 text-zinc-400">{job.city}</td>
-                  <td className="px-4 py-2 text-emerald-400">{job.salary}</td>
+                  <td className="px-4 py-2 text-zinc-500 font-mono" title={`DB ID: ${job.id}`}>{pageStart + index + 1}</td>
+                  <td className="px-4 py-2 font-medium text-zinc-200 truncate" title={job.title}>{job.title}</td>
+                  <td className="px-4 py-2 text-zinc-300 truncate" title={job.company}>{job.company}</td>
+                  <td className="px-4 py-2 text-zinc-400 truncate" title={job.city}>{job.city}</td>
+                  <td className="px-4 py-2 text-emerald-400 truncate" title={job.salary}>{job.salary}</td>
                   <td className="px-4 py-2">
                     {isScoring ? (
                       <span className="inline-flex items-center gap-1.5 rounded bg-indigo-950/60 px-2 py-1 text-indigo-300">
@@ -203,10 +382,10 @@ export function Jobs({
                       <span className="text-zinc-600">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-zinc-400">{job.avg.toFixed(1)}</td>
-                  <td className="px-4 py-2 text-zinc-400">{job.exp} / {job.edu}</td>
-                  <td className="px-4 py-2">
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] uppercase tracking-wider">{job.cats[0] || job.tier || '-'}</span>
+                  <td className="px-4 py-2 text-zinc-400 truncate">{job.avg.toFixed(1)}</td>
+                  <td className="px-4 py-2 text-zinc-400 truncate" title={`${job.exp} / ${job.edu}`}>{job.exp} / {job.edu}</td>
+                  <td className="px-4 py-2 truncate">
+                    <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] uppercase tracking-wider" title={job.cats[0] || job.tier || '-'}>{job.cats[0] || job.tier || '-'}</span>
                   </td>
                 </tr>
                 );

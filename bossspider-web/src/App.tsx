@@ -25,6 +25,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('Dashboard');
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
   const boss = useBossSpider();
+  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Logs';
 
   const startCrawl = async () => {
     if (await boss.startCrawl()) setActiveTab('Logs');
@@ -122,8 +123,8 @@ export default function App() {
           </div>
         )}
 
-        <main className="flex-1 overflow-auto bg-zinc-950 p-6">
-          <div className="max-w-6xl mx-auto h-full">
+        <main className="flex-1 overflow-auto bg-zinc-950 p-5">
+          <div className={isWideWorkspace ? 'h-full w-full min-w-0' : 'max-w-6xl mx-auto h-full'}>
             {activeTab === 'Dashboard' && boss.config && (
               <Dashboard
                 config={boss.config}

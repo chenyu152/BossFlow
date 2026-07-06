@@ -167,15 +167,15 @@ export function Pipeline({
     const ok = window.confirm('Delete this pipeline item and its generated LLM report?');
     if (!ok) return;
     if (await onDeleteItem(selectedItem.sourceKey)) {
-              setSelectedSourceKey('');
-              setSelectedJob(null);
-              setReport(null);
-            }
-          };
+      setSelectedSourceKey('');
+      setSelectedJob(null);
+      setReport(null);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-100">Pipeline</h2>
           <p className="text-xs text-zinc-500">
@@ -217,10 +217,21 @@ export function Pipeline({
         ))}
       </div>
 
-      <div className="border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex-1 flex">
-        <div className="flex-1 overflow-auto">
+      <div className="border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex-1 min-h-0 flex">
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
           {displayedPending.length ? (
-            <table className="w-full text-left text-xs whitespace-nowrap">
+            <table className="w-full table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-[7%]" />
+                <col className="w-[14%]" />
+                <col className="w-[20%]" />
+                <col className="w-[5%]" />
+                <col className="w-[8%]" />
+                <col className="w-[11%]" />
+                <col className="w-[18%]" />
+                <col className="w-[6%]" />
+                <col className="w-[11%]" />
+              </colgroup>
               <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800 shadow-sm z-10">
                 <tr>
                   <th className="px-4 py-2.5 font-medium text-zinc-400">Status</th>
@@ -248,10 +259,10 @@ export function Pipeline({
                           {DECISION_LABELS[item.decisionStatus] || item.decisionStatus}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-zinc-200 font-medium">{item.company}</td>
-                      <td className="px-4 py-2 text-zinc-300">{item.title}</td>
-                      <td className="px-4 py-2 text-zinc-400">{item.city}</td>
-                      <td className="px-4 py-2 text-emerald-400">{item.salary}</td>
+                      <td className="px-4 py-2 text-zinc-200 font-medium truncate" title={item.company}>{item.company}</td>
+                      <td className="px-4 py-2 text-zinc-300 truncate" title={item.title}>{item.title}</td>
+                      <td className="px-4 py-2 text-zinc-400 truncate" title={item.city}>{item.city}</td>
+                      <td className="px-4 py-2 text-emerald-400 truncate" title={item.salary}>{item.salary}</td>
                       <td className="px-4 py-2">
                         {item.score ? (
                           <div className="space-y-1">
@@ -274,7 +285,7 @@ export function Pipeline({
                             Generating
                           </div>
                         ) : item.reportPath ? (
-                          <div className="max-w-60 space-y-1">
+                          <div className="min-w-0 space-y-1">
                             <span className="inline-flex items-center gap-1.5 rounded bg-emerald-950/60 px-2 py-1 text-emerald-300">
                               {item.llmScore ? item.llmScore.toFixed(1) : item.reportId}
                               <span className="text-[10px] text-emerald-500">{item.llmFitLevel || 'Report'}</span>
@@ -287,7 +298,7 @@ export function Pipeline({
                           <span className="text-zinc-600">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-zinc-500">{item.addedAt || '-'}</td>
+                      <td className="px-4 py-2 text-zinc-500 truncate" title={item.addedAt || '-'}>{item.addedAt || '-'}</td>
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-2">
                           <button

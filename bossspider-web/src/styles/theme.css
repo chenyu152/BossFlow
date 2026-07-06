@@ -173,4 +173,32 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3f3f46 #09090b;
+  }
+
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: #09090b;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+    border: 2px solid #09090b;
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: #09090b;
+  }
 }
