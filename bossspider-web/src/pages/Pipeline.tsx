@@ -447,8 +447,14 @@ export function Pipeline({
       )}
 
       {report && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5">
-          <div className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5"
+          onClick={() => setReport(null)}
+        >
+          <div
+            className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
