@@ -1,0 +1,43 @@
+{
+  "keywords": [
+    "AI产品经理",
+    "Agent产品经理"
+  ],
+  "cities": {
+    "上海": "101020100",
+    "广州": "101280100",
+    "深圳": "101280600",
+    "北京": "101010100"
+  },
+  "scrape_limits": {
+    "max_pages": 3,
+    "max_scrolls_per_page": 2,
+    "scroll_target": 500,
+    "scroll_max_scrolls": 200,
+    "greedy_max_pages": 0,
+    "max_jobs_per_city_round": 0
+  },
+  "min_salary": 17.0,
+  "cat_rules": {},
+  "relevance_keywords": [
+    "AI产品经理",
+    "Agent产品经理"
+  ],
+  "blacklist_keywords": [
+    "美术",
+    "特效",
+    "地编",
+    "原画",
+    "模型",
+    "开发",
+    "程序",
+    "测试",
+    "工程师",
+    "程序员",
+    "广告",
+    "营销",
+    "运营",
+    "电商",
+    "客服"
+  ]
+}
