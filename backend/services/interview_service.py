@@ -90,7 +90,7 @@ def _ensure_story_bank() -> None:
 def _parse_story_bank(content: str) -> list[dict[str, Any]]:
     stories: list[dict[str, Any]] = []
     blocks = re.split(r"^###\s+", content, flags=re.MULTILINE)[1:]
-    for block in blocks:
+    for index, block in enumerate(blocks):
         lines = block.strip().splitlines()
         if not lines:
             continue
@@ -102,10 +102,21 @@ def _parse_story_bank(content: str) -> list[dict[str, Any]]:
             theme = theme_match.group(1).strip()
             title = theme_match.group(2).strip()
 
-        def field(label: str) -> str:
-            pattern = rf"\*\*{re.escape(label)}:\*\*\s*(.+)"
-            match = re.search(pattern, block)
-            return match.group(1).strip() if match else ""
+        fields: dict[str, list[str]] = {}
+        current_label = ""
+        for line in lines[1:]:
+            field_match = re.match(r"^\*\*([^:：]+)[:：]\*\*\s*(.*)$", line.strip())
+            if field_match:
+                current_label = field_match.group(1).strip()
+                fields[current_label] = [field_match.group(2).strip()]
+            elif current_label:
+                fields[current_label].append(line.rstrip())
+
+        def field(*labels: str) -> str:
+            for label in labels:
+                if label in fields:
+                    return "\n".join(fields[label]).strip()
+            return ""
 
         tags = [
             tag.strip()
@@ -113,19 +124,67 @@ def _parse_story_bank(content: str) -> list[dict[str, Any]]:
             if tag.strip()
         ]
         story = {
+            "id": f"story-{index + 1}",
             "title": title,
             "theme": theme,
             "source": field("Source"),
             "tags": tags,
-            "situation": field("S (Situation)") or field("Situation"),
-            "task": field("T (Task)") or field("Task"),
-            "action": field("A (Action)") or field("Action"),
-            "result": field("R (Result)") or field("Result"),
+            "situation": field("S (Situation)", "Situation"),
+            "task": field("T (Task)", "Task"),
+            "action": field("A (Action)", "Action"),
+            "result": field("R (Result)", "Result"),
             "reflection": field("Reflection"),
         }
         if story["title"] and story["title"].lower() != "story title" and (story["action"] or story["result"] or story["reflection"]):
             stories.append(story)
     return stories
+
+
+def _clean_story(story: dict[str, Any]) -> dict[str, Any]:
+    tags = story.get("tags") or []
+    if isinstance(tags, str):
+        tags = re.split(r"[,;，；]", tags)
+    return {
+        "title": str(story.get("title") or "").strip(),
+        "theme": str(story.get("theme") or "").strip(),
+        "source": str(story.get("source") or "").strip(),
+        "tags": [str(tag).strip() for tag in tags if str(tag).strip()],
+        "situation": str(story.get("situation") or "").strip(),
+        "task": str(story.get("task") or "").strip(),
+        "action": str(story.get("action") or "").strip(),
+        "result": str(story.get("result") or "").strip(),
+        "reflection": str(story.get("reflection") or "").strip(),
+    }
+
+
+def _render_story_bank(stories: list[dict[str, Any]]) -> str:
+    lines = [
+        "# Interview Story Bank",
+        "",
+        "Reusable STAR+R stories for interview prep. Keep every claim defensible.",
+        "",
+        "## Stories",
+        "",
+    ]
+    for raw_story in stories:
+        story = _clean_story(raw_story)
+        if not story["title"]:
+            continue
+        heading = f"[{story['theme']}] {story['title']}" if story["theme"] else story["title"]
+        lines.extend(
+            [
+                f"### {heading}",
+                f"**Source:** {story['source']}",
+                f"**Best for questions about:** {', '.join(story['tags'])}",
+                f"**S (Situation):** {story['situation']}",
+                f"**T (Task):** {story['task']}",
+                f"**A (Action):** {story['action']}",
+                f"**R (Result):** {story['result']}",
+                f"**Reflection:** {story['reflection']}",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _interview_item_from_pipeline_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -175,6 +234,14 @@ def read_story_bank() -> dict[str, Any]:
         "content": content,
         "stories": _parse_story_bank(content),
     }
+
+
+def save_story_bank(stories: list[dict[str, Any]]) -> dict[str, Any]:
+    _ensure_story_bank()
+    cleaned = [_clean_story(story) for story in stories]
+    content = _render_story_bank(cleaned)
+    STORY_BANK_PATH.write_text(content, encoding="utf-8")
+    return read_story_bank()
 
 
 def _prompt(

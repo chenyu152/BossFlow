@@ -213,6 +213,7 @@ export default function App() {
                 preparingKeys={boss.interviewPreparingKeys}
                 onRefresh={() => { void boss.refreshInterviewItems(); }}
                 onLoadStoryBank={boss.loadInterviewStoryBank}
+                onSaveStoryBank={boss.saveInterviewStoryBank}
                 onLoadPrep={boss.loadInterviewPrep}
                 onGeneratePrep={boss.generateInterviewPrep}
               />

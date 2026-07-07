@@ -6,6 +6,7 @@ import type {
   ConfigPayload,
   InterviewItem,
   InterviewPrepResponse,
+  InterviewStory,
   InterviewStoryBankResponse,
   Job,
   PipelineResponse,
@@ -361,6 +362,17 @@ export function useBossSpider() {
     }
   }, [showNotice]);
 
+  const saveInterviewStoryBank = useCallback(async (stories: InterviewStory[]): Promise<InterviewStoryBankResponse | null> => {
+    try {
+      const data = await bossApi.saveInterviewStoryBank(stories);
+      showNotice('面试故事库已保存');
+      return data;
+    } catch (error) {
+      showNotice(`保存面试故事库失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
   const generateInterviewPrep = useCallback(async (
     sourceKey: string,
     userNotes: string,
@@ -477,6 +489,7 @@ export function useBossSpider() {
     generateResumeDraft,
     loadResumeDraft,
     loadInterviewStoryBank,
+    saveInterviewStoryBank,
     generateInterviewPrep,
     loadInterviewPrep,
     updatePipelineStatus,

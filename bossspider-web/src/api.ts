@@ -160,6 +160,13 @@ export const bossApi = {
     return request<InterviewStoryBankResponse>('/api/interview/story-bank');
   },
 
+  saveInterviewStoryBank(stories: unknown[]) {
+    return request<InterviewStoryBankResponse>('/api/interview/story-bank', {
+      method: 'PUT',
+      body: JSON.stringify({ stories }),
+    });
+  },
+
   generateInterviewPrep(sourceKey: string, userNotes: string) {
     return request<InterviewPrepResponse>('/api/interview/prep', {
       method: 'POST',

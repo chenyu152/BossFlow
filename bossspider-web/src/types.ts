@@ -295,6 +295,7 @@ export type InterviewItemsResponse = {
 };
 
 export type InterviewStory = {
+  id?: string;
   title: string;
   theme: string;
   source: string;
