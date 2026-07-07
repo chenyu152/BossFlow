@@ -46,10 +46,20 @@ export function useBossSpider() {
   const [resumeDraftingKeys, setResumeDraftingKeys] = useState<string[]>([]);
   const [interviewPreparingKeys, setInterviewPreparingKeys] = useState<string[]>([]);
   const firstStatusLoad = useRef(true);
+  const projectRef = useRef(project);
+  const tRef = useRef(t);
 
   const parsedLogs = useMemo(() => logs.map(parseLog), [logs]);
   const recentLogs = parsedLogs.slice(-6);
   const isRunning = status !== 'ready' && status !== 'failed';
+
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -80,22 +90,23 @@ export function useBossSpider() {
     return data.items || [];
   }, []);
 
-  const loadConfig = useCallback(async (targetProject = project) => {
+  const loadConfig = useCallback(async (targetProject?: string) => {
     setLoading(true);
     try {
-      const data = await bossApi.getConfig(targetProject);
+      const data = await bossApi.getConfig(targetProject ?? projectRef.current);
       setConfig(data);
       setProject(data.project);
+      projectRef.current = data.project;
       await loadJobs(data.project, '');
       await refreshPipeline();
       await refreshResumeItems();
       await refreshInterviewItems();
     } catch (error) {
-      showNotice(t('notices.loadFailed', { error: (error as Error).message }));
+      showNotice(tRef.current('notices.loadFailed', { error: (error as Error).message }));
     } finally {
       setLoading(false);
     }
-  }, [loadJobs, project, refreshInterviewItems, refreshPipeline, refreshResumeItems, showNotice, t]);
+  }, [loadJobs, refreshInterviewItems, refreshPipeline, refreshResumeItems, showNotice]);
 
   const refreshJobs = useCallback(async (search = jobSearch) => {
     if (!config) return;
@@ -113,8 +124,8 @@ export function useBossSpider() {
         setProject(data.defaultProject);
         await loadConfig(data.defaultProject);
       })
-      .catch((error) => showNotice(t('notices.backendConnectionFailed', { error: (error as Error).message })));
-  }, [loadConfig, showNotice, t]);
+      .catch((error) => showNotice(tRef.current('notices.backendConnectionFailed', { error: (error as Error).message })));
+  }, [loadConfig, showNotice]);
 
   useEffect(() => {
     const timer = window.setInterval(async () => {

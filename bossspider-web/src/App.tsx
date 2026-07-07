@@ -38,6 +38,7 @@ export default function App() {
   const [selectedInterviewKey, setSelectedInterviewKey] = useState('');
   const boss = useBossSpider();
   const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
+  const currentLanguage = i18n.resolvedLanguage || i18n.language;
 
   const setActiveTabStable = useCallback((tab: Tab) => {
     setActiveTab(tab);
@@ -125,7 +126,7 @@ export default function App() {
                   key={lang}
                   onClick={() => i18n.changeLanguage(lang)}
                   className={`px-1.5 py-0.5 text-[11px] font-medium rounded-sm transition-colors ${
-                    i18n.language === lang
+                    currentLanguage.startsWith(lang)
                       ? 'bg-indigo-600 text-white'
                       : 'text-zinc-500 hover:text-zinc-300'
                   }`}

@@ -97,7 +97,7 @@ BossFlow/
 ├── reports/jobs/             # LLM 岗位评估报告
 ├── output/resumes/           # 定制简历输出
 ├── output/interview-prep/    # 面试准备文档
-├── interview-prep/           # 故事库/题库
+├── data/interview-prep/      # 故事库/题库
 ├── cv.md                     # 基础简历（需自行创建，参考 cv.example.md）
 ├── profile.yml               # 求职偏好配置
 ├── .env                      # API Key 等环境变量

@@ -150,6 +150,12 @@
     "llmEval": "LLM Eval",
     "noMatch": "No pipeline jobs match this filter.",
     "sourceFile": "Source file",
+    "coverage": "Coverage {{n}}%",
+    "jdQuality": "JD quality {{n}}%",
+    "expRisk": "Experience risk: {{risk}}",
+    "eduRisk": "Education risk: {{risk}}",
+    "expRiskShort": "Exp {{risk}}",
+    "eduRiskShort": "Edu {{risk}}",
     "decisionStatus": {
       "needs_llm": "Needs LLM",
       "needs_review": "Needs Review",

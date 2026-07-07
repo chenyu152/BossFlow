@@ -151,6 +151,12 @@
     "llmEval": "LLM 精评",
     "noMatch": "没有匹配的 Pipeline 条目。",
     "sourceFile": "源文件",
+    "coverage": "覆盖率 {{n}}%",
+    "jdQuality": "JD 质量 {{n}}%",
+    "expRisk": "经验风险：{{risk}}",
+    "eduRisk": "学历风险：{{risk}}",
+    "expRiskShort": "经验 {{risk}}",
+    "eduRiskShort": "学历 {{risk}}",
     "decisionStatus": {
       "needs_llm": "待精评",
       "needs_review": "待确认",
