@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Logs';
+export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Logs';
 
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'stopping' | 'failed';
 
@@ -117,6 +117,10 @@ export type PipelineItem = {
   resumeSuggestionPath: string;
   resumeSuggestionJsonPath: string;
   resumeSuggestedAt: string;
+  resumeDraftId: string;
+  resumeDraftPath: string;
+  resumeDraftJsonPath: string;
+  resumeDraftedAt: string;
   decisionStatus: DecisionStatus;
   raw: string;
 };
@@ -217,6 +221,43 @@ export type ResumeSuggestionResponse = {
   sourceKey: string;
   resumeSuggestionId: string;
   suggestionPath: string;
+  jsonPath?: string;
+  content: string;
+  pipeline?: PipelineResponse;
+};
+
+export type ResumeItem = {
+  sourceKey: string;
+  company: string;
+  title: string;
+  city: string;
+  salary: string;
+  url: string;
+  project: string;
+  jobId: number | null;
+  llmScore: number | null;
+  llmFitLevel: string;
+  llmRecommendation: string;
+  reportPath: string;
+  resumeSuggestionId: string;
+  resumeSuggestionPath: string;
+  resumeSuggestedAt: string;
+  resumeDraftId: string;
+  resumeDraftPath: string;
+  resumeDraftedAt: string;
+  decisionStatus: DecisionStatus | string;
+};
+
+export type ResumeItemsResponse = {
+  ok: boolean;
+  items: ResumeItem[];
+};
+
+export type ResumeDraftResponse = {
+  ok: boolean;
+  sourceKey: string;
+  resumeDraftId: string;
+  draftPath: string;
   jsonPath?: string;
   content: string;
   pipeline?: PipelineResponse;

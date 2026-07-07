@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { parseLog } from '../utils';
-import type { ConfigPatch, ConfigPayload, Job, PipelineResponse, ResumeSuggestionResponse, Status } from '../types';
+import type { ConfigPatch, ConfigPayload, Job, PipelineResponse, ResumeDraftResponse, ResumeItem, ResumeSuggestionResponse, Status } from '../types';
 
 export function useBossSpider() {
   const [status, setStatus] = useState<Status>('ready');
@@ -11,6 +11,7 @@ export function useBossSpider() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsTotal, setJobsTotal] = useState(0);
   const [pipeline, setPipeline] = useState<PipelineResponse | null>(null);
+  const [resumeItems, setResumeItems] = useState<ResumeItem[]>([]);
   const [jobSearch, setJobSearch] = useState('');
   const [sortJobsByScore, setSortJobsByScore] = useState(false);
   const [sortPipelineByLlmScore, setSortPipelineByLlmScore] = useState(false);
@@ -24,6 +25,7 @@ export function useBossSpider() {
   const [jobScoringIds, setJobScoringIds] = useState<number[]>([]);
   const [llmEvaluatingKeys, setLlmEvaluatingKeys] = useState<string[]>([]);
   const [resumeSuggestingKeys, setResumeSuggestingKeys] = useState<string[]>([]);
+  const [resumeDraftingKeys, setResumeDraftingKeys] = useState<string[]>([]);
   const firstStatusLoad = useRef(true);
 
   const parsedLogs = useMemo(() => logs.map(parseLog), [logs]);
@@ -47,6 +49,12 @@ export function useBossSpider() {
     return data;
   }, []);
 
+  const refreshResumeItems = useCallback(async () => {
+    const data = await bossApi.getResumeItems();
+    setResumeItems(data.items || []);
+    return data.items || [];
+  }, []);
+
   const loadConfig = useCallback(async (targetProject = project) => {
     setLoading(true);
     try {
@@ -55,12 +63,13 @@ export function useBossSpider() {
       setProject(data.project);
       await loadJobs(data.project, '');
       await refreshPipeline();
+      await refreshResumeItems();
     } catch (error) {
       showNotice(`加载失败：${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
-  }, [loadJobs, project, refreshPipeline, showNotice]);
+  }, [loadJobs, project, refreshPipeline, refreshResumeItems, showNotice]);
 
   const refreshJobs = useCallback(async (search = jobSearch) => {
     if (!config) return;
@@ -270,6 +279,7 @@ export function useBossSpider() {
     try {
       const data = await bossApi.generateResumeSuggestions(sourceKey);
       if (data.pipeline) setPipeline(data.pipeline);
+      await refreshResumeItems();
       showNotice(`定制简历建议已生成：${data.resumeSuggestionId}`);
       return data;
     } catch (error) {
@@ -278,13 +288,43 @@ export function useBossSpider() {
     } finally {
       setResumeSuggestingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [showNotice]);
+  }, [refreshResumeItems, showNotice]);
 
   const loadResumeSuggestion = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
     try {
       return await bossApi.getResumeSuggestion(sourceKey);
     } catch (error) {
       showNotice(`加载定制简历建议失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
+  const generateResumeDraft = useCallback(async (
+    sourceKey: string,
+    approvedSuggestionIds: string[],
+    userNotes: string,
+  ): Promise<ResumeDraftResponse | null> => {
+    setResumeDraftingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
+    showNotice('岗位定制简历生成中，可能需要几十秒');
+    try {
+      const data = await bossApi.generateResumeDraft(sourceKey, approvedSuggestionIds, userNotes);
+      if (data.pipeline) setPipeline(data.pipeline);
+      await refreshResumeItems();
+      showNotice(`岗位定制简历已生成：${data.resumeDraftId}`);
+      return data;
+    } catch (error) {
+      showNotice(`岗位定制简历生成失败：${(error as Error).message}`);
+      return null;
+    } finally {
+      setResumeDraftingKeys((keys) => keys.filter((key) => key !== sourceKey));
+    }
+  }, [refreshResumeItems, showNotice]);
+
+  const loadResumeDraft = useCallback(async (sourceKey: string): Promise<ResumeDraftResponse | null> => {
+    try {
+      return await bossApi.getResumeDraft(sourceKey);
+    } catch (error) {
+      showNotice(`加载岗位定制简历失败：${(error as Error).message}`);
       return null;
     }
   }, [showNotice]);
@@ -305,6 +345,7 @@ export function useBossSpider() {
     try {
       const data = await bossApi.deletePipelineItem(sourceKey);
       setPipeline(data);
+      await refreshResumeItems();
       const deletedResumeCount = data.deletedResumeArtifacts?.length || 0;
       showNotice(`已删除 Pipeline 条目${data.deletedReports.length ? `，同时删除报告 ${data.deletedReports.length} 个` : ''}${deletedResumeCount ? `，简历建议 ${deletedResumeCount} 个` : ''}`);
       return true;
@@ -312,7 +353,7 @@ export function useBossSpider() {
       showNotice(`删除失败：${(error as Error).message}`);
       return false;
     }
-  }, [showNotice]);
+  }, [refreshResumeItems, showNotice]);
 
   return {
     status,
@@ -322,6 +363,7 @@ export function useBossSpider() {
     jobs,
     jobsTotal,
     pipeline,
+    resumeItems,
     jobSearch,
     sortJobsByScore,
     sortPipelineByLlmScore,
@@ -337,6 +379,7 @@ export function useBossSpider() {
     jobScoringIds,
     llmEvaluatingKeys,
     resumeSuggestingKeys,
+    resumeDraftingKeys,
     isRunning,
     setJobSearch,
     setSortJobsByScore,
@@ -348,6 +391,7 @@ export function useBossSpider() {
     loadConfig,
     refreshJobs,
     refreshPipeline,
+    refreshResumeItems,
     updateConfig,
     saveConfig,
     startCrawl,
@@ -364,6 +408,8 @@ export function useBossSpider() {
     loadPipelineReport,
     generateResumeSuggestions,
     loadResumeSuggestion,
+    generateResumeDraft,
+    loadResumeDraft,
     updatePipelineStatus,
     deletePipelineItem,
   };

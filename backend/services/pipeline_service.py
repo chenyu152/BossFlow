@@ -117,6 +117,10 @@ def _item_from_line(line: str, status: str) -> dict[str, Any] | None:
         "resumeSuggestionPath": meta.get("resumeSuggestionPath", ""),
         "resumeSuggestionJsonPath": meta.get("resumeSuggestionJsonPath", ""),
         "resumeSuggestedAt": meta.get("resumeSuggestedAt", ""),
+        "resumeDraftId": meta.get("resumeDraftId", ""),
+        "resumeDraftPath": meta.get("resumeDraftPath", ""),
+        "resumeDraftJsonPath": meta.get("resumeDraftJsonPath", ""),
+        "resumeDraftedAt": meta.get("resumeDraftedAt", ""),
         "decisionStatus": meta.get("decisionStatus") or ("needs_review" if meta.get("reportPath") else "needs_llm"),
         "raw": line,
     }
@@ -358,6 +362,7 @@ def delete_pipeline_item(source_key: str) -> dict[str, Any]:
         removed = True
         deleted_reports.extend(_safe_delete_report(str(meta.get("reportPath") or "")))
         deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeSuggestionPath") or "")))
+        deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeDraftPath") or "")))
     if not removed:
         return {"ok": False, "deleted": False, "deletedReports": [], "deletedResumeArtifacts": [], **read_pipeline()}
     PIPELINE_PATH.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")

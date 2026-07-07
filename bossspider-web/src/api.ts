@@ -8,6 +8,8 @@ import type {
   PipelineReportResponse,
   PipelineResponse,
   ProjectListResponse,
+  ResumeDraftResponse,
+  ResumeItemsResponse,
   ResumeSuggestionResponse,
   ScoreJobsResponse,
   ScorePipelineResponse,
@@ -130,6 +132,21 @@ export const bossApi = {
 
   getResumeSuggestion(sourceKey: string) {
     return request<ResumeSuggestionResponse>(`/api/resume/suggestion?sourceKey=${encodeURIComponent(sourceKey)}`);
+  },
+
+  getResumeItems() {
+    return request<ResumeItemsResponse>('/api/resume/items');
+  },
+
+  generateResumeDraft(sourceKey: string, approvedSuggestionIds: string[], userNotes: string) {
+    return request<ResumeDraftResponse>('/api/resume/draft', {
+      method: 'POST',
+      body: JSON.stringify({ sourceKey, approvedSuggestionIds, userNotes }),
+    });
+  },
+
+  getResumeDraft(sourceKey: string) {
+    return request<ResumeDraftResponse>(`/api/resume/draft?sourceKey=${encodeURIComponent(sourceKey)}`);
   },
 
   getTaskStatus() {
