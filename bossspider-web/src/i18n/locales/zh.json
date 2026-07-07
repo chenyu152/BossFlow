@@ -282,7 +282,12 @@
     "dismiss": "丢弃",
     "delete": "删除",
     "noDraftsYet": "暂无故事草稿。从面试准备页面创建草稿，然后在此确认。",
-    "storyBankEmpty": "故事库为空。添加 STAR+R 故事后保存到 Markdown，供后续面试准备使用。"
+    "storyBankEmpty": "故事库为空。添加 STAR+R 故事后保存到 Markdown，供后续面试准备使用。",
+    "sourceLabel": "来源",
+    "createdAt": "创建于",
+    "updatedAt": "更新于",
+    "prepPath": "准备文档",
+    "promotionRequirement": "确认前需要填写标题，并至少补充一个 STAR 字段。"
   },
   "interview": {
     "title": "面试",
@@ -355,7 +360,9 @@
     "withResumeArtsDeleted": "，简历材料 {{count}} 个",
     "withInterviewArtsDeleted": "，面试材料 {{count}} 个",
     "deleteFailed": "删除失败：{{error}}",
-    "configNotLoaded": "配置尚未加载"
+    "configNotLoaded": "配置尚未加载",
+    "storyDraftPromoted": "故事草稿已确认并写入故事库",
+    "storyDraftPromoteFailed": "确认故事草稿失败：{{error}}"
   },
   "strategy": {
     "desc": {

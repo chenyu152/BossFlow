@@ -30,7 +30,14 @@ class InterviewStoryDraftPayload(InterviewStoryPayload):
     prepPath: str = ""
     createdAt: str = ""
     updatedAt: str = ""
+    promotedAt: str = ""
+    promotedStoryId: str = ""
 
 
 class StoryDraftsSaveRequest(BaseModel):
     drafts: list[InterviewStoryDraftPayload]
+
+
+class StoryDraftPromoteRequest(BaseModel):
+    draftId: str
+    draft: InterviewStoryDraftPayload

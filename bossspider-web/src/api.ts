@@ -4,6 +4,8 @@ import type {
   InterviewItemsResponse,
   InterviewPrepResponse,
   InterviewStoryBankResponse,
+  InterviewStoryDraft,
+  InterviewStoryDraftPromoteResponse,
   InterviewStoryDraftsResponse,
   Job,
   JobsResponse,
@@ -176,6 +178,13 @@ export const bossApi = {
     return request<InterviewStoryDraftsResponse>('/api/interview/story-drafts', {
       method: 'PUT',
       body: JSON.stringify({ drafts }),
+    });
+  },
+
+  promoteInterviewStoryDraft(draftId: string, draft: InterviewStoryDraft) {
+    return request<InterviewStoryDraftPromoteResponse>('/api/interview/story-drafts/promote', {
+      method: 'POST',
+      body: JSON.stringify({ draftId, draft }),
     });
   },
 

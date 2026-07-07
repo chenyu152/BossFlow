@@ -2,7 +2,7 @@ import { BookOpenText, CheckCircle2, Loader2, Plus, Save, Trash2 } from 'lucide-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppTranslation } from '../i18n';
 import { emptyStory } from '../storyUtils';
-import type { InterviewStory, InterviewStoryBankResponse, InterviewStoryDraft, InterviewStoryDraftsResponse } from '../types';
+import type { InterviewStory, InterviewStoryBankResponse, InterviewStoryDraft, InterviewStoryDraftPromoteResponse, InterviewStoryDraftsResponse } from '../types';
 
 type StoryMode = 'drafts' | 'confirmed';
 const STORY_DRAFT_TRANSFER_KEY = 'bossspider:story-draft-transfer';
@@ -18,6 +18,8 @@ function newDraftFromStory(story: InterviewStory): InterviewStoryDraft {
     prepPath: '',
     createdAt: now,
     updatedAt: now,
+    promotedAt: '',
+    promotedStoryId: '',
   };
 }
 
@@ -52,11 +54,23 @@ function statusLabel(t: (key: string) => string, status: InterviewStoryDraft['st
   return t('story.needsConfirmation');
 }
 
+function hasPromotableStoryFields(story: InterviewStory) {
+  return Boolean(story.situation.trim() || story.task.trim() || story.action.trim() || story.result.trim());
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
 export function Story({
   onLoadStoryBank,
   onSaveStoryBank,
   onLoadStoryDrafts,
   onSaveStoryDrafts,
+  onPromoteStoryDraft,
   incomingDraft,
   onIncomingDraftConsumed,
 }: {
@@ -64,6 +78,7 @@ export function Story({
   onSaveStoryBank: (stories: InterviewStory[]) => Promise<InterviewStoryBankResponse | null>;
   onLoadStoryDrafts: () => Promise<InterviewStoryDraftsResponse | null>;
   onSaveStoryDrafts: (drafts: InterviewStoryDraft[]) => Promise<InterviewStoryDraftsResponse | null>;
+  onPromoteStoryDraft: (draftId: string, draft: InterviewStoryDraft) => Promise<InterviewStoryDraftPromoteResponse | null>;
   incomingDraft?: InterviewStory | null;
   onIncomingDraftConsumed?: () => void;
 }) {
@@ -83,6 +98,7 @@ export function Story({
   const stories = storyBank?.stories || [];
   const drafts = useMemo(() => visibleDrafts(draftStore?.drafts || []), [draftStore]);
   const activeList = mode === 'drafts' ? drafts : stories;
+  const canPromoteDraft = mode === 'drafts' && Boolean(storyDraft.title.trim()) && hasPromotableStoryFields(storyDraft);
 
   const queueIncomingDraft = (story: InterviewStory) => {
     const draft = newDraftFromStory(story);
@@ -270,18 +286,23 @@ export function Story({
   };
 
   const promoteDraft = async () => {
-    if (mode !== 'drafts' || !storyDraft.title.trim()) return;
+    if (!canPromoteDraft) return;
     setSaving(true);
     try {
-      const nextStories = [...stories, storyDraft];
-      const savedBank = await saveStories(nextStories);
-      if (!savedBank) return;
-      const nextDrafts = (draftStore?.drafts || []).map((draft) => (
-        draft.draftId === draftMeta.draftId ? { ...draft, ...storyDraft, status: 'promoted' as const } : draft
-      ));
-      await saveDrafts(nextDrafts);
+      const currentDraft: InterviewStoryDraft = {
+        ...draftMeta,
+        ...storyDraft,
+        status: draftMeta.status === 'needs_confirmation' ? 'ready' : draftMeta.status,
+      };
+      const promoted = await onPromoteStoryDraft(currentDraft.draftId, currentDraft);
+      if (!promoted) return;
+      setStoryBank(promoted.storyBank);
+      setDraftStore(promoted.storyDrafts);
       setMode('confirmed');
-      setSelectedIndex(Math.max(0, nextStories.length - 1));
+      const promotedIndex = promoted.storyBank.stories.findIndex((story) => story.id === promoted.story.id);
+      setSelectedIndex(promotedIndex >= 0 ? promotedIndex : Math.max(0, promoted.storyBank.stories.length - 1));
+      setStoryDraft(promoted.story);
+      setDraftMeta(promoted.draft);
       setDirty(false);
     } finally {
       setSaving(false);
@@ -320,7 +341,8 @@ export function Story({
           {mode === 'drafts' && (
             <button
               onClick={promoteDraft}
-              disabled={saving || !storyDraft.title.trim()}
+              disabled={saving || !canPromoteDraft}
+              title={!canPromoteDraft ? t('story.promotionRequirement') : undefined}
               className="inline-flex items-center gap-2 rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckCircle2 size={14} />
@@ -399,17 +421,42 @@ export function Story({
           </div>
 
           {mode === 'drafts' && (
-            <div className="mb-4 flex max-w-5xl flex-wrap items-center gap-2 rounded border border-zinc-800 bg-zinc-950 p-3">
-              <span className="text-xs text-zinc-500">{t('story.statusLabel')}</span>
-              {(['needs_confirmation', 'editing', 'ready'] as const).map((status) => (
-                <button
-                  key={status}
-                  onClick={() => updateDraftStatus(status)}
-                  className={`rounded px-2 py-1 text-xs transition-colors ${draftMeta.status === status ? 'bg-amber-900/70 text-amber-200' : 'border border-zinc-800 text-zinc-400 hover:bg-zinc-900'}`}
-                >
-                  {statusLabel(t, status)}
-                </button>
-              ))}
+            <div className="mb-4 max-w-5xl space-y-3 rounded border border-zinc-800 bg-zinc-950 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-zinc-500">{t('story.statusLabel')}</span>
+                {(['needs_confirmation', 'editing', 'ready'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => updateDraftStatus(status)}
+                    className={`rounded px-2 py-1 text-xs transition-colors ${draftMeta.status === status ? 'bg-amber-900/70 text-amber-200' : 'border border-zinc-800 text-zinc-400 hover:bg-zinc-900'}`}
+                  >
+                    {statusLabel(t, status)}
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-2 text-xs text-zinc-500 sm:grid-cols-2">
+                <div>
+                  <span className="text-zinc-600">{t('story.sourceLabel')} </span>
+                  <span className="text-zinc-300">{draftMeta.sourceLabel || storyDraft.source || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-600">{t('story.createdAt')} </span>
+                  <span className="text-zinc-300">{formatDateTime(draftMeta.createdAt) || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-600">{t('story.updatedAt')} </span>
+                  <span className="text-zinc-300">{formatDateTime(draftMeta.updatedAt) || '-'}</span>
+                </div>
+                {draftMeta.prepPath && (
+                  <div className="min-w-0 sm:col-span-2">
+                    <span className="text-zinc-600">{t('story.prepPath')} </span>
+                    <span className="break-all text-zinc-300">{draftMeta.prepPath}</span>
+                  </div>
+                )}
+              </div>
+              {!canPromoteDraft && (
+                <div className="text-xs text-amber-300">{t('story.promotionRequirement')}</div>
+              )}
             </div>
           )}
 

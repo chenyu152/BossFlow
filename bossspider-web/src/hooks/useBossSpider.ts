@@ -10,6 +10,7 @@ import type {
   InterviewStory,
   InterviewStoryBankResponse,
   InterviewStoryDraft,
+  InterviewStoryDraftPromoteResponse,
   InterviewStoryDraftsResponse,
   Job,
   PipelineResponse,
@@ -408,6 +409,20 @@ export function useBossSpider() {
     }
   }, [showNotice, t]);
 
+  const promoteInterviewStoryDraft = useCallback(async (
+    draftId: string,
+    draft: InterviewStoryDraft,
+  ): Promise<InterviewStoryDraftPromoteResponse | null> => {
+    try {
+      const data = await bossApi.promoteInterviewStoryDraft(draftId, draft);
+      showNotice(t('notices.storyDraftPromoted'));
+      return data;
+    } catch (error) {
+      showNotice(t('notices.storyDraftPromoteFailed', { error: (error as Error).message }));
+      return null;
+    }
+  }, [showNotice, t]);
+
   const generateInterviewPrep = useCallback(async (
     sourceKey: string,
     userNotes: string,
@@ -530,6 +545,7 @@ export function useBossSpider() {
     saveInterviewStoryBank,
     loadInterviewStoryDrafts,
     saveInterviewStoryDrafts,
+    promoteInterviewStoryDraft,
     generateInterviewPrep,
     loadInterviewPrep,
     updatePipelineStatus,

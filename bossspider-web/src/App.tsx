@@ -243,6 +243,7 @@ export default function App() {
                 onSaveStoryBank={boss.saveInterviewStoryBank}
                 onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
                 onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
+                onPromoteStoryDraft={boss.promoteInterviewStoryDraft}
                 incomingDraft={storyDraftSeed}
                 onIncomingDraftConsumed={() => setStoryDraftSeed(null)}
               />

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
-from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftsSaveRequest
+from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
@@ -18,6 +18,7 @@ from backend.services.interview_service import (
     read_interview_prep,
     read_story_bank,
     read_story_drafts,
+    promote_story_draft,
     save_story_bank,
     save_story_drafts,
 )
@@ -186,6 +187,11 @@ def get_interview_story_drafts():
 @app.put("/api/interview/story-drafts")
 def update_interview_story_drafts(payload: StoryDraftsSaveRequest):
     return save_story_drafts([draft.model_dump() for draft in payload.drafts])
+
+
+@app.post("/api/interview/story-drafts/promote")
+def confirm_interview_story_draft(payload: StoryDraftPromoteRequest):
+    return promote_story_draft(payload.draftId, payload.draft.model_dump())
 
 
 @app.post("/api/interview/prep")

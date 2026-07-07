@@ -146,7 +146,9 @@ def _parse_story_bank(content: str) -> list[dict[str, Any]]:
             "result": field("R (Result)", "Result"),
             "reflection": field("Reflection"),
         }
-        if story["title"] and story["title"].lower() != "story title" and (story["action"] or story["result"] or story["reflection"]):
+        if story["title"] and story["title"].lower() != "story title" and any(
+            story[key] for key in ("situation", "task", "action", "result", "reflection")
+        ):
             stories.append(story)
     return stories
 
@@ -182,6 +184,8 @@ def _clean_story_draft(draft: dict[str, Any]) -> dict[str, Any]:
         "prepPath": str(draft.get("prepPath") or "").strip(),
         "createdAt": str(draft.get("createdAt") or "").strip(),
         "updatedAt": str(draft.get("updatedAt") or "").strip(),
+        "promotedAt": str(draft.get("promotedAt") or "").strip(),
+        "promotedStoryId": str(draft.get("promotedStoryId") or "").strip(),
     }
 
 
@@ -303,6 +307,58 @@ def save_story_drafts(drafts: list[dict[str, Any]]) -> dict[str, Any]:
     }
     STORY_DRAFTS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return read_story_drafts()
+
+
+def _has_promotable_story_fields(story: dict[str, Any]) -> bool:
+    return any(story.get(key) for key in ("situation", "task", "action", "result"))
+
+
+def promote_story_draft(draft_id: str, draft: dict[str, Any]) -> dict[str, Any]:
+    current = _clean_story_draft({**draft, "draftId": draft_id or draft.get("draftId", "")})
+    if not current["draftId"]:
+        raise HTTPException(status_code=400, detail="Draft id is required")
+    if not current["title"]:
+        raise HTTPException(status_code=400, detail="Story title is required")
+    if not _has_promotable_story_fields(current):
+        raise HTTPException(status_code=400, detail="At least one STAR field is required")
+
+    bank = read_story_bank()
+    next_stories = [*bank["stories"], _clean_story(current)]
+    saved_bank = save_story_bank(next_stories)
+    promoted_story = saved_bank["stories"][-1] if saved_bank["stories"] else {}
+
+    now = dt.datetime.now().isoformat()
+    existing_drafts = read_story_drafts()["drafts"]
+    promoted_draft = {
+        **current,
+        "status": "promoted",
+        "promotedAt": now,
+        "promotedStoryId": promoted_story.get("id", ""),
+        "updatedAt": now,
+    }
+    found = False
+    next_drafts = []
+    for existing in existing_drafts:
+        if existing.get("draftId") == current["draftId"]:
+            next_drafts.append({**existing, **promoted_draft})
+            found = True
+        else:
+            next_drafts.append(existing)
+    if not found:
+        next_drafts.append(promoted_draft)
+    saved_drafts = save_story_drafts(next_drafts)
+    saved_promoted_draft = next(
+        (item for item in saved_drafts["drafts"] if item.get("draftId") == current["draftId"]),
+        promoted_draft,
+    )
+
+    return {
+        "ok": True,
+        "story": promoted_story,
+        "draft": saved_promoted_draft,
+        "storyBank": saved_bank,
+        "storyDrafts": saved_drafts,
+    }
 
 
 def _prompt(

@@ -322,12 +322,22 @@ export type InterviewStoryDraft = InterviewStory & {
   prepPath: string;
   createdAt: string;
   updatedAt: string;
+  promotedAt?: string;
+  promotedStoryId?: string;
 };
 
 export type InterviewStoryDraftsResponse = {
   ok: boolean;
   path: string;
   drafts: InterviewStoryDraft[];
+};
+
+export type InterviewStoryDraftPromoteResponse = {
+  ok: boolean;
+  story: InterviewStory;
+  draft: InterviewStoryDraft;
+  storyBank: InterviewStoryBankResponse;
+  storyDrafts: InterviewStoryDraftsResponse;
 };
 
 export type InterviewPrepResponse = {
