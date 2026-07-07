@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Logs';
+export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Interview' | 'Logs';
 
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'stopping' | 'failed';
 
@@ -121,6 +121,10 @@ export type PipelineItem = {
   resumeDraftPath: string;
   resumeDraftJsonPath: string;
   resumeDraftedAt: string;
+  interviewPrepId: string;
+  interviewPrepPath: string;
+  interviewPrepJsonPath: string;
+  interviewPreparedAt: string;
   decisionStatus: DecisionStatus;
   raw: string;
 };
@@ -191,6 +195,7 @@ export type PipelineDeleteResponse = PipelineResponse & {
   deleted: boolean;
   deletedReports: string[];
   deletedResumeArtifacts?: string[];
+  deletedInterviewArtifacts?: string[];
 };
 
 export type PipelineReportResponse = {
@@ -258,6 +263,61 @@ export type ResumeDraftResponse = {
   sourceKey: string;
   resumeDraftId: string;
   draftPath: string;
+  jsonPath?: string;
+  content: string;
+  pipeline?: PipelineResponse;
+};
+
+export type InterviewItem = {
+  sourceKey: string;
+  company: string;
+  title: string;
+  city: string;
+  salary: string;
+  url: string;
+  project: string;
+  jobId: number | null;
+  llmScore: number | null;
+  llmFitLevel: string;
+  llmRecommendation: string;
+  reportPath: string;
+  resumeSuggestionPath: string;
+  resumeDraftPath: string;
+  interviewPrepId: string;
+  interviewPrepPath: string;
+  interviewPreparedAt: string;
+  decisionStatus: DecisionStatus | string;
+};
+
+export type InterviewItemsResponse = {
+  ok: boolean;
+  items: InterviewItem[];
+};
+
+export type InterviewStory = {
+  title: string;
+  theme: string;
+  source: string;
+  tags: string[];
+  situation: string;
+  task: string;
+  action: string;
+  result: string;
+  reflection: string;
+};
+
+export type InterviewStoryBankResponse = {
+  ok: boolean;
+  path: string;
+  content: string;
+  stories: InterviewStory[];
+};
+
+export type InterviewPrepResponse = {
+  ok: boolean;
+  sourceKey: string;
+  interviewPrepId: string;
+  prepPath: string;
   jsonPath?: string;
   content: string;
   pipeline?: PipelineResponse;

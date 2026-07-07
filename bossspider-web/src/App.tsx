@@ -6,6 +6,7 @@ import {
   FileJson,
   FileText,
   Inbox,
+  MessageSquareText,
   LayoutDashboard,
   Play,
   Square,
@@ -15,6 +16,7 @@ import { NavItem } from './components/NavItem';
 import { StatusBadge } from './components/StatusBadge';
 import { useBossSpider } from './hooks/useBossSpider';
 import { Dashboard } from './pages/Dashboard';
+import { Interview } from './pages/Interview';
 import { Jobs } from './pages/Jobs';
 import { Logs } from './pages/Logs';
 import { Pipeline } from './pages/Pipeline';
@@ -27,7 +29,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('Dashboard');
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
   const boss = useBossSpider();
-  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Logs';
+  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Interview' || activeTab === 'Logs';
 
   const startCrawl = async () => {
     if (await boss.startCrawl()) setActiveTab('Logs');
@@ -64,6 +66,7 @@ export default function App() {
           <NavItem icon={<Briefcase size={16} />} label="Jobs" active={activeTab === 'Jobs'} onClick={() => setActiveTab('Jobs')} />
           <NavItem icon={<Inbox size={16} />} label="Pipeline" active={activeTab === 'Pipeline'} onClick={() => setActiveTab('Pipeline')} />
           <NavItem icon={<FileText size={16} />} label="Resume" active={activeTab === 'Resume'} onClick={() => setActiveTab('Resume')} />
+          <NavItem icon={<MessageSquareText size={16} />} label="Interview" active={activeTab === 'Interview'} onClick={() => setActiveTab('Interview')} />
           <NavItem icon={<Terminal size={16} />} label="Logs" active={activeTab === 'Logs'} onClick={() => setActiveTab('Logs')} />
         </nav>
 
@@ -202,6 +205,16 @@ export default function App() {
                 onLoadSuggestion={boss.loadResumeSuggestion}
                 onLoadDraft={boss.loadResumeDraft}
                 onGenerateDraft={boss.generateResumeDraft}
+              />
+            )}
+            {activeTab === 'Interview' && (
+              <Interview
+                items={boss.interviewItems}
+                preparingKeys={boss.interviewPreparingKeys}
+                onRefresh={() => { void boss.refreshInterviewItems(); }}
+                onLoadStoryBank={boss.loadInterviewStoryBank}
+                onLoadPrep={boss.loadInterviewPrep}
+                onGeneratePrep={boss.generateInterviewPrep}
               />
             )}
             {activeTab === 'Logs' && <Logs status={boss.status} logs={boss.parsedLogs} />}

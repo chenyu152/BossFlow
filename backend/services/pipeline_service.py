@@ -13,6 +13,7 @@ DATA_DIR = BASE_DIR / "data"
 PIPELINE_PATH = DATA_DIR / "pipeline.md"
 REPORTS_DIR = BASE_DIR / "reports" / "jobs"
 RESUMES_DIR = BASE_DIR / "output" / "resumes"
+INTERVIEW_OUTPUT_DIR = BASE_DIR / "output" / "interview-prep"
 DECISION_STATUSES = {"needs_llm", "needs_review", "ready_to_greet", "greeted", "skipped"}
 
 
@@ -121,6 +122,10 @@ def _item_from_line(line: str, status: str) -> dict[str, Any] | None:
         "resumeDraftPath": meta.get("resumeDraftPath", ""),
         "resumeDraftJsonPath": meta.get("resumeDraftJsonPath", ""),
         "resumeDraftedAt": meta.get("resumeDraftedAt", ""),
+        "interviewPrepId": meta.get("interviewPrepId", ""),
+        "interviewPrepPath": meta.get("interviewPrepPath", ""),
+        "interviewPrepJsonPath": meta.get("interviewPrepJsonPath", ""),
+        "interviewPreparedAt": meta.get("interviewPreparedAt", ""),
         "decisionStatus": meta.get("decisionStatus") or ("needs_review" if meta.get("reportPath") else "needs_llm"),
         "raw": line,
     }
@@ -313,6 +318,27 @@ def _safe_delete_resume_artifact(path_value: str) -> list[str]:
     return deleted
 
 
+def _safe_delete_interview_artifact(path_value: str) -> list[str]:
+    if not path_value:
+        return []
+    deleted: list[str] = []
+    interview_root = INTERVIEW_OUTPUT_DIR.resolve()
+    candidates = [Path(path_value)]
+    if candidates[0].suffix.lower() == ".md":
+        candidates.append(candidates[0].with_suffix(".json"))
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if interview_root != resolved and interview_root not in resolved.parents:
+            continue
+        if resolved.exists() and resolved.is_file():
+            resolved.unlink()
+            deleted.append(str(resolved))
+    return deleted
+
+
 def _safe_report_path(path_value: str) -> Path:
     if not path_value:
         raise HTTPException(status_code=404, detail="Pipeline item has no report")
@@ -354,6 +380,7 @@ def delete_pipeline_item(source_key: str) -> dict[str, Any]:
     removed = False
     deleted_reports: list[str] = []
     deleted_resume_artifacts: list[str] = []
+    deleted_interview_artifacts: list[str] = []
     for line in lines:
         meta = _metadata_from_line(line)
         if meta.get("sourceKey") != source_key:
@@ -363,13 +390,15 @@ def delete_pipeline_item(source_key: str) -> dict[str, Any]:
         deleted_reports.extend(_safe_delete_report(str(meta.get("reportPath") or "")))
         deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeSuggestionPath") or "")))
         deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeDraftPath") or "")))
+        deleted_interview_artifacts.extend(_safe_delete_interview_artifact(str(meta.get("interviewPrepPath") or "")))
     if not removed:
-        return {"ok": False, "deleted": False, "deletedReports": [], "deletedResumeArtifacts": [], **read_pipeline()}
+        return {"ok": False, "deleted": False, "deletedReports": [], "deletedResumeArtifacts": [], "deletedInterviewArtifacts": [], **read_pipeline()}
     PIPELINE_PATH.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")
     return {
         "ok": True,
         "deleted": True,
         "deletedReports": deleted_reports,
         "deletedResumeArtifacts": deleted_resume_artifacts,
+        "deletedInterviewArtifacts": deleted_interview_artifacts,
         **read_pipeline(),
     }

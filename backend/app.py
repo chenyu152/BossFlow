@@ -7,10 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
+from backend.schemas.interview import InterviewPrepRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
+from backend.services.interview_service import generate_interview_prep, list_interview_items, read_interview_prep, read_story_bank
 from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
 from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
 from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
@@ -151,6 +153,26 @@ def create_resume_draft(payload: ResumeDraftRequest):
 @app.get("/api/resume/draft")
 def get_resume_draft(sourceKey: str):
     return read_resume_draft(sourceKey)
+
+
+@app.get("/api/interview/items")
+def get_interview_items():
+    return list_interview_items()
+
+
+@app.get("/api/interview/story-bank")
+def get_interview_story_bank():
+    return read_story_bank()
+
+
+@app.post("/api/interview/prep")
+def create_interview_prep(payload: InterviewPrepRequest):
+    return generate_interview_prep(payload.sourceKey, payload.userNotes)
+
+
+@app.get("/api/interview/prep")
+def get_interview_prep(sourceKey: str):
+    return read_interview_prep(sourceKey)
 
 
 @app.post("/api/tasks/crawl")

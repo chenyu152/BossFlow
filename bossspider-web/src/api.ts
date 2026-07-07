@@ -1,6 +1,9 @@
 import type {
   ConfigPayload,
   EvaluatePipelineResponse,
+  InterviewItemsResponse,
+  InterviewPrepResponse,
+  InterviewStoryBankResponse,
   Job,
   JobsResponse,
   LlmEvaluatePipelineResponse,
@@ -147,6 +150,25 @@ export const bossApi = {
 
   getResumeDraft(sourceKey: string) {
     return request<ResumeDraftResponse>(`/api/resume/draft?sourceKey=${encodeURIComponent(sourceKey)}`);
+  },
+
+  getInterviewItems() {
+    return request<InterviewItemsResponse>('/api/interview/items');
+  },
+
+  getInterviewStoryBank() {
+    return request<InterviewStoryBankResponse>('/api/interview/story-bank');
+  },
+
+  generateInterviewPrep(sourceKey: string, userNotes: string) {
+    return request<InterviewPrepResponse>('/api/interview/prep', {
+      method: 'POST',
+      body: JSON.stringify({ sourceKey, userNotes }),
+    });
+  },
+
+  getInterviewPrep(sourceKey: string) {
+    return request<InterviewPrepResponse>(`/api/interview/prep?sourceKey=${encodeURIComponent(sourceKey)}`);
   },
 
   getTaskStatus() {

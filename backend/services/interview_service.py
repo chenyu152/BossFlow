@@ -1,0 +1,340 @@
+import datetime as dt
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+from fastapi import HTTPException
+
+from backend.services.llm_evaluation_service import (
+    CV_PATH,
+    PROFILE_PATH,
+    REPORTS_DIR,
+    _call_llm,
+    _job_text,
+    _load_pipeline_job,
+    _read_text,
+    _slug,
+)
+from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
+from backend.storage.paths import BASE_DIR
+
+INTERVIEW_DATA_DIR = BASE_DIR / "data" / "interview-prep"
+INTERVIEW_OUTPUT_DIR = BASE_DIR / "output" / "interview-prep"
+STORY_BANK_PATH = INTERVIEW_DATA_DIR / "story-bank.md"
+RESUME_OUTPUT_DIR = BASE_DIR / "output" / "resumes"
+
+
+def _next_interview_id() -> str:
+    INTERVIEW_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    nums = []
+    for path in INTERVIEW_OUTPUT_DIR.glob("*.md"):
+        prefix = path.name[:3]
+        if prefix.isdigit():
+            nums.append(int(prefix))
+    return f"{(max(nums) + 1) if nums else 1:03d}"
+
+
+def _safe_read_markdown(path_value: str, root: Path, limit: int = 12000) -> str:
+    if not path_value:
+        return ""
+    try:
+        resolved = Path(path_value).resolve()
+    except OSError:
+        return ""
+    root_resolved = root.resolve()
+    if root_resolved != resolved and root_resolved not in resolved.parents:
+        return ""
+    if resolved.suffix.lower() != ".md" or not resolved.exists() or not resolved.is_file():
+        return ""
+    return _read_text(resolved, limit)
+
+
+def _safe_interview_prep_path(path_value: str) -> Path:
+    if not path_value:
+        raise HTTPException(status_code=404, detail="Pipeline item has no interview prep")
+    root = INTERVIEW_OUTPUT_DIR.resolve()
+    try:
+        resolved = Path(path_value).resolve()
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Invalid interview prep path") from exc
+    if root != resolved and root not in resolved.parents:
+        raise HTTPException(status_code=403, detail="Interview prep path is outside the interview output directory")
+    if resolved.suffix.lower() != ".md":
+        raise HTTPException(status_code=400, detail="Only Markdown interview prep can be viewed")
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Interview prep file not found")
+    return resolved
+
+
+def _ensure_story_bank() -> None:
+    INTERVIEW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if STORY_BANK_PATH.exists():
+        return
+    STORY_BANK_PATH.write_text(
+        "# Interview Story Bank\n\n"
+        "Use this file to keep reusable STAR+R stories. Each story can be matched to multiple interview questions.\n\n"
+        "## Stories\n\n"
+        "### [Theme] Story title\n"
+        "**Source:** Where this story comes from\n"
+        "**Best for questions about:** ownership, ambiguity, collaboration\n"
+        "**S (Situation):** \n"
+        "**T (Task):** \n"
+        "**A (Action):** \n"
+        "**R (Result):** \n"
+        "**Reflection:** \n",
+        encoding="utf-8",
+    )
+
+
+def _parse_story_bank(content: str) -> list[dict[str, Any]]:
+    stories: list[dict[str, Any]] = []
+    blocks = re.split(r"^###\s+", content, flags=re.MULTILINE)[1:]
+    for block in blocks:
+        lines = block.strip().splitlines()
+        if not lines:
+            continue
+        heading = lines[0].strip()
+        theme = ""
+        title = heading
+        theme_match = re.match(r"^\[([^\]]+)\]\s*(.+)$", heading)
+        if theme_match:
+            theme = theme_match.group(1).strip()
+            title = theme_match.group(2).strip()
+
+        def field(label: str) -> str:
+            pattern = rf"\*\*{re.escape(label)}:\*\*\s*(.+)"
+            match = re.search(pattern, block)
+            return match.group(1).strip() if match else ""
+
+        tags = [
+            tag.strip()
+            for tag in re.split(r"[,;，；]", field("Best for questions about"))
+            if tag.strip()
+        ]
+        story = {
+            "title": title,
+            "theme": theme,
+            "source": field("Source"),
+            "tags": tags,
+            "situation": field("S (Situation)") or field("Situation"),
+            "task": field("T (Task)") or field("Task"),
+            "action": field("A (Action)") or field("Action"),
+            "result": field("R (Result)") or field("Result"),
+            "reflection": field("Reflection"),
+        }
+        if story["title"] and story["title"].lower() != "story title" and (story["action"] or story["result"] or story["reflection"]):
+            stories.append(story)
+    return stories
+
+
+def _interview_item_from_pipeline_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sourceKey": item.get("sourceKey", ""),
+        "company": item.get("company", ""),
+        "title": item.get("title", ""),
+        "city": item.get("city", ""),
+        "salary": item.get("salary", ""),
+        "url": item.get("url", ""),
+        "project": item.get("project", ""),
+        "jobId": item.get("jobId"),
+        "llmScore": item.get("llmScore"),
+        "llmFitLevel": item.get("llmFitLevel", ""),
+        "llmRecommendation": item.get("llmRecommendation", ""),
+        "reportPath": item.get("reportPath", ""),
+        "resumeSuggestionPath": item.get("resumeSuggestionPath", ""),
+        "resumeDraftPath": item.get("resumeDraftPath", ""),
+        "interviewPrepId": item.get("interviewPrepId", ""),
+        "interviewPrepPath": item.get("interviewPrepPath", ""),
+        "interviewPreparedAt": item.get("interviewPreparedAt", ""),
+        "decisionStatus": item.get("decisionStatus", ""),
+    }
+
+
+def list_interview_items() -> dict[str, Any]:
+    pipeline = read_pipeline()
+    items = []
+    for item in [*pipeline["pending"], *pipeline["processed"]]:
+        if (
+            item.get("reportPath")
+            or item.get("resumeSuggestionPath")
+            or item.get("resumeDraftPath")
+            or item.get("interviewPrepPath")
+            or item.get("llmScore")
+        ):
+            items.append(_interview_item_from_pipeline_item(item))
+    return {"ok": True, "items": items}
+
+
+def read_story_bank() -> dict[str, Any]:
+    _ensure_story_bank()
+    content = STORY_BANK_PATH.read_text(encoding="utf-8")
+    return {
+        "ok": True,
+        "path": str(STORY_BANK_PATH),
+        "content": content,
+        "stories": _parse_story_bank(content),
+    }
+
+
+def _prompt(
+    job: dict[str, Any],
+    item: dict[str, Any],
+    story_bank: str,
+    report_text: str,
+    resume_draft_text: str,
+    user_notes: str,
+) -> list[dict[str, str]]:
+    cv_text = _read_text(CV_PATH, 18000)
+    profile_text = _read_text(PROFILE_PATH, 6000)
+    system = """你是 BossFlow 的面试准备助手，负责把 Boss 直聘岗位、候选人简历、岗位精评和故事库整理成可执行的面试准备文档。
+
+硬性规则：
+- 只使用输入材料中存在的信息，不要编造候选人经历、指标、公司背景或真实面试题。
+- 不能联网调研；如果需要公司调研，放到“后续联网调研待补充”。
+- 未经来源证明的问题必须标注为“[基于JD推断]”。
+- 故事匹配必须来自 story-bank.md 或 cv.md；如果证据不足，明确标为“缺故事/需用户补充”。
+- 输出 Markdown，内容要适合直接给求职者面试前复习。
+"""
+    user = f"""请为以下 Boss 直聘岗位生成一份岗位面试准备文档。
+
+请严格按这些章节输出：
+
+# 面试准备：{{公司}} - {{岗位}}
+
+## A. 岗位面试画像
+- 这个岗位最可能考察的能力
+- Boss 直聘沟通/面试阶段可能先确认的信息
+- 当前材料里的主要优势和风险
+
+## B. 高概率问题
+按下面三类分组，每类 4-6 个问题。问题必须标注来源：
+- HR/招聘沟通问题
+- 项目/经历追问
+- 技术/岗位能力问题
+来源只能是：[基于JD推断]、[来自精评报告]、[来自故事库]。
+
+## C. 故事库匹配
+用表格输出：问题/能力点 | 推荐故事 | 为什么匹配 | 需要调整的角度 | 风险。
+如果 story-bank.md 里没有合适故事，可从 cv.md 中指出“可发展为故事的经历”，但必须标注“待用户确认”。
+
+## D. 缺失故事
+列出 3-6 个当前还缺的 STAR+R 故事主题。每个主题给出：
+- 为什么这个岗位可能会问
+- 可以从哪些已有项目/经历里挖
+- 需要用户补充的事实
+
+## E. 技术与项目准备清单
+输出最多 10 条 checklist，每条说明为什么重要、该复习到什么程度。
+
+## F. 15 分钟面试前速览
+- 一句话定位
+- 最该讲的 3 个证据
+- 最容易被追问的 3 个风险
+- 可以反问面试官的 3 个问题
+
+## G. 后续功能待补充
+列出“联网公司调研”和“模拟面试”后续应该补齐的信息，但不要假装已经完成。
+
+岗位信息：
+```text
+{_job_text(job)}
+```
+
+岗位精评报告：
+```markdown
+{report_text or "暂无岗位精评报告。"}
+```
+
+岗位定制简历草稿：
+```markdown
+{resume_draft_text or "暂无岗位定制简历草稿。"}
+```
+
+故事库 story-bank.md：
+```markdown
+{story_bank or "暂无故事库内容。"}
+```
+
+候选人 cv.md：
+```markdown
+{cv_text or "cv.md not found"}
+```
+
+profile.yml：
+```yaml
+{profile_text or "profile.yml not found"}
+```
+
+用户备注：
+```text
+{user_notes or "无"}
+```
+"""
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def generate_interview_prep(source_key: str, user_notes: str = "") -> dict[str, Any]:
+    item, job = _load_pipeline_job(source_key)
+    _ensure_story_bank()
+    story_bank = STORY_BANK_PATH.read_text(encoding="utf-8")
+    report_text = _safe_read_markdown(str(item.get("reportPath") or ""), REPORTS_DIR, 15000)
+    resume_draft_text = _safe_read_markdown(str(item.get("resumeDraftPath") or ""), RESUME_OUTPUT_DIR, 16000)
+    content = _call_llm(_prompt(job, item, story_bank, report_text, resume_draft_text, user_notes))
+
+    prep_id = _next_interview_id()
+    now = dt.datetime.now()
+    filename = (
+        f"{prep_id}-{_slug(job.get('company'))}-{_slug(job.get('title'))}-"
+        f"interview-prep-{now.strftime('%Y-%m-%d')}.md"
+    )
+    prep_path = INTERVIEW_OUTPUT_DIR / filename
+    INTERVIEW_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    prep_path.write_text(content, encoding="utf-8")
+
+    meta = {
+        "interviewPrepId": prep_id,
+        "sourceKey": source_key,
+        "generatedAt": now.isoformat(),
+        "job": job,
+        "pipelineItem": item,
+        "prepPath": str(prep_path),
+        "storyBankPath": str(STORY_BANK_PATH),
+        "userNotes": user_notes,
+    }
+    json_path = prep_path.with_suffix(".json")
+    json_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    update_pipeline_item_metadata(
+        source_key,
+        {
+            "interviewPrepId": prep_id,
+            "interviewPrepPath": str(prep_path),
+            "interviewPrepJsonPath": str(json_path),
+            "interviewPreparedAt": now.strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    )
+
+    return {
+        "ok": True,
+        "sourceKey": source_key,
+        "interviewPrepId": prep_id,
+        "prepPath": str(prep_path),
+        "jsonPath": str(json_path),
+        "content": content,
+        "pipeline": read_pipeline(),
+    }
+
+
+def read_interview_prep(source_key: str) -> dict[str, Any]:
+    item = find_pipeline_item(source_key)
+    if not item:
+        raise HTTPException(status_code=404, detail=f"Pipeline item not found: {source_key}")
+    path = _safe_interview_prep_path(str(item.get("interviewPrepPath") or ""))
+    return {
+        "ok": True,
+        "sourceKey": source_key,
+        "interviewPrepId": item.get("interviewPrepId", ""),
+        "prepPath": str(path),
+        "content": path.read_text(encoding="utf-8"),
+    }

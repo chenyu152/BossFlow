@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { parseLog } from '../utils';
-import type { ConfigPatch, ConfigPayload, Job, PipelineResponse, ResumeDraftResponse, ResumeItem, ResumeSuggestionResponse, Status } from '../types';
+import type {
+  ConfigPatch,
+  ConfigPayload,
+  InterviewItem,
+  InterviewPrepResponse,
+  InterviewStoryBankResponse,
+  Job,
+  PipelineResponse,
+  ResumeDraftResponse,
+  ResumeItem,
+  ResumeSuggestionResponse,
+  Status,
+} from '../types';
 
 export function useBossSpider() {
   const [status, setStatus] = useState<Status>('ready');
@@ -12,6 +24,7 @@ export function useBossSpider() {
   const [jobsTotal, setJobsTotal] = useState(0);
   const [pipeline, setPipeline] = useState<PipelineResponse | null>(null);
   const [resumeItems, setResumeItems] = useState<ResumeItem[]>([]);
+  const [interviewItems, setInterviewItems] = useState<InterviewItem[]>([]);
   const [jobSearch, setJobSearch] = useState('');
   const [sortJobsByScore, setSortJobsByScore] = useState(false);
   const [sortPipelineByLlmScore, setSortPipelineByLlmScore] = useState(false);
@@ -26,6 +39,7 @@ export function useBossSpider() {
   const [llmEvaluatingKeys, setLlmEvaluatingKeys] = useState<string[]>([]);
   const [resumeSuggestingKeys, setResumeSuggestingKeys] = useState<string[]>([]);
   const [resumeDraftingKeys, setResumeDraftingKeys] = useState<string[]>([]);
+  const [interviewPreparingKeys, setInterviewPreparingKeys] = useState<string[]>([]);
   const firstStatusLoad = useRef(true);
 
   const parsedLogs = useMemo(() => logs.map(parseLog), [logs]);
@@ -55,6 +69,12 @@ export function useBossSpider() {
     return data.items || [];
   }, []);
 
+  const refreshInterviewItems = useCallback(async () => {
+    const data = await bossApi.getInterviewItems();
+    setInterviewItems(data.items || []);
+    return data.items || [];
+  }, []);
+
   const loadConfig = useCallback(async (targetProject = project) => {
     setLoading(true);
     try {
@@ -64,12 +84,13 @@ export function useBossSpider() {
       await loadJobs(data.project, '');
       await refreshPipeline();
       await refreshResumeItems();
+      await refreshInterviewItems();
     } catch (error) {
       showNotice(`加载失败：${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
-  }, [loadJobs, project, refreshPipeline, refreshResumeItems, showNotice]);
+  }, [loadJobs, project, refreshInterviewItems, refreshPipeline, refreshResumeItems, showNotice]);
 
   const refreshJobs = useCallback(async (search = jobSearch) => {
     if (!config) return;
@@ -280,6 +301,7 @@ export function useBossSpider() {
       const data = await bossApi.generateResumeSuggestions(sourceKey);
       if (data.pipeline) setPipeline(data.pipeline);
       await refreshResumeItems();
+      await refreshInterviewItems();
       showNotice(`定制简历建议已生成：${data.resumeSuggestionId}`);
       return data;
     } catch (error) {
@@ -288,7 +310,7 @@ export function useBossSpider() {
     } finally {
       setResumeSuggestingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshResumeItems, showNotice]);
+  }, [refreshInterviewItems, refreshResumeItems, showNotice]);
 
   const loadResumeSuggestion = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
     try {
@@ -310,6 +332,7 @@ export function useBossSpider() {
       const data = await bossApi.generateResumeDraft(sourceKey, approvedSuggestionIds, userNotes);
       if (data.pipeline) setPipeline(data.pipeline);
       await refreshResumeItems();
+      await refreshInterviewItems();
       showNotice(`岗位定制简历已生成：${data.resumeDraftId}`);
       return data;
     } catch (error) {
@@ -318,13 +341,51 @@ export function useBossSpider() {
     } finally {
       setResumeDraftingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshResumeItems, showNotice]);
+  }, [refreshInterviewItems, refreshResumeItems, showNotice]);
 
   const loadResumeDraft = useCallback(async (sourceKey: string): Promise<ResumeDraftResponse | null> => {
     try {
       return await bossApi.getResumeDraft(sourceKey);
     } catch (error) {
       showNotice(`加载岗位定制简历失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
+  const loadInterviewStoryBank = useCallback(async (): Promise<InterviewStoryBankResponse | null> => {
+    try {
+      return await bossApi.getInterviewStoryBank();
+    } catch (error) {
+      showNotice(`加载面试故事库失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
+  const generateInterviewPrep = useCallback(async (
+    sourceKey: string,
+    userNotes: string,
+  ): Promise<InterviewPrepResponse | null> => {
+    setInterviewPreparingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
+    showNotice('面试准备文档生成中，可能需要几十秒');
+    try {
+      const data = await bossApi.generateInterviewPrep(sourceKey, userNotes);
+      if (data.pipeline) setPipeline(data.pipeline);
+      await refreshInterviewItems();
+      showNotice(`面试准备文档已生成：${data.interviewPrepId}`);
+      return data;
+    } catch (error) {
+      showNotice(`面试准备文档生成失败：${(error as Error).message}`);
+      return null;
+    } finally {
+      setInterviewPreparingKeys((keys) => keys.filter((key) => key !== sourceKey));
+    }
+  }, [refreshInterviewItems, showNotice]);
+
+  const loadInterviewPrep = useCallback(async (sourceKey: string): Promise<InterviewPrepResponse | null> => {
+    try {
+      return await bossApi.getInterviewPrep(sourceKey);
+    } catch (error) {
+      showNotice(`加载面试准备文档失败：${(error as Error).message}`);
       return null;
     }
   }, [showNotice]);
@@ -346,14 +407,16 @@ export function useBossSpider() {
       const data = await bossApi.deletePipelineItem(sourceKey);
       setPipeline(data);
       await refreshResumeItems();
+      await refreshInterviewItems();
       const deletedResumeCount = data.deletedResumeArtifacts?.length || 0;
-      showNotice(`已删除 Pipeline 条目${data.deletedReports.length ? `，同时删除报告 ${data.deletedReports.length} 个` : ''}${deletedResumeCount ? `，简历建议 ${deletedResumeCount} 个` : ''}`);
+      const deletedInterviewCount = data.deletedInterviewArtifacts?.length || 0;
+      showNotice(`已删除 Pipeline 条目${data.deletedReports.length ? `，同时删除报告 ${data.deletedReports.length} 个` : ''}${deletedResumeCount ? `，简历材料 ${deletedResumeCount} 个` : ''}${deletedInterviewCount ? `，面试材料 ${deletedInterviewCount} 个` : ''}`);
       return true;
     } catch (error) {
       showNotice(`删除失败：${(error as Error).message}`);
       return false;
     }
-  }, [refreshResumeItems, showNotice]);
+  }, [refreshInterviewItems, refreshResumeItems, showNotice]);
 
   return {
     status,
@@ -364,6 +427,7 @@ export function useBossSpider() {
     jobsTotal,
     pipeline,
     resumeItems,
+    interviewItems,
     jobSearch,
     sortJobsByScore,
     sortPipelineByLlmScore,
@@ -380,6 +444,7 @@ export function useBossSpider() {
     llmEvaluatingKeys,
     resumeSuggestingKeys,
     resumeDraftingKeys,
+    interviewPreparingKeys,
     isRunning,
     setJobSearch,
     setSortJobsByScore,
@@ -392,6 +457,7 @@ export function useBossSpider() {
     refreshJobs,
     refreshPipeline,
     refreshResumeItems,
+    refreshInterviewItems,
     updateConfig,
     saveConfig,
     startCrawl,
@@ -410,6 +476,9 @@ export function useBossSpider() {
     loadResumeSuggestion,
     generateResumeDraft,
     loadResumeDraft,
+    loadInterviewStoryBank,
+    generateInterviewPrep,
+    loadInterviewPrep,
     updatePipelineStatus,
     deletePipelineItem,
   };
