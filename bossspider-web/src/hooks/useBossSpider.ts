@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { bossApi } from '../api';
 import { parseLog } from '../utils';
 import type {
@@ -19,6 +20,7 @@ import type {
 } from '../types';
 
 export function useBossSpider() {
+  const { t } = useTranslation('common');
   const [status, setStatus] = useState<Status>('ready');
   const [projects, setProjects] = useState<string[]>([]);
   const [project, setProject] = useState('agent');
@@ -89,20 +91,20 @@ export function useBossSpider() {
       await refreshResumeItems();
       await refreshInterviewItems();
     } catch (error) {
-      showNotice(`加载失败：${(error as Error).message}`);
+      showNotice(t('notices.loadFailed', { error: (error as Error).message }));
     } finally {
       setLoading(false);
     }
-  }, [loadJobs, project, refreshInterviewItems, refreshPipeline, refreshResumeItems, showNotice]);
+  }, [loadJobs, project, refreshInterviewItems, refreshPipeline, refreshResumeItems, showNotice, t]);
 
   const refreshJobs = useCallback(async (search = jobSearch) => {
     if (!config) return;
     try {
       await loadJobs(config.project, search);
     } catch (error) {
-      showNotice(`刷新岗位失败：${(error as Error).message}`);
+      showNotice(t('notices.refreshJobsFailed', { error: (error as Error).message }));
     }
-  }, [config, jobSearch, loadJobs, showNotice]);
+  }, [config, jobSearch, loadJobs, showNotice, t]);
 
   useEffect(() => {
     bossApi.getProjects()
@@ -111,8 +113,8 @@ export function useBossSpider() {
         setProject(data.defaultProject);
         await loadConfig(data.defaultProject);
       })
-      .catch((error) => showNotice(`后端连接失败：${(error as Error).message}`));
-  }, [loadConfig, showNotice]);
+      .catch((error) => showNotice(t('notices.backendConnectionFailed', { error: (error as Error).message })));
+  }, [loadConfig, showNotice, t]);
 
   useEffect(() => {
     const timer = window.setInterval(async () => {
@@ -135,7 +137,7 @@ export function useBossSpider() {
   }, []);
 
   const requestBody = useCallback(() => {
-    if (!config) throw new Error('配置尚未加载');
+    if (!config) throw new Error(t('notices.configNotLoaded'));
     return {
       project: config.project,
       keywordsText: config.keywordsText,
@@ -154,11 +156,11 @@ export function useBossSpider() {
     try {
       const saved = await bossApi.saveConfig(requestBody());
       setConfig(saved);
-      showNotice('配置已保存');
+      showNotice(t('notices.configSaved'));
     } catch (error) {
-      showNotice(`保存失败：${(error as Error).message}`);
+      showNotice(t('notices.saveFailed', { error: (error as Error).message }));
     }
-  }, [requestBody, showNotice]);
+  }, [requestBody, showNotice, t]);
 
   const startCrawl = useCallback(async () => {
     if (!config) return false;
@@ -167,10 +169,10 @@ export function useBossSpider() {
       setStatus('crawling');
       return true;
     } catch (error) {
-      showNotice(`启动失败：${(error as Error).message}`);
+      showNotice(t('notices.startFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [autoSqlite, config, headlessMode, quickMode, requestBody, showNotice, strategyIndex]);
+  }, [autoSqlite, config, headlessMode, quickMode, requestBody, showNotice, strategyIndex, t]);
 
   const startLogin = useCallback(async () => {
     try {
@@ -178,10 +180,10 @@ export function useBossSpider() {
       setStatus('login');
       return true;
     } catch (error) {
-      showNotice(`登录流程启动失败：${(error as Error).message}`);
+      showNotice(t('notices.loginStartFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [requestBody, showNotice]);
+  }, [requestBody, showNotice, t]);
 
   const processPartial = useCallback(async () => {
     try {
@@ -189,10 +191,10 @@ export function useBossSpider() {
       setStatus('processing-partial');
       return true;
     } catch (error) {
-      showNotice(`处理中断文件失败：${(error as Error).message}`);
+      showNotice(t('notices.processPartialFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [autoSqlite, requestBody, showNotice]);
+  }, [autoSqlite, requestBody, showNotice, t]);
 
   const stopTask = useCallback(async () => {
     try {
@@ -200,10 +202,10 @@ export function useBossSpider() {
       setStatus('stopping');
       return true;
     } catch (error) {
-      showNotice(`终止失败：${(error as Error).message}`);
+      showNotice(t('notices.stopFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const exportJobs = useCallback(() => {
     if (!config) return;
@@ -215,13 +217,13 @@ export function useBossSpider() {
     try {
       const data = await bossApi.addJobsToPipeline(config.project, jobIds);
       setPipeline(data);
-      showNotice(`已加入 Pipeline：${data.added || 0} 个，跳过重复：${data.skipped || 0} 个`);
+      showNotice(t('notices.addedToPipeline', { added: data.added || 0, skipped: data.skipped || 0 }));
       return true;
     } catch (error) {
-      showNotice(`加入 Pipeline 失败：${(error as Error).message}`);
+      showNotice(t('notices.addToPipelineFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [config, showNotice]);
+  }, [config, showNotice, t]);
 
   const scoreJobs = useCallback(async (jobIds: number[]) => {
     if (!config || !jobIds.length) return false;
@@ -229,100 +231,100 @@ export function useBossSpider() {
     try {
       const data = await bossApi.scoreJobs(config.project, jobIds);
       await loadJobs(config.project, jobSearch);
-      showNotice(`岗位粗筛完成：${data.scored} 个${data.errors.length ? `，失败 ${data.errors.length} 个` : ''}`);
+      showNotice(t('notices.jobScoringComplete', { scored: data.scored, errors: data.errors.length ? t('notices.withErrors', { count: data.errors.length }) : '' }));
       return true;
     } catch (error) {
-      showNotice(`岗位粗筛失败：${(error as Error).message}`);
+      showNotice(t('notices.jobScoringFailed', { error: (error as Error).message }));
       return false;
     } finally {
       setJobScoringIds((ids) => ids.filter((id) => !jobIds.includes(id)));
     }
-  }, [config, jobSearch, loadJobs, showNotice]);
+  }, [config, jobSearch, loadJobs, showNotice, t]);
 
   const evaluatePipelineItem = useCallback(async (sourceKey: string) => {
     try {
       const data = await bossApi.evaluatePipelineItem(sourceKey);
       setPipeline(data.pipeline);
-      showNotice(`粗筛完成：${data.score.toFixed(1)} / 5.0，${data.fitLevel}`);
+      showNotice(t('notices.evalComplete', { score: data.score.toFixed(1), fitLevel: data.fitLevel }));
       return true;
     } catch (error) {
-      showNotice(`粗筛失败：${(error as Error).message}`);
+      showNotice(t('notices.evalFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const scoreAllPipeline = useCallback(async () => {
     try {
       const data = await bossApi.scorePipeline();
       setPipeline(data.pipeline);
-      showNotice(`粗筛完成：${data.scored} 个岗位${data.errors.length ? `，失败 ${data.errors.length} 个` : ''}`);
+      showNotice(t('notices.batchScoreComplete', { scored: data.scored, errors: data.errors.length ? t('notices.withErrors', { count: data.errors.length }) : '' }));
       return true;
     } catch (error) {
-      showNotice(`一键粗筛失败：${(error as Error).message}`);
+      showNotice(t('notices.batchScoreFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const llmEvaluatePipelineItem = useCallback(async (sourceKey: string) => {
     setLlmEvaluatingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
-    showNotice('LLM 精评已开始，生成报告可能需要几十秒');
+    showNotice(t('notices.llmEvalStarted'));
     try {
       const data = await bossApi.llmEvaluatePipelineItem(sourceKey);
       setPipeline(data.pipeline);
-      showNotice(`LLM 精评完成：报告 ${data.reportId}${data.summary.score ? `，${data.summary.score.toFixed(1)} / 5.0` : ''}`);
+      showNotice(t('notices.llmEvalComplete', { reportId: data.reportId, scoreInfo: data.summary.score ? `，${data.summary.score.toFixed(1)} / 5.0` : '' }));
       return true;
     } catch (error) {
-      showNotice(`LLM 精评失败：${(error as Error).message}`);
+      showNotice(t('notices.llmEvalFailed', { error: (error as Error).message }));
       return false;
     } finally {
       setLlmEvaluatingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const loadJobDetail = useCallback(async (projectName: string, jobId: number) => {
     try {
       return await bossApi.getJobItem(projectName, jobId);
     } catch (error) {
-      showNotice(`加载岗位详情失败：${(error as Error).message}`);
+      showNotice(t('notices.loadJobDetailFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const loadPipelineReport = useCallback(async (sourceKey: string) => {
     try {
       return await bossApi.getPipelineReport(sourceKey);
     } catch (error) {
-      showNotice(`加载报告失败：${(error as Error).message}`);
+      showNotice(t('notices.loadReportFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const generateResumeSuggestions = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
     setResumeSuggestingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
-    showNotice('定制简历建议生成中，可能需要几十秒');
+    showNotice(t('notices.resumeSuggestionGenerating'));
     try {
       const data = await bossApi.generateResumeSuggestions(sourceKey);
       if (data.pipeline) setPipeline(data.pipeline);
       await refreshResumeItems();
       await refreshInterviewItems();
-      showNotice(`定制简历建议已生成：${data.resumeSuggestionId}`);
+      showNotice(t('notices.resumeSuggestionGenerated', { id: data.resumeSuggestionId }));
       return data;
     } catch (error) {
-      showNotice(`定制简历建议生成失败：${(error as Error).message}`);
+      showNotice(t('notices.resumeSuggestionFailed', { error: (error as Error).message }));
       return null;
     } finally {
       setResumeSuggestingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshInterviewItems, refreshResumeItems, showNotice]);
+  }, [refreshInterviewItems, refreshResumeItems, showNotice, t]);
 
   const loadResumeSuggestion = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
     try {
       return await bossApi.getResumeSuggestion(sourceKey);
     } catch (error) {
-      showNotice(`加载定制简历建议失败：${(error as Error).message}`);
+      showNotice(t('notices.loadResumeSuggestionFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const generateResumeDraft = useCallback(async (
     sourceKey: string,
@@ -330,111 +332,111 @@ export function useBossSpider() {
     userNotes: string,
   ): Promise<ResumeDraftResponse | null> => {
     setResumeDraftingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
-    showNotice('岗位定制简历生成中，可能需要几十秒');
+    showNotice(t('notices.resumeDraftGenerating'));
     try {
       const data = await bossApi.generateResumeDraft(sourceKey, approvedSuggestionIds, userNotes);
       if (data.pipeline) setPipeline(data.pipeline);
       await refreshResumeItems();
       await refreshInterviewItems();
-      showNotice(`岗位定制简历已生成：${data.resumeDraftId}`);
+      showNotice(t('notices.resumeDraftGenerated', { id: data.resumeDraftId }));
       return data;
     } catch (error) {
-      showNotice(`岗位定制简历生成失败：${(error as Error).message}`);
+      showNotice(t('notices.resumeDraftFailed', { error: (error as Error).message }));
       return null;
     } finally {
       setResumeDraftingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshInterviewItems, refreshResumeItems, showNotice]);
+  }, [refreshInterviewItems, refreshResumeItems, showNotice, t]);
 
   const loadResumeDraft = useCallback(async (sourceKey: string): Promise<ResumeDraftResponse | null> => {
     try {
       return await bossApi.getResumeDraft(sourceKey);
     } catch (error) {
-      showNotice(`加载岗位定制简历失败：${(error as Error).message}`);
+      showNotice(t('notices.loadResumeDraftFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const loadInterviewStoryBank = useCallback(async (): Promise<InterviewStoryBankResponse | null> => {
     try {
       return await bossApi.getInterviewStoryBank();
     } catch (error) {
-      showNotice(`加载面试故事库失败：${(error as Error).message}`);
+      showNotice(t('notices.loadStoryBankFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const saveInterviewStoryBank = useCallback(async (stories: InterviewStory[]): Promise<InterviewStoryBankResponse | null> => {
     try {
       const data = await bossApi.saveInterviewStoryBank(stories);
-      showNotice('面试故事库已保存');
+      showNotice(t('notices.storyBankSaved'));
       return data;
     } catch (error) {
-      showNotice(`保存面试故事库失败：${(error as Error).message}`);
+      showNotice(t('notices.saveStoryBankFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const loadInterviewStoryDrafts = useCallback(async (): Promise<InterviewStoryDraftsResponse | null> => {
     try {
       return await bossApi.getInterviewStoryDrafts();
     } catch (error) {
-      showNotice(`加载面试故事草稿失败：${(error as Error).message}`);
+      showNotice(t('notices.loadStoryDraftsFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const saveInterviewStoryDrafts = useCallback(async (drafts: InterviewStoryDraft[]): Promise<InterviewStoryDraftsResponse | null> => {
     try {
       const data = await bossApi.saveInterviewStoryDrafts(drafts);
-      showNotice('面试故事草稿已保存');
+      showNotice(t('notices.storyDraftsSaved'));
       return data;
     } catch (error) {
-      showNotice(`保存面试故事草稿失败：${(error as Error).message}`);
+      showNotice(t('notices.saveStoryDraftsFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const generateInterviewPrep = useCallback(async (
     sourceKey: string,
     userNotes: string,
   ): Promise<InterviewPrepResponse | null> => {
     setInterviewPreparingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
-    showNotice('面试准备文档生成中，可能需要几十秒');
+    showNotice(t('notices.interviewPrepGenerating'));
     try {
       const data = await bossApi.generateInterviewPrep(sourceKey, userNotes);
       if (data.pipeline) setPipeline(data.pipeline);
       await refreshInterviewItems();
-      showNotice(`面试准备文档已生成：${data.interviewPrepId}`);
+      showNotice(t('notices.interviewPrepGenerated', { id: data.interviewPrepId }));
       return data;
     } catch (error) {
-      showNotice(`面试准备文档生成失败：${(error as Error).message}`);
+      showNotice(t('notices.interviewPrepFailed', { error: (error as Error).message }));
       return null;
     } finally {
       setInterviewPreparingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshInterviewItems, showNotice]);
+  }, [refreshInterviewItems, showNotice, t]);
 
   const loadInterviewPrep = useCallback(async (sourceKey: string): Promise<InterviewPrepResponse | null> => {
     try {
       return await bossApi.getInterviewPrep(sourceKey);
     } catch (error) {
-      showNotice(`加载面试准备文档失败：${(error as Error).message}`);
+      showNotice(t('notices.loadInterviewPrepFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const updatePipelineStatus = useCallback(async (sourceKey: string, decisionStatus: string) => {
     try {
       const data = await bossApi.updatePipelineStatus(sourceKey, decisionStatus);
       setPipeline(data);
-      showNotice('Pipeline 状态已更新');
+      showNotice(t('notices.pipelineStatusUpdated'));
       return true;
     } catch (error) {
-      showNotice(`更新状态失败：${(error as Error).message}`);
+      showNotice(t('notices.updateStatusFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [showNotice]);
+  }, [showNotice, t]);
 
   const deletePipelineItem = useCallback(async (sourceKey: string) => {
     try {
@@ -444,13 +446,16 @@ export function useBossSpider() {
       await refreshInterviewItems();
       const deletedResumeCount = data.deletedResumeArtifacts?.length || 0;
       const deletedInterviewCount = data.deletedInterviewArtifacts?.length || 0;
-      showNotice(`已删除 Pipeline 条目${data.deletedReports.length ? `，同时删除报告 ${data.deletedReports.length} 个` : ''}${deletedResumeCount ? `，简历材料 ${deletedResumeCount} 个` : ''}${deletedInterviewCount ? `，面试材料 ${deletedInterviewCount} 个` : ''}`);
+      const reportsDeleted = data.deletedReports.length ? t('notices.withReportsDeleted', { count: data.deletedReports.length }) : '';
+      const resumeArtsDeleted = deletedResumeCount ? t('notices.withResumeArtsDeleted', { count: deletedResumeCount }) : '';
+      const interviewArtsDeleted = deletedInterviewCount ? t('notices.withInterviewArtsDeleted', { count: deletedInterviewCount }) : '';
+      showNotice(t('notices.pipelineItemDeleted', { reports: reportsDeleted, resumeArts: resumeArtsDeleted, interviewArts: interviewArtsDeleted }));
       return true;
     } catch (error) {
-      showNotice(`删除失败：${(error as Error).message}`);
+      showNotice(t('notices.deleteFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [refreshInterviewItems, refreshResumeItems, showNotice]);
+  }, [refreshInterviewItems, refreshResumeItems, showNotice, t]);
 
   return {
     status,

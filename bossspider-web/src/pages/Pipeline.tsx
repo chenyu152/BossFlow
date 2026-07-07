@@ -5,27 +5,18 @@ import remarkGfm from 'remark-gfm';
 import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
 import type { DecisionStatus, Job, PipelineItem, PipelineReportResponse, PipelineResponse, ResumeSuggestionResponse } from '../types';
+import { useAppTranslation } from '../i18n';
 
-const DECISION_LABELS: Record<DecisionStatus, string> = {
-  needs_llm: '待精评',
-  needs_review: '待确认',
-  ready_to_greet: '可打招呼',
-  greeted: '已打招呼',
-  skipped: '跳过',
-};
-
-const STATUS_OPTIONS: Array<{ value: DecisionStatus; label: string }> = [
-  { value: 'needs_llm', label: '待精评' },
-  { value: 'needs_review', label: '待确认' },
-  { value: 'ready_to_greet', label: '可打招呼' },
-  { value: 'greeted', label: '已打招呼' },
-  { value: 'skipped', label: '跳过' },
-];
-
-const STATUS_FILTERS: Array<{ value: 'all' | DecisionStatus; label: string }> = [
-  { value: 'all', label: 'All' },
-  ...STATUS_OPTIONS,
-];
+function getDecisionLabel(status: DecisionStatus, t: (key: string) => string): string {
+  const map: Record<DecisionStatus, string> = {
+    needs_llm: 'pipeline.decisionStatus.needs_llm',
+    needs_review: 'pipeline.decisionStatus.needs_review',
+    ready_to_greet: 'pipeline.decisionStatus.ready_to_greet',
+    greeted: 'pipeline.decisionStatus.greeted',
+    skipped: 'pipeline.decisionStatus.skipped',
+  };
+  return t(map[status] || status);
+}
 
 const STATUS_CLASSES: Record<DecisionStatus, { badge: string; active: string; idle: string }> = {
   needs_llm: {
@@ -98,6 +89,27 @@ export function Pipeline({
   onUpdateStatus: (sourceKey: string, decisionStatus: string) => Promise<boolean>;
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
 }) {
+  const { t } = useAppTranslation();
+
+  const STATUS_OPTIONS: Array<{ value: DecisionStatus; label: string }> = useMemo(
+    () => [
+      { value: 'needs_llm', label: getDecisionLabel('needs_llm', t) },
+      { value: 'needs_review', label: getDecisionLabel('needs_review', t) },
+      { value: 'ready_to_greet', label: getDecisionLabel('ready_to_greet', t) },
+      { value: 'greeted', label: getDecisionLabel('greeted', t) },
+      { value: 'skipped', label: getDecisionLabel('skipped', t) },
+    ],
+    [t],
+  );
+
+  const STATUS_FILTERS: Array<{ value: 'all' | DecisionStatus; label: string }> = useMemo(
+    () => [
+      { value: 'all', label: t('jobs.allJobs') },
+      ...STATUS_OPTIONS,
+    ],
+    [t, STATUS_OPTIONS],
+  );
+
   const pending = pipeline?.pending || [];
   const processed = pipeline?.processed || [];
   const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all');
@@ -135,10 +147,10 @@ export function Pipeline({
   }, [selectedItem, selectedSourceKey]);
 
   const riskText = (risk?: string) => {
-    if (risk === 'matched') return 'ok';
-    if (risk === 'near') return 'near';
-    if (risk === 'risk') return 'risk';
-    return 'unknown';
+    if (risk === 'matched') return t('pipeline.risk.ok');
+    if (risk === 'near') return t('pipeline.risk.near');
+    if (risk === 'risk') return t('pipeline.risk.risk');
+    return t('pipeline.risk.unknown');
   };
 
   const selectItem = async (item: PipelineItem) => {
@@ -203,7 +215,7 @@ export function Pipeline({
 
   const deleteSelected = async () => {
     if (!selectedItem) return;
-    const ok = window.confirm('Delete this pipeline item and its generated LLM report?');
+    const ok = window.confirm(t('pipeline.confirmDelete'));
     if (!ok) return;
     if (await onDeleteItem(selectedItem.sourceKey)) {
       setSelectedSourceKey('');
@@ -217,9 +229,9 @@ export function Pipeline({
     <div className="h-full flex flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100">Pipeline</h2>
+          <h2 className="text-lg font-semibold text-zinc-100">{t('pipeline.title')}</h2>
           <p className="text-xs text-zinc-500">
-            Pending {pending.length.toLocaleString()} / Processed {processed.length.toLocaleString()}
+            {t('pipeline.pending', { n: pending.length.toLocaleString() })} / {t('pipeline.processed', { n: processed.length.toLocaleString() })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -229,7 +241,7 @@ export function Pipeline({
             className={`inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByLlmScore ? 'border-emerald-800 bg-emerald-950/40 text-emerald-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
           >
             <ArrowDownWideNarrow size={14} />
-            LLM sort
+            {t('pipeline.llmSort')}
           </button>
           <button
             onClick={onScoreAll}
@@ -237,7 +249,7 @@ export function Pipeline({
             className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 transition-colors"
           >
             <Wand2 size={14} />
-            Rescore pending
+            {t('pipeline.rescorePending')}
           </button>
           <button onClick={onRefresh} className="p-1.5 border border-zinc-800 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors">
             <RefreshCw size={14} />
@@ -274,15 +286,15 @@ export function Pipeline({
               </colgroup>
               <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800 shadow-sm z-10">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">Status</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">Company</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">Title</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">City</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">Salary</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">Score</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">LLM</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">Added</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400 w-40">Action</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.status')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.company')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.jobTitle')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.city')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.salary')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.score')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.llm')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.added')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400 w-40">{t('pipeline.action')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/50">
@@ -296,7 +308,7 @@ export function Pipeline({
                     >
                       <td className="px-4 py-2">
                         <span className={`rounded border px-2 py-1 text-[10px] ${statusBadgeClass(item.decisionStatus)}`}>
-                          {DECISION_LABELS[item.decisionStatus] || item.decisionStatus}
+                          {getDecisionLabel(item.decisionStatus, t)}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-zinc-200 font-medium truncate" title={item.company}>{item.company}</td>
@@ -311,7 +323,7 @@ export function Pipeline({
                               <span className="text-[10px] text-zinc-500">{item.fitLevel}</span>
                             </span>
                             <div className="text-[10px] text-zinc-500">
-                              Exp {riskText(item.experienceRisk)} / Edu {riskText(item.educationRisk)}
+                              {t('pipeline.expRiskShort', { risk: riskText(item.experienceRisk) })} / {t('pipeline.eduRiskShort', { risk: riskText(item.educationRisk) })}
                             </div>
                           </div>
                         ) : (
@@ -322,7 +334,7 @@ export function Pipeline({
                         {isLlmEvaluating ? (
                           <div className="inline-flex items-center gap-2 rounded bg-emerald-950/60 px-2 py-1 text-emerald-300">
                             <Loader2 size={12} className="animate-spin" />
-                            Generating
+                            {t('pipeline.generating')}
                           </div>
                         ) : item.reportPath ? (
                           <div className="min-w-0 space-y-1">
@@ -349,7 +361,7 @@ export function Pipeline({
                             className="inline-flex items-center gap-1.5 rounded border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
                           >
                             <Wand2 size={13} />
-                            Score
+                            {t('pipeline.scoreButton')}
                           </button>
                           <button
                             onClick={(event) => {
@@ -362,10 +374,10 @@ export function Pipeline({
                             {isLlmEvaluating ? (
                               <>
                                 <Loader2 size={13} className="animate-spin" />
-                                Generating
+                                {t('pipeline.generating')}
                               </>
                             ) : (
-                              'LLM Eval'
+                              t('pipeline.llmEval')
                             )}
                           </button>
                         </div>
@@ -377,7 +389,7 @@ export function Pipeline({
             </table>
           ) : (
             <div className="h-full flex items-center justify-center text-sm text-zinc-500">
-              No pipeline jobs match this filter.
+              {t('pipeline.noMatch')}
             </div>
           )}
         </div>
@@ -385,7 +397,7 @@ export function Pipeline({
         {selectedItem && (
           <div className="w-96 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-              <h3 className="font-semibold text-zinc-100">Job Details</h3>
+              <h3 className="font-semibold text-zinc-100">{t('pipeline.jobDetails')}</h3>
               <button onClick={() => setSelectedSourceKey('')} className="text-zinc-500 hover:text-zinc-300">
                 <X size={16} />
               </button>
@@ -408,43 +420,43 @@ export function Pipeline({
                 className="w-full flex items-center justify-center gap-2 rounded border border-red-900/70 bg-red-950/20 px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-950/40 transition-colors"
               >
                 <Trash2 size={15} />
-                Delete item and report
+                {t('pipeline.deleteItem')}
               </button>
 
               {detailLoading && (
                 <div className="flex items-center gap-2 text-sm text-zinc-500">
                   <Loader2 size={14} className="animate-spin" />
-                  Loading details
+                  {t('pipeline.loadingDetails')}
                 </div>
               )}
 
-              <DetailItem label="Title" value={selectedItem.title} strong />
+              <DetailItem label={t('pipeline.jobTitle')} value={selectedItem.title} strong />
               <div className="grid grid-cols-2 gap-4">
-                <DetailItem label="Company" value={selectedItem.company} />
-                <DetailItem label="City" value={selectedItem.city} />
-                <DetailItem label="Salary" value={selectedItem.salary} accent />
-                <DetailItem label="Avg Salary" value={`${(selectedJob?.avg ?? selectedItem.avg ?? 0).toFixed(1)}k`} />
-                <DetailItem label="Experience" value={selectedJob?.exp || '-'} />
-                <DetailItem label="Education" value={selectedJob?.edu || '-'} />
+                <DetailItem label={t('pipeline.company')} value={selectedItem.company} />
+                <DetailItem label={t('pipeline.city')} value={selectedItem.city} />
+                <DetailItem label={t('pipeline.salary')} value={selectedItem.salary} accent />
+                <DetailItem label={t('pipeline.avgSalary')} value={`${(selectedJob?.avg ?? selectedItem.avg ?? 0).toFixed(1)}k`} />
+                <DetailItem label={t('pipeline.experience')} value={selectedJob?.exp || '-'} />
+                <DetailItem label={t('pipeline.education')} value={selectedJob?.edu || '-'} />
               </div>
 
               <div className="rounded border border-zinc-800 bg-zinc-900/50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-500">Score</span>
+                  <span className="text-xs text-zinc-500">{t('pipeline.score')}</span>
                   <span className="text-sm font-semibold text-zinc-100">{selectedItem.score ? selectedItem.score.toFixed(1) : '-'} / 5.0</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                  <div>Coverage {selectedItem.coverage ?? 0}%</div>
-                  <div>JD {selectedItem.jdQuality ?? 0}%</div>
-                  <div>Exp {riskText(selectedItem.experienceRisk)}</div>
-                  <div>Edu {riskText(selectedItem.educationRisk)}</div>
+                  <div>{t('pipeline.coverage', { n: selectedItem.coverage ?? 0 })}</div>
+                  <div>{t('pipeline.jdQuality', { n: selectedItem.jdQuality ?? 0 })}</div>
+                  <div>{t('pipeline.expRisk', { risk: riskText(selectedItem.experienceRisk) })}</div>
+                  <div>{t('pipeline.eduRisk', { risk: riskText(selectedItem.educationRisk) })}</div>
                 </div>
               </div>
 
               {(selectedItem.reportPath || selectedItem.llmRecommendation) && (
                 <div className="rounded border border-emerald-900/50 bg-emerald-950/20 p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-emerald-500">LLM</span>
+                    <span className="text-xs text-emerald-500">{t('pipeline.llm')}</span>
                     <span className="text-sm font-semibold text-emerald-200">{selectedItem.llmScore ? selectedItem.llmScore.toFixed(1) : selectedItem.reportId || '-'} / 5.0</span>
                   </div>
                   {selectedItem.llmFitLevel && <div className="text-xs text-emerald-400">{selectedItem.llmFitLevel}</div>}
@@ -458,7 +470,7 @@ export function Pipeline({
                         className="inline-flex items-center gap-2 rounded border border-emerald-900/70 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50 transition-colors"
                       >
                         {reportLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
-                        View report
+                        {t('pipeline.viewReport')}
                       </button>
                     </>
                   )}
@@ -467,16 +479,16 @@ export function Pipeline({
 
               <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-indigo-400">Resume</span>
+                  <span className="text-xs text-indigo-400">{t('nav.resume')}</span>
                   {selectedItem.resumeSuggestionId && (
                     <span className="text-xs font-semibold text-indigo-200">{selectedItem.resumeSuggestionId}</span>
                   )}
                 </div>
                 <div className="text-xs leading-relaxed text-zinc-400">
-                  Generate JD-specific resume suggestions first. This will not change cv.md.
+                  {t('pipeline.resumeHint')}
                 </div>
                 {selectedItem.resumeSuggestedAt && (
-                  <div className="text-[10px] text-zinc-500">Generated {selectedItem.resumeSuggestedAt}</div>
+                  <div className="text-[10px] text-zinc-500">{t('pipeline.generatedAt', { date: selectedItem.resumeSuggestedAt })}</div>
                 )}
                 {selectedItem.resumeSuggestionPath && (
                   <div className="break-all text-[10px] text-zinc-500">{selectedItem.resumeSuggestionPath}</div>
@@ -488,7 +500,7 @@ export function Pipeline({
                     className="inline-flex items-center gap-2 rounded border border-indigo-800/70 bg-indigo-950/40 px-2.5 py-1.5 text-xs font-medium text-indigo-200 hover:bg-indigo-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
                   >
                     {isSelectedResumeSuggesting || resumeLoading ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
-                    {selectedItem.resumeSuggestionPath ? 'Regenerate suggestions' : 'Generate suggestions'}
+                    {selectedItem.resumeSuggestionPath ? t('pipeline.regenerateSuggestions') : t('pipeline.generateSuggestions')}
                   </button>
                   {selectedItem.resumeSuggestionPath && (
                     <button
@@ -497,14 +509,14 @@ export function Pipeline({
                       className="inline-flex items-center gap-2 rounded border border-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-50 transition-colors"
                     >
                       {resumeLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
-                      View suggestions
+                      {t('pipeline.viewSuggestions')}
                     </button>
                   )}
                 </div>
               </div>
 
               <div>
-                <div className="text-xs text-zinc-500 mb-1">Category</div>
+                <div className="text-xs text-zinc-500 mb-1">{t('jobs.tableHeaders.category')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {((selectedJob?.cats.length ? selectedJob.cats : [selectedJob?.tier || '-'])).map((cat) => (
                     <span key={cat} className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 text-xs">{cat}</span>
@@ -516,7 +528,7 @@ export function Pipeline({
 
               {(selectedJob?.url || selectedItem.url) && (
                 <a href={selectedJob?.url || selectedItem.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline">
-                  View Original Link
+                  {t('jobs.viewOriginalLink')}
                 </a>
               )}
             </div>
@@ -526,7 +538,7 @@ export function Pipeline({
 
       {pipeline?.path && (
         <div className="mt-3 text-xs text-zinc-600 truncate">
-          Source file: {pipeline.path}
+          {t('pipeline.sourceFile', { path: pipeline.path })}
         </div>
       )}
 
@@ -543,10 +555,10 @@ export function Pipeline({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <BookOpenText size={16} className="text-emerald-400" />
-                  <h3 className="truncate text-base font-semibold text-zinc-100">{report.title || `Report ${report.reportId}`}</h3>
+                  <h3 className="truncate text-base font-semibold text-zinc-100">{report.title || t('pipeline.report', { id: report.reportId })}</h3>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  {report.reportId && <span>Report {report.reportId}</span>}
+                  {report.reportId && <span>{t('pipeline.report', { id: report.reportId })}</span>}
                   <span className="max-w-3xl truncate">{report.reportPath}</span>
                 </div>
               </div>
@@ -582,7 +594,7 @@ export function Pipeline({
                 <div className="flex items-center gap-2">
                   <FileText size={16} className="text-indigo-400" />
                   <h3 className="truncate text-base font-semibold text-zinc-100">
-                    Resume Suggestions {resumeSuggestion.resumeSuggestionId}
+                    {t('resume.suggestions', { id: resumeSuggestion.resumeSuggestionId })}
                   </h3>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">

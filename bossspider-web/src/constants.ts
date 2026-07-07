@@ -14,7 +14,7 @@ export const CITY_OPTIONS = [
 ];
 
 export const STRATEGIES = [
-  { title: 'Standard', desc: 'Normal pagination up to limit' },
-  { title: 'Greedy', desc: 'Deep traversal mode' },
-  { title: 'Scroll', desc: 'Infinite scroll mode' },
-];
+  { title: 'Standard', descKey: 'strategy.desc.standard' },
+  { title: 'Greedy', descKey: 'strategy.desc.greedy' },
+  { title: 'Scroll', descKey: 'strategy.desc.scroll' },
+] as const;

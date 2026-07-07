@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useAppTranslation } from './i18n';
 import {
   Briefcase,
   BookOpenText,
@@ -30,6 +31,7 @@ import type { InterviewStory, Tab } from './types';
 const STORY_DRAFT_TRANSFER_KEY = 'bossspider:story-draft-transfer';
 
 export default function App() {
+  const { t, i18n } = useAppTranslation();
   const [activeTab, setActiveTab] = useState<Tab>('Dashboard');
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
   const [storyDraftSeed, setStoryDraftSeed] = useState<InterviewStory | null>(null);
@@ -70,19 +72,19 @@ export default function App() {
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          <NavItem icon={<LayoutDashboard size={16} />} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} />
-          <NavItem icon={<Crosshair size={16} />} label="Scope" active={activeTab === 'Scope'} onClick={() => setActiveTab('Scope')} />
-          <NavItem icon={<FileJson size={16} />} label="Rules" active={activeTab === 'Rules'} onClick={() => setActiveTab('Rules')} />
-          <NavItem icon={<Briefcase size={16} />} label="Jobs" active={activeTab === 'Jobs'} onClick={() => setActiveTab('Jobs')} />
-          <NavItem icon={<Inbox size={16} />} label="Pipeline" active={activeTab === 'Pipeline'} onClick={() => setActiveTab('Pipeline')} />
-          <NavItem icon={<FileText size={16} />} label="Resume" active={activeTab === 'Resume'} onClick={() => setActiveTab('Resume')} />
-          <NavItem icon={<MessageSquareText size={16} />} label="Interview" active={activeTab === 'Interview'} onClick={() => setActiveTab('Interview')} />
-          <NavItem icon={<BookOpenText size={16} />} label="Story" active={activeTab === 'Story'} onClick={() => setActiveTab('Story')} />
-          <NavItem icon={<Terminal size={16} />} label="Logs" active={activeTab === 'Logs'} onClick={() => setActiveTab('Logs')} />
+          <NavItem icon={<LayoutDashboard size={16} />} label={t('nav.dashboard')} active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} />
+          <NavItem icon={<Crosshair size={16} />} label={t('nav.scope')} active={activeTab === 'Scope'} onClick={() => setActiveTab('Scope')} />
+          <NavItem icon={<FileJson size={16} />} label={t('nav.rules')} active={activeTab === 'Rules'} onClick={() => setActiveTab('Rules')} />
+          <NavItem icon={<Briefcase size={16} />} label={t('nav.jobs')} active={activeTab === 'Jobs'} onClick={() => setActiveTab('Jobs')} />
+          <NavItem icon={<Inbox size={16} />} label={t('nav.pipeline')} active={activeTab === 'Pipeline'} onClick={() => setActiveTab('Pipeline')} />
+          <NavItem icon={<FileText size={16} />} label={t('nav.resume')} active={activeTab === 'Resume'} onClick={() => setActiveTab('Resume')} />
+          <NavItem icon={<MessageSquareText size={16} />} label={t('nav.interview')} active={activeTab === 'Interview'} onClick={() => setActiveTab('Interview')} />
+          <NavItem icon={<BookOpenText size={16} />} label={t('nav.story')} active={activeTab === 'Story'} onClick={() => setActiveTab('Story')} />
+          <NavItem icon={<Terminal size={16} />} label={t('nav.logs')} active={activeTab === 'Logs'} onClick={() => setActiveTab('Logs')} />
         </nav>
 
         <div className="p-4 border-t border-zinc-800 text-xs text-zinc-600">
-          Web Console
+          {t('nav.webConsole')}
         </div>
       </aside>
 
@@ -90,7 +92,7 @@ export default function App() {
         <header className="h-14 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-4 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500 uppercase font-medium">Project</span>
+              <span className="text-xs text-zinc-500 uppercase font-medium">{t('header.project')}</span>
               <select
                 value={boss.project}
                 onChange={(event) => boss.loadConfig(event.target.value)}
@@ -111,24 +113,40 @@ export default function App() {
             >
               <Database size={14} className="shrink-0" />
               <span className="truncate">
-                {dbPathExpanded ? boss.config?.dbFilePath || 'No database loaded' : boss.config?.dbFileName || 'No database'}
+                {dbPathExpanded ? boss.config?.dbFilePath || t('header.noDatabaseLoaded') : boss.config?.dbFileName || t('header.noDatabase')}
               </span>
             </button>
           </div>
 
           <div className="flex items-center gap-3">
+            <div className="flex items-center gap-0.5 rounded border border-zinc-800 bg-zinc-900/50 p-0.5">
+              {(['zh', 'en'] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => i18n.changeLanguage(lang)}
+                  className={`px-1.5 py-0.5 text-[11px] font-medium rounded-sm transition-colors ${
+                    i18n.language === lang
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                  title={lang === 'zh' ? '切换到中文' : 'Switch to English'}
+                >
+                  {lang === 'zh' ? '中' : 'EN'}
+                </button>
+              ))}
+            </div>
             <button onClick={() => setActiveTab('Logs')} className="text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors">
-              View Logs
+              {t('header.viewLogs')}
             </button>
             {!boss.isRunning ? (
               <button onClick={startCrawl} disabled={!boss.config || boss.loading} className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors">
                 <Play size={14} />
-                Start Crawl
+                {t('header.startCrawl')}
               </button>
             ) : (
               <button onClick={stopTask} className="flex items-center gap-1.5 bg-red-900/50 text-red-400 border border-red-900/50 hover:bg-red-900/80 px-3 py-1.5 rounded text-sm font-medium transition-colors">
                 <Square size={14} />
-                Stop Crawl
+                {t('header.stopCrawl')}
               </button>
             )}
           </div>

@@ -1,5 +1,6 @@
 import { BookOpenText, CheckCircle2, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAppTranslation } from '../i18n';
 import { emptyStory } from '../storyUtils';
 import type { InterviewStory, InterviewStoryBankResponse, InterviewStoryDraft, InterviewStoryDraftsResponse } from '../types';
 
@@ -43,12 +44,12 @@ function visibleDrafts(drafts: InterviewStoryDraft[]) {
   return drafts.filter((draft) => draft.status !== 'dismissed' && draft.status !== 'promoted');
 }
 
-function statusLabel(status: InterviewStoryDraft['status']) {
-  if (status === 'ready') return 'Ready';
-  if (status === 'editing') return 'Editing';
-  if (status === 'promoted') return 'Promoted';
-  if (status === 'dismissed') return 'Dismissed';
-  return 'Needs confirmation';
+function statusLabel(t: (key: string) => string, status: InterviewStoryDraft['status']) {
+  if (status === 'ready') return t('story.ready');
+  if (status === 'editing') return t('story.editing');
+  if (status === 'promoted') return t('story.promoted');
+  if (status === 'dismissed') return t('story.dismissed');
+  return t('story.needsConfirmation');
 }
 
 export function Story({
@@ -66,6 +67,7 @@ export function Story({
   incomingDraft?: InterviewStory | null;
   onIncomingDraftConsumed?: () => void;
 }) {
+  const { t } = useAppTranslation();
   const [mode, setMode] = useState<StoryMode>('drafts');
   const [storyBank, setStoryBank] = useState<InterviewStoryBankResponse | null>(null);
   const [draftStore, setDraftStore] = useState<InterviewStoryDraftsResponse | null>(null);
@@ -287,16 +289,16 @@ export function Story({
   };
 
   const selectedTitle = mode === 'drafts'
-    ? draftMeta.title || 'Untitled draft'
-    : storyDraft.title || 'Untitled story';
+    ? draftMeta.title || t('story.untitledDraft')
+    : storyDraft.title || t('story.untitledStory');
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100">Story</h2>
+          <h2 className="text-lg font-semibold text-zinc-100">{t('story.title')}</h2>
           <p className="text-xs text-zinc-500">
-            {drafts.length.toLocaleString()} drafts / {stories.length.toLocaleString()} confirmed stories
+            {drafts.length.toLocaleString()} {t('story.draftsCount')} / {stories.length.toLocaleString()} {t('story.confirmedCount')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -305,7 +307,7 @@ export function Story({
             className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-900"
           >
             <Plus size={14} />
-            {mode === 'drafts' ? 'New Draft' : 'New Story'}
+            {mode === 'drafts' ? t('story.newDraft') : t('story.newStory')}
           </button>
           <button
             onClick={saveCurrent}
@@ -313,7 +315,7 @@ export function Story({
             className="inline-flex items-center gap-2 rounded bg-cyan-700 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {mode === 'drafts' ? 'Save Draft' : 'Save Story'}
+            {mode === 'drafts' ? t('story.saveDraft') : t('story.saveStory')}
           </button>
           {mode === 'drafts' && (
             <button
@@ -322,7 +324,7 @@ export function Story({
               className="inline-flex items-center gap-2 rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckCircle2 size={14} />
-              Promote
+              {t('story.promote')}
             </button>
           )}
         </div>
@@ -335,22 +337,22 @@ export function Story({
               onClick={() => switchMode('drafts')}
               className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'drafts' ? 'bg-cyan-700 text-white' : 'text-zinc-400 hover:bg-zinc-900'}`}
             >
-              Drafts {drafts.length}
+              {t('story.drafts')} {drafts.length}
             </button>
             <button
               onClick={() => switchMode('confirmed')}
               className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'confirmed' ? 'bg-cyan-700 text-white' : 'text-zinc-400 hover:bg-zinc-900'}`}
             >
-              Confirmed {stories.length}
+              {t('story.confirmed')} {stories.length}
             </button>
           </div>
           <div className="mb-3 break-all rounded border border-zinc-800 bg-zinc-900/50 p-3 text-[10px] text-zinc-500">
-            {mode === 'drafts' ? draftStore?.path || 'Loading drafts...' : storyBank?.path || 'Loading story bank...'}
+            {mode === 'drafts' ? draftStore?.path || t('story.loadingDrafts') : storyBank?.path || t('story.loadingStories')}
           </div>
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-zinc-500">
               <Loader2 size={14} className="animate-spin" />
-              Loading stories
+              {t('story.loadingStoriesShort')}
             </div>
           ) : activeList.length ? (
             <div className="space-y-2">
@@ -362,11 +364,11 @@ export function Story({
                     onClick={() => setSelectedIndex(index)}
                     className={`block w-full rounded border px-3 py-3 text-left transition-colors ${index === selectedIndex ? 'border-cyan-700 bg-cyan-950/30 text-cyan-200' : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:bg-zinc-900'}`}
                   >
-                    <div className="truncate text-sm font-medium">{item.title || 'Untitled'}</div>
-                    <div className="mt-1 truncate text-xs text-zinc-500">{item.theme || 'General'}</div>
+                    <div className="truncate text-sm font-medium">{item.title || t('story.untitled')}</div>
+                    <div className="mt-1 truncate text-xs text-zinc-500">{item.theme || t('story.general')}</div>
                     {draft && (
                       <div className="mt-2 inline-flex rounded bg-amber-950/50 px-1.5 py-0.5 text-[10px] text-amber-300">
-                        {statusLabel(draft.status)}
+                        {statusLabel(t, draft.status)}
                       </div>
                     )}
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -381,8 +383,8 @@ export function Story({
           ) : (
             <div className="rounded border border-dashed border-zinc-800 bg-zinc-900/30 p-4 text-sm leading-relaxed text-zinc-500">
               {mode === 'drafts'
-                ? 'No story drafts yet. Create drafts from Interview prep, then confirm them here.'
-                : 'Story bank is empty. Add a STAR+R story, then save it to Markdown for future interview prep.'}
+                ? t('story.noDraftsYet')
+                : t('story.storyBankEmpty')}
             </div>
           )}
         </aside>
@@ -391,21 +393,21 @@ export function Story({
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
               <BookOpenText size={15} className="text-cyan-400" />
-              {mode === 'drafts' ? 'Draft Editor' : 'STAR+R Editor'}
+              {mode === 'drafts' ? t('story.draftEditor') : t('story.starEditor')}
             </div>
             <div className="truncate text-xs text-zinc-500">{selectedTitle}</div>
           </div>
 
           {mode === 'drafts' && (
             <div className="mb-4 flex max-w-5xl flex-wrap items-center gap-2 rounded border border-zinc-800 bg-zinc-950 p-3">
-              <span className="text-xs text-zinc-500">Status</span>
+              <span className="text-xs text-zinc-500">{t('story.statusLabel')}</span>
               {(['needs_confirmation', 'editing', 'ready'] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => updateDraftStatus(status)}
                   className={`rounded px-2 py-1 text-xs transition-colors ${draftMeta.status === status ? 'bg-amber-900/70 text-amber-200' : 'border border-zinc-800 text-zinc-400 hover:bg-zinc-900'}`}
                 >
-                  {statusLabel(status)}
+                  {statusLabel(t, status)}
                 </button>
               ))}
             </div>
@@ -413,7 +415,7 @@ export function Story({
 
           <div className="grid max-w-5xl grid-cols-2 gap-3">
             <label className="space-y-1">
-              <span className="text-xs uppercase text-zinc-500">Title</span>
+              <span className="text-xs uppercase text-zinc-500">{t('story.titleField')}</span>
               <input
                 value={storyDraft.title}
                 onChange={(event) => updateStoryDraft({ title: event.target.value })}
@@ -421,7 +423,7 @@ export function Story({
               />
             </label>
             <label className="space-y-1">
-              <span className="text-xs uppercase text-zinc-500">Theme</span>
+              <span className="text-xs uppercase text-zinc-500">{t('story.themeField')}</span>
               <input
                 value={storyDraft.theme}
                 onChange={(event) => updateStoryDraft({ theme: event.target.value })}
@@ -429,29 +431,29 @@ export function Story({
               />
             </label>
             <label className="col-span-2 space-y-1">
-              <span className="text-xs uppercase text-zinc-500">Tags</span>
+              <span className="text-xs uppercase text-zinc-500">{t('story.tagsField')}</span>
               <input
                 value={storyDraft.tags.join(', ')}
                 onChange={(event) => updateStoryDraft({ tags: event.target.value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean) })}
-                placeholder="ownership, ambiguity, collaboration"
+                placeholder={t('story.tagsPlaceholder')}
                 className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-cyan-600"
               />
             </label>
             <label className="col-span-2 space-y-1">
-              <span className="text-xs uppercase text-zinc-500">Source</span>
+              <span className="text-xs uppercase text-zinc-500">{t('story.sourceField')}</span>
               <input
                 value={storyDraft.source}
                 onChange={(event) => updateStoryDraft({ source: event.target.value })}
                 className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-cyan-600"
               />
             </label>
-            {[
-              ['situation', 'S - Situation'],
-              ['task', 'T - Task'],
-              ['action', 'A - Action'],
-              ['result', 'R - Result'],
-              ['reflection', 'Reflection'],
-            ].map(([key, label]) => (
+            {([
+              ['situation', t('story.sSituation')],
+              ['task', t('story.tTask')],
+              ['action', t('story.aAction')],
+              ['result', t('story.rResult')],
+              ['reflection', t('story.reflection')],
+            ] as [string, string][]).map(([key, label]) => (
               <label key={key} className="col-span-2 space-y-1">
                 <span className="text-xs uppercase text-zinc-500">{label}</span>
                 <textarea
@@ -465,7 +467,7 @@ export function Story({
 
           <div className="mt-5 flex max-w-5xl items-center justify-between">
             <div className="text-xs text-zinc-500">
-              {dirty ? 'Unsaved changes' : 'Saved version loaded'}
+              {dirty ? t('story.unsavedChanges') : t('story.savedVersion')}
             </div>
             <button
               onClick={deleteCurrent}
@@ -473,7 +475,7 @@ export function Story({
               className="inline-flex items-center gap-2 rounded border border-red-950/70 px-3 py-1.5 text-sm text-red-300 transition-colors hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 size={14} />
-              {mode === 'drafts' ? 'Dismiss' : 'Delete'}
+              {mode === 'drafts' ? t('story.dismiss') : t('story.delete')}
             </button>
           </div>
         </main>

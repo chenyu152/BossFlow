@@ -1,5 +1,6 @@
 import { BookOpenText, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useAppTranslation } from '../i18n';
 
 type DescriptionSection = {
   title: string;
@@ -140,6 +141,7 @@ function DescriptionContent({ sections, compact = false }: { sections: Descripti
 }
 
 export function JobDescription({ text }: { text?: string }) {
+  const { t } = useAppTranslation();
   const [open, setOpen] = useState(false);
   const sections = useMemo(() => parseDescription(text || ''), [text]);
   const itemCount = sections.reduce((sum, section) => sum + section.items.length, 0);
@@ -148,9 +150,9 @@ export function JobDescription({ text }: { text?: string }) {
   if (!text?.trim()) {
     return (
       <div>
-        <div className="mb-1 text-xs text-zinc-500">Description</div>
+        <div className="mb-1 text-xs text-zinc-500">{t('jobs.description')}</div>
         <div className="rounded border border-zinc-800/50 bg-zinc-900/50 p-3 text-sm text-zinc-500">
-          No description loaded.
+          {t('jobs.noDescriptionLoaded')}
         </div>
       </div>
     );
@@ -159,13 +161,13 @@ export function JobDescription({ text }: { text?: string }) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="text-xs text-zinc-500">Description</div>
+        <div className="text-xs text-zinc-500">{t('jobs.description')}</div>
         <button
           onClick={() => setOpen(true)}
           className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
         >
           <BookOpenText size={13} />
-          View full JD
+          {t('jobs.viewFullJd')}
         </button>
       </div>
       <div className="rounded border border-zinc-800/50 bg-zinc-900/50 p-3">
@@ -175,7 +177,7 @@ export function JobDescription({ text }: { text?: string }) {
             onClick={() => setOpen(true)}
             className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
           >
-            Show all {itemCount} items
+            {t('jobs.showAllItems', { count: itemCount })}
           </button>
         )}
       </div>
@@ -192,7 +194,7 @@ export function JobDescription({ text }: { text?: string }) {
             <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-5 py-4">
               <div className="flex min-w-0 items-center gap-2">
                 <BookOpenText size={16} className="text-indigo-400" />
-                <h3 className="truncate text-base font-semibold text-zinc-100">Job Description</h3>
+                <h3 className="truncate text-base font-semibold text-zinc-100">{t('jobs.jobDetails')}</h3>
               </div>
               <button
                 onClick={() => setOpen(false)}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, RefreshCw, RotateCcw, Search, Square, Wand2, X } from 'lucide-react';
+import { useAppTranslation } from '../i18n';
 import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
 import type { Job } from '../types';
@@ -29,6 +30,7 @@ export function Jobs({
   scoringJobIds: number[];
   onAddToPipeline: (jobs: Job[]) => void;
 }) {
+  const { t } = useAppTranslation();
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [page, setPage] = useState(1);
@@ -239,10 +241,10 @@ export function Jobs({
   };
 
   const riskText = (risk?: string) => {
-    if (risk === 'matched') return 'ok';
-    if (risk === 'near') return 'near';
-    if (risk === 'risk') return 'risk';
-    return 'unknown';
+    if (risk === 'matched') return t('status.ok');
+    if (risk === 'near') return t('status.near');
+    if (risk === 'risk') return t('status.risk');
+    return t('status.unknown');
   };
 
   return (
@@ -256,7 +258,7 @@ export function Jobs({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter') onRefresh(); }}
-              placeholder="Search title, company..."
+              placeholder={t('jobs.searchPlaceholder')}
               className="w-full bg-zinc-900/50 border border-zinc-800 rounded text-sm pl-8 pr-3 py-1.5 text-zinc-200 outline-none focus:border-indigo-500 transition-colors"
             />
           </div>
@@ -264,14 +266,14 @@ export function Jobs({
             <RefreshCw size={14} />
           </button>
           <span className="text-xs text-zinc-500">
-            {jobs.length >= total ? `All ${total.toLocaleString()}` : `${jobs.length.toLocaleString()} / ${total.toLocaleString()}`}
+            {jobs.length >= total ? `${t('jobs.allJobs')} ${total.toLocaleString()}` : `${jobs.length.toLocaleString()} / ${total.toLocaleString()}`}
           </span>
           <button
             onClick={() => setFiltersOpen((value) => !value)}
             className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded transition-colors ${filtersOpen || hasActiveFilters ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
           >
             <Funnel size={14} />
-            Filters
+            {t('jobs.filters')}
             {activeFilterCount > 0 && <span className="text-indigo-100">({activeFilterCount})</span>}
           </button>
           <button
@@ -280,7 +282,7 @@ export function Jobs({
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
           >
             {scoringVisible ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            Score page
+            {t('jobs.scorePage')}
           </button>
           <button
             onClick={() => onScoreJobs(allIds)}
@@ -288,7 +290,7 @@ export function Jobs({
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
           >
             {scoringAll ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            Score all
+            {t('jobs.scoreAll')}
           </button>
           <button
             onClick={() => onScoreJobs(selectedJobs.map((job) => job.id))}
@@ -296,14 +298,14 @@ export function Jobs({
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
           >
             {scoringSelected ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            Score selected
+            {t('jobs.scoreSelected')}
           </button>
           <button
             onClick={() => setSortByScore((value) => !value)}
             className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded transition-colors ${sortByScore ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
           >
             <ArrowDownWideNarrow size={14} />
-            Score sort
+            {t('jobs.scoreSort')}
           </button>
           <button
             onClick={() => onAddToPipeline(selectedJobs)}
@@ -311,18 +313,18 @@ export function Jobs({
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white rounded transition-colors"
           >
             <ListPlus size={14} />
-            Add selected
+            {t('jobs.addSelected')}
             {selectedJobs.length > 0 && <span className="text-indigo-100">({selectedJobs.length})</span>}
           </button>
           {selectedJobs.length > 0 && (
             <button onClick={() => setSelectedIds(new Set())} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-              Clear
+              {t('jobs.clear')}
             </button>
           )}
         </div>
         <button onClick={onExport} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 rounded transition-colors">
           <Download size={14} />
-          Export Excel
+          {t('jobs.exportExcel')}
         </button>
       </div>
 
@@ -333,7 +335,7 @@ export function Jobs({
             onChange={(event) => setCityFilter(event.target.value)}
             className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
           >
-            <option value="all">All cities</option>
+            <option value="all">{t('jobs.allCities')}</option>
             {cityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
           </select>
           <select
@@ -341,7 +343,7 @@ export function Jobs({
             onChange={(event) => setCategoryFilter(event.target.value)}
             className="max-w-48 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
           >
-            <option value="all">All categories</option>
+            <option value="all">{t('jobs.allCategories')}</option>
             {categoryOptions.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
           </select>
           <select
@@ -349,40 +351,40 @@ export function Jobs({
             onChange={(event) => setScoreFilter(event.target.value)}
             className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
           >
-            <option value="all">All scores</option>
-            <option value="high">High fit ≥ 4.0</option>
-            <option value="review">Worth reviewing 3.5-3.9</option>
-            <option value="weak">Weak &lt; 3.5</option>
-            <option value="unscored">Unscored</option>
+            <option value="all">{t('jobs.allScores')}</option>
+            <option value="high">{t('jobs.highFitFilter')}</option>
+            <option value="review">{t('jobs.worthReviewingFilter')}</option>
+            <option value="weak">{t('jobs.weakFilter')}</option>
+            <option value="unscored">{t('jobs.unscored')}</option>
           </select>
           <select
             value={experienceFilter}
             onChange={(event) => setExperienceFilter(event.target.value)}
             className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
           >
-            <option value="all">All exp</option>
-            <option value="matched">Exp ok</option>
-            <option value="near">Exp near</option>
-            <option value="risk">Exp risk</option>
-            <option value="unknown">Exp unknown</option>
+            <option value="all">{t('jobs.allExp')}</option>
+            <option value="matched">{t('jobs.expOk')}</option>
+            <option value="near">{t('jobs.expNear')}</option>
+            <option value="risk">{t('jobs.expRisk')}</option>
+            <option value="unknown">{t('jobs.expUnknown')}</option>
           </select>
           <select
             value={educationFilter}
             onChange={(event) => setEducationFilter(event.target.value)}
             className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
           >
-            <option value="all">All edu</option>
-            <option value="matched">Edu ok</option>
-            <option value="near">Edu near</option>
-            <option value="risk">Edu risk</option>
-            <option value="unknown">Edu unknown</option>
+            <option value="all">{t('jobs.allEdu')}</option>
+            <option value="matched">{t('jobs.eduOk')}</option>
+            <option value="near">{t('jobs.eduNear')}</option>
+            <option value="risk">{t('jobs.eduRisk')}</option>
+            <option value="unknown">{t('jobs.eduUnknown')}</option>
           </select>
           <input
             type="number"
             min="0"
             value={minAvgFilter}
             onChange={(event) => setMinAvgFilter(event.target.value)}
-            placeholder="Min avg K"
+            placeholder={t('jobs.minAvgK')}
             className="w-24 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
           />
           {hasActiveFilters && (
@@ -391,7 +393,7 @@ export function Jobs({
               className="inline-flex items-center gap-1.5 rounded border border-zinc-800 px-2.5 py-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 transition-colors"
             >
               <RotateCcw size={13} />
-              Clear filters
+              {t('jobs.clearFilters')}
             </button>
           )}
         </div>
@@ -399,12 +401,12 @@ export function Jobs({
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
         <div>
-          Showing {displayJobs.length ? pageStart + 1 : 0}-{pageEnd} / {displayJobs.length.toLocaleString()}
-          {hasActiveFilters && <span className="ml-2 text-zinc-400">Filtered from {jobs.length.toLocaleString()}</span>}
-          {selectedJobs.length > 0 && <span className="ml-2 text-indigo-300">Selected {selectedJobs.length}</span>}
+          {t('jobs.showing')} {displayJobs.length ? pageStart + 1 : 0}-{pageEnd} / {displayJobs.length.toLocaleString()}
+          {hasActiveFilters && <span className="ml-2 text-zinc-400">{t('jobs.filteredFrom')} {jobs.length.toLocaleString()}</span>}
+          {selectedJobs.length > 0 && <span className="ml-2 text-indigo-300">{t('jobs.selected')} {selectedJobs.length}</span>}
         </div>
         <div className="flex items-center gap-2">
-          <span>Rows</span>
+          <span>{t('jobs.rows')}</span>
           <select
             value={pageSize}
             onChange={(event) => setPageSize(Number(event.target.value))}
@@ -419,15 +421,15 @@ export function Jobs({
             disabled={safePage <= 1}
             className="rounded border border-zinc-800 px-2 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
           >
-            Prev
+            {t('jobs.prev')}
           </button>
-          <span>Page {safePage} / {totalPages}</span>
+          <span>{t('jobs.page')} {safePage} / {totalPages}</span>
           <button
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             disabled={safePage >= totalPages}
             className="rounded border border-zinc-800 px-2 py-1 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
           >
-            Next
+            {t('jobs.next')}
           </button>
         </div>
       </div>
@@ -453,20 +455,20 @@ export function Jobs({
                   <button
                     onClick={toggleAllVisible}
                     className="flex h-full w-full items-center px-4 py-2.5 text-zinc-500 hover:bg-indigo-950/20 hover:text-zinc-200 transition-colors"
-                    title={allVisibleSelected ? 'Unselect visible jobs' : 'Select visible jobs'}
+                    title={allVisibleSelected ? t('jobs.unselectVisibleJobs') : t('jobs.selectVisibleJobs')}
                   >
                     {allVisibleSelected ? <CheckSquare size={15} /> : <Square size={15} />}
                   </button>
                 </th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400 w-16">#</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">Title</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">Company</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">City</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">Salary</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">Score</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">Avg K</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">Exp / Edu</th>
-                <th className="px-4 py-2.5 font-medium text-zinc-400">Category</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400 w-16">{t('jobs.tableHeaders.number')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.title')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.company')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.city')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.salary')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.score')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.avgK')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.expEdu')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.category')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
@@ -494,7 +496,7 @@ export function Jobs({
                       {selectedIds.has(job.id) ? <CheckSquare size={15} className="text-indigo-400" /> : <Square size={15} />}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-zinc-500 font-mono" title={`DB ID: ${job.id}`}>{pageStart + index + 1}</td>
+                  <td className="px-4 py-2 text-zinc-500 font-mono" title={`${t('jobs.dbId')}: ${job.id}`}>{pageStart + index + 1}</td>
                   <td className="px-4 py-2 font-medium text-zinc-200 truncate" title={job.title}>{job.title}</td>
                   <td className="px-4 py-2 text-zinc-300 truncate" title={job.company}>{job.company}</td>
                   <td className="px-4 py-2 text-zinc-400 truncate" title={job.city}>{job.city}</td>
@@ -503,7 +505,7 @@ export function Jobs({
                     {isScoring ? (
                       <span className="inline-flex items-center gap-1.5 rounded bg-indigo-950/60 px-2 py-1 text-indigo-300">
                         <Loader2 size={12} className="animate-spin" />
-                        Scoring
+                        {t('jobs.scoring')}
                       </span>
                     ) : job.score ? (
                       <div className="space-y-1">
@@ -512,7 +514,7 @@ export function Jobs({
                           <span className="text-[10px] text-zinc-500">{job.fitLevel}</span>
                         </span>
                         <div className="text-[10px] text-zinc-500">
-                          Exp {riskText(job.experienceRisk)} / Edu {riskText(job.educationRisk)}
+                          {t('pipeline.experience')} {riskText(job.experienceRisk)} / {t('pipeline.education')} {riskText(job.educationRisk)}
                         </div>
                       </div>
                     ) : (
@@ -534,7 +536,7 @@ export function Jobs({
         {selectedJob && (
           <div className="w-80 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-              <h3 className="font-semibold text-zinc-100">Job Details</h3>
+              <h3 className="font-semibold text-zinc-100">{t('jobs.jobDetails')}</h3>
               <button onClick={() => setSelectedJob(null)} className="text-zinc-500 hover:text-zinc-300">
                 <X size={16} />
               </button>
@@ -545,19 +547,19 @@ export function Jobs({
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
               >
                 <ListPlus size={15} />
-                Add to Pipeline
+                {t('jobs.addToPipeline')}
               </button>
               {selectedJob.score ? (
                 <div className="rounded border border-zinc-800 bg-zinc-900/50 p-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-zinc-500">Score</span>
+                    <span className="text-xs text-zinc-500">{t('jobs.scoreThisJob')}</span>
                     <span className="text-sm font-semibold text-zinc-100">{selectedJob.score.toFixed(1)} / 5.0</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                    <div>Coverage {selectedJob.coverage ?? 0}%</div>
-                    <div>JD {selectedJob.jdQuality ?? 0}%</div>
-                    <div>Exp {riskText(selectedJob.experienceRisk)}</div>
-                    <div>Edu {riskText(selectedJob.educationRisk)}</div>
+                    <div>{t('jobs.coverage')} {selectedJob.coverage ?? 0}%</div>
+                    <div>{t('jobs.jd')} {selectedJob.jdQuality ?? 0}%</div>
+                    <div>{t('pipeline.experience')} {riskText(selectedJob.experienceRisk)}</div>
+                    <div>{t('pipeline.education')} {riskText(selectedJob.educationRisk)}</div>
                   </div>
                 </div>
               ) : (
@@ -567,20 +569,20 @@ export function Jobs({
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
                 >
                   {scoringSet.has(selectedJob.id) ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
-                  Score this job
+                  {t('jobs.scoreThisJob')}
                 </button>
               )}
-              <DetailItem label="Title" value={selectedJob.title} strong />
+              <DetailItem label={t('jobs.tableHeaders.title')} value={selectedJob.title} strong />
               <div className="grid grid-cols-2 gap-4">
-                <DetailItem label="Company" value={selectedJob.company} />
-                <DetailItem label="City" value={selectedJob.city} />
-                <DetailItem label="Salary" value={selectedJob.salary} accent />
-                <DetailItem label="Avg Salary" value={`${selectedJob.avg.toFixed(1)}k`} />
-                <DetailItem label="Experience" value={selectedJob.exp} />
-                <DetailItem label="Education" value={selectedJob.edu} />
+                <DetailItem label={t('jobs.tableHeaders.company')} value={selectedJob.company} />
+                <DetailItem label={t('jobs.tableHeaders.city')} value={selectedJob.city} />
+                <DetailItem label={t('jobs.tableHeaders.salary')} value={selectedJob.salary} accent />
+                <DetailItem label={t('pipeline.avgSalary')} value={`${selectedJob.avg.toFixed(1)}k`} />
+                <DetailItem label={t('pipeline.experience')} value={selectedJob.exp} />
+                <DetailItem label={t('pipeline.education')} value={selectedJob.edu} />
               </div>
               <div>
-                <div className="text-xs text-zinc-500 mb-1">Category</div>
+                <div className="text-xs text-zinc-500 mb-1">{t('jobs.tableHeaders.category')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {(selectedJob.cats.length ? selectedJob.cats : [selectedJob.tier]).map((cat) => (
                     <span key={cat} className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 text-xs">{cat}</span>
@@ -591,7 +593,7 @@ export function Jobs({
               {selectedJob.url && (
                 <div>
                   <a href={selectedJob.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline">
-                    View Original Link
+                    {t('jobs.viewOriginalLink')}
                   </a>
                 </div>
               )}

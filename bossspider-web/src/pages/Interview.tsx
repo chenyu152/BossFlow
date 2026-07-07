@@ -2,6 +2,7 @@ import { BookOpenText, BrainCircuit, ExternalLink, FileText, Loader2, RefreshCw,
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useAppTranslation } from '../i18n';
 import { extractStoryDraftsFromPrep } from '../storyUtils';
 import type { InterviewItem, InterviewPrepResponse, InterviewStory, InterviewStoryBankResponse } from '../types';
 
@@ -32,6 +33,7 @@ export function Interview({
   onLoadPrep: (sourceKey: string) => Promise<InterviewPrepResponse | null>;
   onGeneratePrep: (sourceKey: string, userNotes: string) => Promise<InterviewPrepResponse | null>;
 }) {
+  const { t } = useAppTranslation();
   const [storyBank, setStoryBank] = useState<InterviewStoryBankResponse | null>(null);
   const [prep, setPrep] = useState<InterviewPrepResponse | null>(null);
   const [userNotes, setUserNotes] = useState('');
@@ -90,9 +92,9 @@ export function Interview({
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100">Interview</h2>
+          <h2 className="text-lg font-semibold text-zinc-100">{t('interview.title')}</h2>
           <p className="text-xs text-zinc-500">
-            {items.length.toLocaleString()} jobs with evaluation or resume materials
+            {items.length.toLocaleString()} {t('interview.jobsWithMaterials')}
           </p>
         </div>
         <button
@@ -100,7 +102,7 @@ export function Interview({
           className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-900"
         >
           <RefreshCw size={14} />
-          Refresh
+          {t('interview.refresh')}
         </button>
       </div>
 
@@ -123,7 +125,7 @@ export function Interview({
             </button>
           )) : (
             <div className="p-4 text-sm leading-relaxed text-zinc-500">
-              No interview-ready jobs yet. Generate an LLM report or resume suggestions from Pipeline first.
+              {t('interview.noInterviewReady')}
             </div>
           )}
         </aside>
@@ -133,7 +135,7 @@ export function Interview({
             {selectedItem ? (
               <div className="space-y-5">
                 <div>
-                  <div className="text-xs text-zinc-500">Target job</div>
+                  <div className="text-xs text-zinc-500">{t('interview.targetJob')}</div>
                   <h3 className="mt-1 text-base font-semibold text-zinc-100">{selectedItem.title}</h3>
                   <div className="mt-1 text-sm text-zinc-400">{selectedItem.company} · {selectedItem.city || '-'} · {selectedItem.salary || '-'}</div>
                   {selectedItem.llmRecommendation && (
@@ -147,33 +149,33 @@ export function Interview({
                   <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
                     <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
                       <BookOpenText size={14} className="text-cyan-400" />
-                      Story Bank
+                      {t('interview.storyBank')}
                     </div>
                     <button
                       onClick={onOpenStory}
                       className="inline-flex items-center gap-1.5 rounded border border-zinc-800 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-900"
                     >
                       <ExternalLink size={12} />
-                      Open Story
+                      {t('interview.openStory')}
                     </button>
                   </div>
                   <div className="space-y-3 p-4">
                     <div className="break-all rounded border border-zinc-800 bg-zinc-900/50 p-3 text-[10px] text-zinc-500">
-                      {storyBank?.path || 'Loading story bank...'}
+                      {storyBank?.path || t('interview.loadingStoryBank')}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
                         <div className="text-xl font-semibold text-zinc-100">{storyBank?.stories.length || 0}</div>
-                        <div className="mt-1 text-xs text-zinc-500">confirmed stories</div>
+                        <div className="mt-1 text-xs text-zinc-500">{t('interview.confirmedStories')}</div>
                       </div>
                       <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
                         <div className="text-xl font-semibold text-cyan-300">{prepStoryDrafts.length}</div>
-                        <div className="mt-1 text-xs text-zinc-500">drafts in this prep</div>
+                        <div className="mt-1 text-xs text-zinc-500">{t('interview.draftsInPrep')}</div>
                       </div>
                     </div>
                     {prepStoryDrafts.length > 0 && (
                       <div className="rounded border border-zinc-800 bg-zinc-900/30 p-3">
-                        <div className="mb-2 text-xs font-medium text-zinc-300">Draft stories from this prep</div>
+                        <div className="mb-2 text-xs font-medium text-zinc-300">{t('interview.draftStories')}</div>
                         <div className="flex flex-wrap gap-2">
                           {prepStoryDrafts.map((draft) => {
                             const isGap = draft.tags.includes('gap') || draft.theme === '缺失故事';
@@ -205,11 +207,11 @@ export function Interview({
                 </div>
 
                 <div>
-                  <div className="mb-1 text-xs text-zinc-500">Prep notes</div>
+                  <div className="mb-1 text-xs text-zinc-500">{t('interview.prepNotes')}</div>
                   <textarea
                     value={userNotes}
                     onChange={(event) => setUserNotes(event.target.value)}
-                    placeholder="补充面试轮次、已知面试官、想重点准备或避开的内容..."
+                    placeholder={t('interview.prepPlaceholder')}
                     className="h-28 w-full resize-none rounded border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-300 outline-none focus:border-cyan-600"
                   />
                 </div>
@@ -220,12 +222,12 @@ export function Interview({
                   className="inline-flex items-center gap-2 rounded bg-cyan-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isPreparing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                  Generate interview prep
+                  {t('interview.generatePrep')}
                 </button>
               </div>
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-                Select a job to start.
+                {t('interview.selectJob')}
               </div>
             )}
           </section>
@@ -233,12 +235,12 @@ export function Interview({
           <section className="min-w-0 overflow-y-auto p-5">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
               <BrainCircuit size={14} className="text-cyan-400" />
-              Interview Prep
+              {t('interview.interviewPrep')}
             </div>
             {loading ? (
               <div className="flex items-center gap-2 text-sm text-zinc-500">
                 <Loader2 size={14} className="animate-spin" />
-                Loading prep
+                {t('interview.loadingPrep')}
               </div>
             ) : prep ? (
               <div className="space-y-3">
@@ -250,14 +252,14 @@ export function Interview({
                 </article>
               </div>
             ) : selectedItem?.interviewPrepPath ? (
-              <div className="text-sm text-zinc-500">Loading existing prep...</div>
+              <div className="text-sm text-zinc-500">{t('interview.loadingExistingPrep')}</div>
             ) : (
               <div className="rounded border border-dashed border-zinc-800 bg-zinc-950 p-5 text-sm leading-relaxed text-zinc-500">
                 <div className="mb-2 flex items-center gap-2 font-medium text-zinc-300">
                   <FileText size={14} />
-                  No interview prep yet
+                  {t('interview.noPrepYetTitle')}
                 </div>
-                Generate a Markdown prep doc from the JD, LLM report, resume draft, cv.md, and story bank. Company web research and mock interview mode are reserved for the next phases.
+                {t('interview.noPrepYetBody')}
               </div>
             )}
           </section>

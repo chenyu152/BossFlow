@@ -1,4 +1,5 @@
 import { BarChart3, FileText, Inbox, Settings, Sparkles, Terminal } from 'lucide-react';
+import { useAppTranslation } from '../i18n';
 import { STRATEGIES } from '../constants';
 import { MetricCard } from '../components/MetricCard';
 import { OptionToggle } from '../components/OptionToggle';
@@ -38,6 +39,7 @@ export function Dashboard({
   onLogin: () => void;
   onProcessPartial: () => void;
 }) {
+  const { t } = useAppTranslation();
   const pending = pipeline?.pending || [];
   const processed = pipeline?.processed || [];
   const scoredJobs = jobs.filter((job) => job.score);
@@ -65,10 +67,10 @@ export function Dashboard({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-4 gap-4">
-        <MetricCard label="Total Jobs" value={config.jobCount.toLocaleString()} />
-        <MetricCard label="Pipeline" value={pending.length.toLocaleString()} hint={`${processed.length.toLocaleString()} processed`} />
-        <MetricCard label="High Fit" value={highFitJobs.length.toLocaleString()} hint={`${worthReviewingJobs.length.toLocaleString()} worth reviewing`} />
-        <MetricCard label="Resume Suggestions" value={resumeSuggestions.toLocaleString()} hint={`${llmReports.toLocaleString()} LLM reports`} />
+        <MetricCard label={t('dashboard.totalJobs')} value={config.jobCount.toLocaleString()} />
+        <MetricCard label={t('dashboard.pipeline')} value={pending.length.toLocaleString()} hint={`${processed.length.toLocaleString()} ${t('dashboard.processed')}`} />
+        <MetricCard label={t('dashboard.highFit')} value={highFitJobs.length.toLocaleString()} hint={`${worthReviewingJobs.length.toLocaleString()} ${t('dashboard.worthReviewing')}`} />
+        <MetricCard label={t('dashboard.resumeSuggestions')} value={resumeSuggestions.toLocaleString()} hint={`${llmReports.toLocaleString()} ${t('dashboard.llmReports')}`} />
       </div>
 
       <div className="grid grid-cols-3 gap-6">
@@ -77,19 +79,19 @@ export function Dashboard({
             <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
                 <BarChart3 size={15} className="text-indigo-400" />
-                Scoring
+                {t('dashboard.scoring')}
               </div>
               <div className="space-y-3 text-xs text-zinc-400">
                 <div className="flex items-center justify-between">
-                  <span>Scored jobs</span>
+                  <span>{t('dashboard.scoredJobs')}</span>
                   <span className="font-medium text-zinc-100">{scoredJobs.length.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Average score</span>
+                  <span>{t('dashboard.averageScore')}</span>
                   <span className="font-medium text-zinc-100">{avgScore ? avgScore.toFixed(1) : '-'}</span>
                 </div>
                 <button onClick={() => setActiveTab('Jobs')} className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                  Open Jobs
+                  {t('dashboard.openJobs')}
                 </button>
               </div>
             </div>
@@ -97,19 +99,19 @@ export function Dashboard({
             <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
                 <Inbox size={15} className="text-emerald-400" />
-                Pipeline
+                {t('dashboard.pipeline')}
               </div>
               <div className="space-y-3 text-xs text-zinc-400">
                 <div className="flex items-center justify-between">
-                  <span>Needs LLM</span>
+                  <span>{t('dashboard.needsLlm')}</span>
                   <span className="font-medium text-sky-300">{needsLlm.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Needs review</span>
+                  <span>{t('dashboard.needsReview')}</span>
                   <span className="font-medium text-amber-300">{needsReview.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Ready to greet</span>
+                  <span>{t('dashboard.readyToGreet')}</span>
                   <span className="font-medium text-emerald-300">{readyToGreet.toLocaleString()}</span>
                 </div>
               </div>
@@ -118,19 +120,19 @@ export function Dashboard({
             <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
                 <FileText size={15} className="text-indigo-400" />
-                Materials
+                {t('dashboard.materials')}
               </div>
               <div className="space-y-3 text-xs text-zinc-400">
                 <div className="flex items-center justify-between">
-                  <span>LLM reports</span>
+                  <span>{t('dashboard.llmReports')}</span>
                   <span className="font-medium text-zinc-100">{llmReports.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Resume suggestions</span>
+                  <span>{t('dashboard.resumeSuggestions')}</span>
                   <span className="font-medium text-zinc-100">{resumeSuggestions.toLocaleString()}</span>
                 </div>
                 <button onClick={() => setActiveTab('Pipeline')} className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                  Open Pipeline
+                  {t('dashboard.openPipeline')}
                 </button>
               </div>
             </div>
@@ -139,18 +141,18 @@ export function Dashboard({
           <div className="border border-zinc-800 bg-zinc-900/30 rounded-md overflow-hidden">
             <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Settings size={14} className="text-zinc-400" /> Current Run Configuration
+                <Settings size={14} className="text-zinc-400" /> {t('dashboard.currentRunConfig')}
               </h2>
             </div>
             <div className="p-5 space-y-6">
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wider">Strategy</label>
+                <label className="block text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wider">{t('dashboard.strategy')}</label>
                 <div className="grid grid-cols-3 gap-3">
                   {STRATEGIES.map((strategy, index) => (
                     <StrategyCard
                       key={strategy.title}
                       title={strategy.title}
-                      desc={strategy.desc}
+                      desc={t(strategy.descKey)}
                       active={strategyIndex === index}
                       onClick={() => setStrategyIndex(index)}
                     />
@@ -159,20 +161,20 @@ export function Dashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wider">Options</label>
+                <label className="block text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wider">{t('dashboard.options')}</label>
                 <div className="flex gap-6">
-                  <OptionToggle label="Quick Mode" active={quickMode} onToggle={() => setQuickMode(!quickMode)} />
-                  <OptionToggle label="Headless" active={headlessMode} onToggle={() => setHeadlessMode(!headlessMode)} />
-                  <OptionToggle label="Auto SQLite" active={autoSqlite} onToggle={() => setAutoSqlite(!autoSqlite)} />
+                  <OptionToggle label={t('dashboard.quickMode')} active={quickMode} onToggle={() => setQuickMode(!quickMode)} />
+                  <OptionToggle label={t('dashboard.headless')} active={headlessMode} onToggle={() => setHeadlessMode(!headlessMode)} />
+                  <OptionToggle label={t('dashboard.autoSqlite')} active={autoSqlite} onToggle={() => setAutoSqlite(!autoSqlite)} />
                 </div>
               </div>
 
               <div className="pt-4 border-t border-zinc-800 flex items-center gap-3">
                 <button onClick={onLogin} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded text-sm font-medium transition-colors">
-                  Login / Save Cookie
+                  {t('dashboard.loginSaveCookie')}
                 </button>
                 <button onClick={onProcessPartial} className="border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-4 py-2 rounded text-sm font-medium transition-colors">
-                  Recover from partial JSON
+                  {t('dashboard.recoverPartial')}
                 </button>
               </div>
             </div>
@@ -183,30 +185,30 @@ export function Dashboard({
           <div className="border border-zinc-800 bg-zinc-950 rounded-md overflow-hidden">
             <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Sparkles size={14} className="text-zinc-400" /> Snapshot
+                <Sparkles size={14} className="text-zinc-400" /> {t('dashboard.snapshot')}
               </h2>
             </div>
             <div className="p-4 space-y-5">
               <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Top Cities</div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.topCities')}</div>
                 <div className="space-y-2">
                   {topCities.length ? topCities.map(([city, count]) => (
                     <div key={city} className="flex items-center justify-between text-xs">
                       <span className="truncate text-zinc-300">{city}</span>
                       <span className="text-zinc-500">{count}</span>
                     </div>
-                  )) : <div className="text-xs text-zinc-600">No jobs loaded.</div>}
+                  )) : <div className="text-xs text-zinc-600">{t('dashboard.noJobsLoaded')}</div>}
                 </div>
               </div>
               <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Top Categories</div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.topCategories')}</div>
                 <div className="space-y-2">
                   {topCategories.length ? topCategories.map(([category, count]) => (
                     <div key={category} className="flex items-center justify-between gap-3 text-xs">
                       <span className="truncate text-zinc-300">{category}</span>
                       <span className="text-zinc-500">{count}</span>
                     </div>
-                  )) : <div className="text-xs text-zinc-600">No categories loaded.</div>}
+                  )) : <div className="text-xs text-zinc-600">{t('dashboard.noCategoriesLoaded')}</div>}
                 </div>
               </div>
             </div>
@@ -215,13 +217,13 @@ export function Dashboard({
           <div className="border border-zinc-800 bg-zinc-950 rounded-md overflow-hidden h-full flex flex-col">
             <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Terminal size={14} className="text-zinc-400" /> Recent Logs
+                <Terminal size={14} className="text-zinc-400" /> {t('dashboard.recentLogs')}
               </h2>
-              <button onClick={() => setActiveTab('Logs')} className="text-xs text-indigo-400 hover:text-indigo-300">Full Logs</button>
+              <button onClick={() => setActiveTab('Logs')} className="text-xs text-indigo-400 hover:text-indigo-300">{t('dashboard.fullLogs')}</button>
             </div>
             <div className="p-3 font-mono text-[11px] leading-relaxed space-y-1 flex-1 bg-zinc-950 overflow-hidden">
               {recentLogs.length === 0 ? (
-                <div className="text-zinc-600">No logs yet.</div>
+                <div className="text-zinc-600">{t('dashboard.noLogsYet')}</div>
               ) : recentLogs.map((log, index) => (
                 <div key={`${log.time}-${index}`} className="flex gap-3">
                   <span className="text-zinc-600 shrink-0">{log.time}</span>
