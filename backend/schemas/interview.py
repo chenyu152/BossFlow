@@ -20,3 +20,17 @@ class InterviewStoryPayload(BaseModel):
 
 class StoryBankSaveRequest(BaseModel):
     stories: list[InterviewStoryPayload]
+
+
+class InterviewStoryDraftPayload(InterviewStoryPayload):
+    draftId: str = ""
+    status: str = "needs_confirmation"
+    sourceKey: str = ""
+    sourceLabel: str = ""
+    prepPath: str = ""
+    createdAt: str = ""
+    updatedAt: str = ""
+
+
+class StoryDraftsSaveRequest(BaseModel):
+    drafts: list[InterviewStoryDraftPayload]

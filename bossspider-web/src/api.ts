@@ -4,6 +4,7 @@ import type {
   InterviewItemsResponse,
   InterviewPrepResponse,
   InterviewStoryBankResponse,
+  InterviewStoryDraftsResponse,
   Job,
   JobsResponse,
   LlmEvaluatePipelineResponse,
@@ -164,6 +165,17 @@ export const bossApi = {
     return request<InterviewStoryBankResponse>('/api/interview/story-bank', {
       method: 'PUT',
       body: JSON.stringify({ stories }),
+    });
+  },
+
+  getInterviewStoryDrafts() {
+    return request<InterviewStoryDraftsResponse>('/api/interview/story-drafts');
+  },
+
+  saveInterviewStoryDrafts(drafts: unknown[]) {
+    return request<InterviewStoryDraftsResponse>('/api/interview/story-drafts', {
+      method: 'PUT',
+      body: JSON.stringify({ drafts }),
     });
   },
 

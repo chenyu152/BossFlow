@@ -7,12 +7,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
-from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest
+from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftsSaveRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
-from backend.services.interview_service import generate_interview_prep, list_interview_items, read_interview_prep, read_story_bank, save_story_bank
+from backend.services.interview_service import (
+    generate_interview_prep,
+    list_interview_items,
+    read_interview_prep,
+    read_story_bank,
+    read_story_drafts,
+    save_story_bank,
+    save_story_drafts,
+)
 from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
 from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
 from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
@@ -168,6 +176,16 @@ def get_interview_story_bank():
 @app.put("/api/interview/story-bank")
 def update_interview_story_bank(payload: StoryBankSaveRequest):
     return save_story_bank([story.model_dump() for story in payload.stories])
+
+
+@app.get("/api/interview/story-drafts")
+def get_interview_story_drafts():
+    return read_story_drafts()
+
+
+@app.put("/api/interview/story-drafts")
+def update_interview_story_drafts(payload: StoryDraftsSaveRequest):
+    return save_story_drafts([draft.model_dump() for draft in payload.drafts])
 
 
 @app.post("/api/interview/prep")

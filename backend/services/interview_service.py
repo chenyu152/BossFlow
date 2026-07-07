@@ -22,6 +22,7 @@ from backend.storage.paths import BASE_DIR
 INTERVIEW_DATA_DIR = BASE_DIR / "data" / "interview-prep"
 INTERVIEW_OUTPUT_DIR = BASE_DIR / "output" / "interview-prep"
 STORY_BANK_PATH = INTERVIEW_DATA_DIR / "story-bank.md"
+STORY_DRAFTS_PATH = INTERVIEW_DATA_DIR / "story-drafts.json"
 RESUME_OUTPUT_DIR = BASE_DIR / "output" / "resumes"
 
 
@@ -83,6 +84,16 @@ def _ensure_story_bank() -> None:
         "**A (Action):** \n"
         "**R (Result):** \n"
         "**Reflection:** \n",
+        encoding="utf-8",
+    )
+
+
+def _ensure_story_drafts() -> None:
+    INTERVIEW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if STORY_DRAFTS_PATH.exists():
+        return
+    STORY_DRAFTS_PATH.write_text(
+        json.dumps({"version": 1, "drafts": []}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -154,6 +165,23 @@ def _clean_story(story: dict[str, Any]) -> dict[str, Any]:
         "action": str(story.get("action") or "").strip(),
         "result": str(story.get("result") or "").strip(),
         "reflection": str(story.get("reflection") or "").strip(),
+    }
+
+
+def _clean_story_draft(draft: dict[str, Any]) -> dict[str, Any]:
+    story = _clean_story(draft)
+    status = str(draft.get("status") or "needs_confirmation").strip().lower()
+    if status not in {"needs_confirmation", "editing", "ready", "promoted", "dismissed"}:
+        status = "needs_confirmation"
+    return {
+        **story,
+        "draftId": str(draft.get("draftId") or "").strip(),
+        "status": status,
+        "sourceKey": str(draft.get("sourceKey") or "").strip(),
+        "sourceLabel": str(draft.get("sourceLabel") or "").strip(),
+        "prepPath": str(draft.get("prepPath") or "").strip(),
+        "createdAt": str(draft.get("createdAt") or "").strip(),
+        "updatedAt": str(draft.get("updatedAt") or "").strip(),
     }
 
 
@@ -242,6 +270,39 @@ def save_story_bank(stories: list[dict[str, Any]]) -> dict[str, Any]:
     content = _render_story_bank(cleaned)
     STORY_BANK_PATH.write_text(content, encoding="utf-8")
     return read_story_bank()
+
+
+def read_story_drafts() -> dict[str, Any]:
+    _ensure_story_drafts()
+    try:
+        payload = json.loads(STORY_DRAFTS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        payload = {"version": 1, "drafts": []}
+    drafts = [_clean_story_draft(draft) for draft in payload.get("drafts", []) if isinstance(draft, dict)]
+    return {
+        "ok": True,
+        "path": str(STORY_DRAFTS_PATH),
+        "drafts": drafts,
+    }
+
+
+def save_story_drafts(drafts: list[dict[str, Any]]) -> dict[str, Any]:
+    _ensure_story_drafts()
+    now = dt.datetime.now().isoformat()
+    cleaned = []
+    for draft in drafts:
+        item = _clean_story_draft(draft)
+        if not item["createdAt"]:
+            item["createdAt"] = now
+        item["updatedAt"] = now
+        cleaned.append(item)
+    payload = {
+        "version": 1,
+        "updatedAt": now,
+        "drafts": cleaned,
+    }
+    STORY_DRAFTS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return read_story_drafts()
 
 
 def _prompt(

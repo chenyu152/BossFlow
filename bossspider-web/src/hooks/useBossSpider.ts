@@ -8,6 +8,8 @@ import type {
   InterviewPrepResponse,
   InterviewStory,
   InterviewStoryBankResponse,
+  InterviewStoryDraft,
+  InterviewStoryDraftsResponse,
   Job,
   PipelineResponse,
   ResumeDraftResponse,
@@ -373,6 +375,26 @@ export function useBossSpider() {
     }
   }, [showNotice]);
 
+  const loadInterviewStoryDrafts = useCallback(async (): Promise<InterviewStoryDraftsResponse | null> => {
+    try {
+      return await bossApi.getInterviewStoryDrafts();
+    } catch (error) {
+      showNotice(`加载面试故事草稿失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
+  const saveInterviewStoryDrafts = useCallback(async (drafts: InterviewStoryDraft[]): Promise<InterviewStoryDraftsResponse | null> => {
+    try {
+      const data = await bossApi.saveInterviewStoryDrafts(drafts);
+      showNotice('面试故事草稿已保存');
+      return data;
+    } catch (error) {
+      showNotice(`保存面试故事草稿失败：${(error as Error).message}`);
+      return null;
+    }
+  }, [showNotice]);
+
   const generateInterviewPrep = useCallback(async (
     sourceKey: string,
     userNotes: string,
@@ -490,6 +512,8 @@ export function useBossSpider() {
     loadResumeDraft,
     loadInterviewStoryBank,
     saveInterviewStoryBank,
+    loadInterviewStoryDrafts,
+    saveInterviewStoryDrafts,
     generateInterviewPrep,
     loadInterviewPrep,
     updatePipelineStatus,

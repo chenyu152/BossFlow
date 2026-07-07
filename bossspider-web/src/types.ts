@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Interview' | 'Logs';
+export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Story' | 'Interview' | 'Logs';
 
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'stopping' | 'failed';
 
@@ -312,6 +312,22 @@ export type InterviewStoryBankResponse = {
   path: string;
   content: string;
   stories: InterviewStory[];
+};
+
+export type InterviewStoryDraft = InterviewStory & {
+  draftId: string;
+  status: 'needs_confirmation' | 'editing' | 'ready' | 'promoted' | 'dismissed';
+  sourceKey: string;
+  sourceLabel: string;
+  prepPath: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InterviewStoryDraftsResponse = {
+  ok: boolean;
+  path: string;
+  drafts: InterviewStoryDraft[];
 };
 
 export type InterviewPrepResponse = {

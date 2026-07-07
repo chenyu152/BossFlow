@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Briefcase,
+  BookOpenText,
   Crosshair,
   Database,
   FileJson,
@@ -23,13 +24,22 @@ import { Pipeline } from './pages/Pipeline';
 import { Resume } from './pages/Resume';
 import { Rules } from './pages/Rules';
 import { Scope } from './pages/Scope';
-import type { Tab } from './types';
+import { Story } from './pages/Story';
+import type { InterviewStory, Tab } from './types';
+
+const STORY_DRAFT_TRANSFER_KEY = 'bossspider:story-draft-transfer';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('Dashboard');
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
+  const [storyDraftSeed, setStoryDraftSeed] = useState<InterviewStory | null>(null);
+  const [selectedInterviewKey, setSelectedInterviewKey] = useState('');
   const boss = useBossSpider();
-  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Interview' || activeTab === 'Logs';
+  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
+
+  const setActiveTabStable = useCallback((tab: Tab) => {
+    setActiveTab(tab);
+  }, []);
 
   const startCrawl = async () => {
     if (await boss.startCrawl()) setActiveTab('Logs');
@@ -67,6 +77,7 @@ export default function App() {
           <NavItem icon={<Inbox size={16} />} label="Pipeline" active={activeTab === 'Pipeline'} onClick={() => setActiveTab('Pipeline')} />
           <NavItem icon={<FileText size={16} />} label="Resume" active={activeTab === 'Resume'} onClick={() => setActiveTab('Resume')} />
           <NavItem icon={<MessageSquareText size={16} />} label="Interview" active={activeTab === 'Interview'} onClick={() => setActiveTab('Interview')} />
+          <NavItem icon={<BookOpenText size={16} />} label="Story" active={activeTab === 'Story'} onClick={() => setActiveTab('Story')} />
           <NavItem icon={<Terminal size={16} />} label="Logs" active={activeTab === 'Logs'} onClick={() => setActiveTab('Logs')} />
         </nav>
 
@@ -207,13 +218,30 @@ export default function App() {
                 onGenerateDraft={boss.generateResumeDraft}
               />
             )}
+            {activeTab === 'Story' && (
+              <Story
+                onLoadStoryBank={boss.loadInterviewStoryBank}
+                onSaveStoryBank={boss.saveInterviewStoryBank}
+                onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
+                onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
+                incomingDraft={storyDraftSeed}
+                onIncomingDraftConsumed={() => setStoryDraftSeed(null)}
+              />
+            )}
             {activeTab === 'Interview' && (
               <Interview
                 items={boss.interviewItems}
                 preparingKeys={boss.interviewPreparingKeys}
+                selectedKey={selectedInterviewKey}
+                onSelectedKeyChange={setSelectedInterviewKey}
                 onRefresh={() => { void boss.refreshInterviewItems(); }}
                 onLoadStoryBank={boss.loadInterviewStoryBank}
-                onSaveStoryBank={boss.saveInterviewStoryBank}
+                onOpenStory={() => setActiveTabStable('Story')}
+                onCreateStoryDraft={(draft) => {
+                  window.sessionStorage.setItem(STORY_DRAFT_TRANSFER_KEY, JSON.stringify(draft));
+                  setStoryDraftSeed(draft);
+                  setActiveTabStable('Story');
+                }}
                 onLoadPrep={boss.loadInterviewPrep}
                 onGeneratePrep={boss.generateInterviewPrep}
               />
