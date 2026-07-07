@@ -1,12 +1,14 @@
-import { Settings, Terminal } from 'lucide-react';
+import { BarChart3, FileText, Inbox, Settings, Sparkles, Terminal } from 'lucide-react';
 import { STRATEGIES } from '../constants';
 import { MetricCard } from '../components/MetricCard';
 import { OptionToggle } from '../components/OptionToggle';
 import { StrategyCard } from '../components/StrategyCard';
-import type { ConfigPayload, ParsedLog, Tab } from '../types';
+import type { ConfigPayload, Job, ParsedLog, PipelineResponse, Tab } from '../types';
 
 export function Dashboard({
   config,
+  jobs,
+  pipeline,
   strategyIndex,
   setStrategyIndex,
   quickMode,
@@ -21,6 +23,8 @@ export function Dashboard({
   onProcessPartial,
 }: {
   config: ConfigPayload;
+  jobs: Job[];
+  pipeline: PipelineResponse | null;
   strategyIndex: number;
   setStrategyIndex: (value: number) => void;
   quickMode: boolean;
@@ -34,17 +38,104 @@ export function Dashboard({
   onLogin: () => void;
   onProcessPartial: () => void;
 }) {
+  const pending = pipeline?.pending || [];
+  const processed = pipeline?.processed || [];
+  const scoredJobs = jobs.filter((job) => job.score);
+  const highFitJobs = jobs.filter((job) => (job.score ?? 0) >= 4);
+  const worthReviewingJobs = jobs.filter((job) => (job.score ?? 0) >= 3.5 && (job.score ?? 0) < 4);
+  const llmReports = pending.filter((item) => item.reportPath).length + processed.filter((item) => item.reportPath).length;
+  const resumeSuggestions = pending.filter((item) => item.resumeSuggestionPath).length + processed.filter((item) => item.resumeSuggestionPath).length;
+  const readyToGreet = pending.filter((item) => item.decisionStatus === 'ready_to_greet').length;
+  const needsLlm = pending.filter((item) => item.decisionStatus === 'needs_llm').length;
+  const needsReview = pending.filter((item) => item.decisionStatus === 'needs_review').length;
+  const avgScore = scoredJobs.length
+    ? scoredJobs.reduce((sum, job) => sum + (job.score || 0), 0) / scoredJobs.length
+    : 0;
+  const topCities = Array.from(
+    jobs.reduce((map, job) => map.set(job.city || '-', (map.get(job.city || '-') || 0) + 1), new Map<string, number>()),
+  ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topCategories = Array.from(
+    jobs.reduce((map, job) => {
+      const category = job.cats[0] || job.tier || '-';
+      map.set(category, (map.get(category) || 0) + 1);
+      return map;
+    }, new Map<string, number>()),
+  ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-4 gap-4">
         <MetricCard label="Total Jobs" value={config.jobCount.toLocaleString()} />
-        <MetricCard label="Keywords" value={String(config.keywordCount)} />
-        <MetricCard label="Cities" value={String(config.cityCount)} />
-        <MetricCard label="Database" value={config.dbFileName || 'jobs_data.db'} />
+        <MetricCard label="Pipeline" value={pending.length.toLocaleString()} hint={`${processed.length.toLocaleString()} processed`} />
+        <MetricCard label="High Fit" value={highFitJobs.length.toLocaleString()} hint={`${worthReviewingJobs.length.toLocaleString()} worth reviewing`} />
+        <MetricCard label="Resume Suggestions" value={resumeSuggestions.toLocaleString()} hint={`${llmReports.toLocaleString()} LLM reports`} />
       </div>
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
+                <BarChart3 size={15} className="text-indigo-400" />
+                Scoring
+              </div>
+              <div className="space-y-3 text-xs text-zinc-400">
+                <div className="flex items-center justify-between">
+                  <span>Scored jobs</span>
+                  <span className="font-medium text-zinc-100">{scoredJobs.length.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Average score</span>
+                  <span className="font-medium text-zinc-100">{avgScore ? avgScore.toFixed(1) : '-'}</span>
+                </div>
+                <button onClick={() => setActiveTab('Jobs')} className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Open Jobs
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
+                <Inbox size={15} className="text-emerald-400" />
+                Pipeline
+              </div>
+              <div className="space-y-3 text-xs text-zinc-400">
+                <div className="flex items-center justify-between">
+                  <span>Needs LLM</span>
+                  <span className="font-medium text-sky-300">{needsLlm.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Needs review</span>
+                  <span className="font-medium text-amber-300">{needsReview.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Ready to greet</span>
+                  <span className="font-medium text-emerald-300">{readyToGreet.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
+                <FileText size={15} className="text-indigo-400" />
+                Materials
+              </div>
+              <div className="space-y-3 text-xs text-zinc-400">
+                <div className="flex items-center justify-between">
+                  <span>LLM reports</span>
+                  <span className="font-medium text-zinc-100">{llmReports.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Resume suggestions</span>
+                  <span className="font-medium text-zinc-100">{resumeSuggestions.toLocaleString()}</span>
+                </div>
+                <button onClick={() => setActiveTab('Pipeline')} className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Open Pipeline
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="border border-zinc-800 bg-zinc-900/30 rounded-md overflow-hidden">
             <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
@@ -88,7 +179,39 @@ export function Dashboard({
           </div>
         </div>
 
-        <div className="col-span-1">
+        <div className="col-span-1 space-y-6">
+          <div className="border border-zinc-800 bg-zinc-950 rounded-md overflow-hidden">
+            <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                <Sparkles size={14} className="text-zinc-400" /> Snapshot
+              </h2>
+            </div>
+            <div className="p-4 space-y-5">
+              <div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Top Cities</div>
+                <div className="space-y-2">
+                  {topCities.length ? topCities.map(([city, count]) => (
+                    <div key={city} className="flex items-center justify-between text-xs">
+                      <span className="truncate text-zinc-300">{city}</span>
+                      <span className="text-zinc-500">{count}</span>
+                    </div>
+                  )) : <div className="text-xs text-zinc-600">No jobs loaded.</div>}
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Top Categories</div>
+                <div className="space-y-2">
+                  {topCategories.length ? topCategories.map(([category, count]) => (
+                    <div key={category} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="truncate text-zinc-300">{category}</span>
+                      <span className="text-zinc-500">{count}</span>
+                    </div>
+                  )) : <div className="text-xs text-zinc-600">No categories loaded.</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="border border-zinc-800 bg-zinc-950 rounded-md overflow-hidden h-full flex flex-col">
             <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">

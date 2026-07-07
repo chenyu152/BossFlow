@@ -128,6 +128,8 @@ export default function App() {
             {activeTab === 'Dashboard' && boss.config && (
               <Dashboard
                 config={boss.config}
+                jobs={boss.jobs}
+                pipeline={boss.pipeline}
                 strategyIndex={boss.strategyIndex}
                 setStrategyIndex={boss.setStrategyIndex}
                 quickMode={boss.quickMode}

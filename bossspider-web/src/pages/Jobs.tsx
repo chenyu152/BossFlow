@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownWideNarrow, CheckSquare, Download, ListPlus, Loader2, RefreshCw, Search, Square, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, RefreshCw, RotateCcw, Search, Square, Wand2, X } from 'lucide-react';
 import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
 import type { Job } from '../types';
@@ -33,6 +33,13 @@ export function Jobs({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
+  const [cityFilter, setCityFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [scoreFilter, setScoreFilter] = useState('all');
+  const [experienceFilter, setExperienceFilter] = useState('all');
+  const [educationFilter, setEducationFilter] = useState('all');
+  const [minAvgFilter, setMinAvgFilter] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const dragStateRef = useRef<{
     active: boolean;
     anchorIndex: number;
@@ -49,10 +56,50 @@ export function Jobs({
   const suppressRowClickRef = useRef(false);
   const [dragRange, setDragRange] = useState<{ start: number; end: number } | null>(null);
 
+  const cityOptions = useMemo(
+    () => Array.from(new Set(jobs.map((job) => job.city).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [jobs],
+  );
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(jobs.flatMap((job) => job.cats.length ? job.cats : [job.tier]).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [jobs],
+  );
+  const hasActiveFilters = cityFilter !== 'all'
+    || categoryFilter !== 'all'
+    || scoreFilter !== 'all'
+    || experienceFilter !== 'all'
+    || educationFilter !== 'all'
+    || Boolean(minAvgFilter);
+  const activeFilterCount = [
+    cityFilter !== 'all',
+    categoryFilter !== 'all',
+    scoreFilter !== 'all',
+    experienceFilter !== 'all',
+    educationFilter !== 'all',
+    Boolean(minAvgFilter),
+  ].filter(Boolean).length;
+
+  const filteredJobs = useMemo(() => {
+    const minAvg = Number(minAvgFilter);
+    return jobs.filter((job) => {
+      if (cityFilter !== 'all' && job.city !== cityFilter) return false;
+      const categories = job.cats.length ? job.cats : [job.tier];
+      if (categoryFilter !== 'all' && !categories.includes(categoryFilter)) return false;
+      if (experienceFilter !== 'all' && (job.experienceRisk || 'unknown') !== experienceFilter) return false;
+      if (educationFilter !== 'all' && (job.educationRisk || 'unknown') !== educationFilter) return false;
+      if (minAvgFilter && Number.isFinite(minAvg) && job.avg < minAvg) return false;
+      if (scoreFilter === 'unscored' && job.score) return false;
+      if (scoreFilter === 'high' && (job.score ?? 0) < 4.0) return false;
+      if (scoreFilter === 'review' && ((job.score ?? 0) < 3.5 || (job.score ?? 0) >= 4.0)) return false;
+      if (scoreFilter === 'weak' && ((job.score ?? 0) >= 3.5 || !job.score)) return false;
+      return true;
+    });
+  }, [categoryFilter, cityFilter, educationFilter, experienceFilter, jobs, minAvgFilter, scoreFilter]);
+
   const displayJobs = useMemo(() => {
-    if (!sortByScore) return jobs;
-    return [...jobs].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
-  }, [jobs, sortByScore]);
+    if (!sortByScore) return filteredJobs;
+    return [...filteredJobs].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+  }, [filteredJobs, sortByScore]);
   const totalPages = Math.max(1, Math.ceil(displayJobs.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
@@ -77,7 +124,7 @@ export function Jobs({
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortByScore, pageSize]);
+  }, [search, sortByScore, pageSize, cityFilter, categoryFilter, scoreFilter, experienceFilter, educationFilter, minAvgFilter]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
@@ -117,6 +164,15 @@ export function Jobs({
       else pageJobs.forEach((job) => next.add(job.id));
       return next;
     });
+  };
+
+  const clearFilters = () => {
+    setCityFilter('all');
+    setCategoryFilter('all');
+    setScoreFilter('all');
+    setExperienceFilter('all');
+    setEducationFilter('all');
+    setMinAvgFilter('');
   };
 
   const isInteractiveTarget = (target: EventTarget | null) => (
@@ -211,6 +267,14 @@ export function Jobs({
             {jobs.length >= total ? `All ${total.toLocaleString()}` : `${jobs.length.toLocaleString()} / ${total.toLocaleString()}`}
           </span>
           <button
+            onClick={() => setFiltersOpen((value) => !value)}
+            className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded transition-colors ${filtersOpen || hasActiveFilters ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
+          >
+            <Funnel size={14} />
+            Filters
+            {activeFilterCount > 0 && <span className="text-indigo-100">({activeFilterCount})</span>}
+          </button>
+          <button
             onClick={() => onScoreJobs(visibleIds)}
             disabled={!visibleIds.length || scoringVisible}
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
@@ -262,9 +326,81 @@ export function Jobs({
         </button>
       </div>
 
+      {filtersOpen && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/20 p-2 text-xs">
+          <select
+            value={cityFilter}
+            onChange={(event) => setCityFilter(event.target.value)}
+            className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
+          >
+            <option value="all">All cities</option>
+            {cityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
+          </select>
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+            className="max-w-48 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
+          >
+            <option value="all">All categories</option>
+            {categoryOptions.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+          <select
+            value={scoreFilter}
+            onChange={(event) => setScoreFilter(event.target.value)}
+            className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
+          >
+            <option value="all">All scores</option>
+            <option value="high">High fit ≥ 4.0</option>
+            <option value="review">Worth reviewing 3.5-3.9</option>
+            <option value="weak">Weak &lt; 3.5</option>
+            <option value="unscored">Unscored</option>
+          </select>
+          <select
+            value={experienceFilter}
+            onChange={(event) => setExperienceFilter(event.target.value)}
+            className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
+          >
+            <option value="all">All exp</option>
+            <option value="matched">Exp ok</option>
+            <option value="near">Exp near</option>
+            <option value="risk">Exp risk</option>
+            <option value="unknown">Exp unknown</option>
+          </select>
+          <select
+            value={educationFilter}
+            onChange={(event) => setEducationFilter(event.target.value)}
+            className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
+          >
+            <option value="all">All edu</option>
+            <option value="matched">Edu ok</option>
+            <option value="near">Edu near</option>
+            <option value="risk">Edu risk</option>
+            <option value="unknown">Edu unknown</option>
+          </select>
+          <input
+            type="number"
+            min="0"
+            value={minAvgFilter}
+            onChange={(event) => setMinAvgFilter(event.target.value)}
+            placeholder="Min avg K"
+            className="w-24 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
+          />
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1.5 rounded border border-zinc-800 px-2.5 py-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 transition-colors"
+            >
+              <RotateCcw size={13} />
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
         <div>
           Showing {displayJobs.length ? pageStart + 1 : 0}-{pageEnd} / {displayJobs.length.toLocaleString()}
+          {hasActiveFilters && <span className="ml-2 text-zinc-400">Filtered from {jobs.length.toLocaleString()}</span>}
           {selectedJobs.length > 0 && <span className="ml-2 text-indigo-300">Selected {selectedJobs.length}</span>}
         </div>
         <div className="flex items-center gap-2">
