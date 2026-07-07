@@ -1,10 +1,10 @@
-import { ArrowDownWideNarrow, BookOpenText, FileText, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
-import type { DecisionStatus, Job, PipelineItem, PipelineReportResponse, PipelineResponse, ResumeSuggestionResponse } from '../types';
+import type { DecisionStatus, InterviewPrepResponse, Job, PipelineItem, PipelineReportResponse, PipelineResponse, ResumeSuggestionResponse } from '../types';
 import { useAppTranslation } from '../i18n';
 
 function getDecisionLabel(status: DecisionStatus, t: (key: string) => string): string {
@@ -56,6 +56,21 @@ function statusButtonClass(status: DecisionStatus, active: boolean) {
   return active ? classes.active : classes.idle;
 }
 
+function MaterialBadge({ label, ready, tone = 'zinc' }: { label: string; ready: boolean; tone?: 'emerald' | 'indigo' | 'cyan' | 'zinc' }) {
+  const readyClass = {
+    emerald: 'border-emerald-900/60 bg-emerald-950/50 text-emerald-300',
+    indigo: 'border-indigo-900/60 bg-indigo-950/50 text-indigo-300',
+    cyan: 'border-cyan-900/60 bg-cyan-950/50 text-cyan-300',
+    zinc: 'border-zinc-700 bg-zinc-800/70 text-zinc-200',
+  }[tone];
+  return (
+    <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${ready ? readyClass : 'border-zinc-800 bg-zinc-900/40 text-zinc-600'}`}>
+      {ready ? <CheckCircle2 size={10} /> : <Circle size={10} />}
+      {label}
+    </span>
+  );
+}
+
 export function Pipeline({
   pipeline,
   onRefresh,
@@ -64,12 +79,15 @@ export function Pipeline({
   onLlmEvaluate,
   llmEvaluatingKeys,
   resumeSuggestingKeys,
+  interviewPreparingKeys,
   sortByLlmScore,
   setSortByLlmScore,
   onLoadJobDetail,
   onLoadReport,
   onGenerateResumeSuggestions,
   onLoadResumeSuggestion,
+  onGenerateInterviewPrep,
+  onLoadInterviewPrep,
   onUpdateStatus,
   onDeleteItem,
 }: {
@@ -80,12 +98,15 @@ export function Pipeline({
   onLlmEvaluate: (sourceKey: string) => void;
   llmEvaluatingKeys: string[];
   resumeSuggestingKeys: string[];
+  interviewPreparingKeys: string[];
   sortByLlmScore: boolean;
   setSortByLlmScore: (value: boolean | ((current: boolean) => boolean)) => void;
   onLoadJobDetail: (project: string, jobId: number) => Promise<Job | null>;
   onLoadReport: (sourceKey: string) => Promise<PipelineReportResponse | null>;
   onGenerateResumeSuggestions: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
   onLoadResumeSuggestion: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
+  onGenerateInterviewPrep: (sourceKey: string, userNotes: string) => Promise<InterviewPrepResponse | null>;
+  onLoadInterviewPrep: (sourceKey: string) => Promise<InterviewPrepResponse | null>;
   onUpdateStatus: (sourceKey: string, decisionStatus: string) => Promise<boolean>;
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
 }) {
@@ -117,17 +138,21 @@ export function Pipeline({
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [report, setReport] = useState<PipelineReportResponse | null>(null);
   const [resumeSuggestion, setResumeSuggestion] = useState<ResumeSuggestionResponse | null>(null);
+  const [interviewPrep, setInterviewPrep] = useState<InterviewPrepResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
+  const [interviewLoading, setInterviewLoading] = useState(false);
   const evaluatingSet = new Set(llmEvaluatingKeys);
   const suggestingSet = new Set(resumeSuggestingKeys);
+  const preparingSet = new Set(interviewPreparingKeys);
 
   const selectedItem = useMemo(
     () => pending.find((item) => item.sourceKey === selectedSourceKey) || null,
     [pending, selectedSourceKey],
   );
   const isSelectedResumeSuggesting = selectedItem ? suggestingSet.has(selectedItem.sourceKey) : false;
+  const isSelectedInterviewPreparing = selectedItem ? preparingSet.has(selectedItem.sourceKey) : false;
 
   const displayedPending = useMemo(() => {
     const filtered = statusFilter === 'all'
@@ -143,6 +168,7 @@ export function Pipeline({
       setSelectedJob(null);
       setReport(null);
       setResumeSuggestion(null);
+      setInterviewPrep(null);
     }
   }, [selectedItem, selectedSourceKey]);
 
@@ -158,6 +184,7 @@ export function Pipeline({
     setSelectedJob(null);
     setReport(null);
     setResumeSuggestion(null);
+    setInterviewPrep(null);
     if (!item.project || !item.jobId) return;
     setDetailLoading(true);
     try {
@@ -209,6 +236,32 @@ export function Pipeline({
     }
   };
 
+  const viewInterviewPrep = async () => {
+    if (!selectedItem?.interviewPrepPath) return;
+    if (interviewPrep?.sourceKey === selectedItem.sourceKey) {
+      setInterviewPrep(null);
+      return;
+    }
+    setInterviewLoading(true);
+    try {
+      const data = await onLoadInterviewPrep(selectedItem.sourceKey);
+      if (data) setInterviewPrep(data);
+    } finally {
+      setInterviewLoading(false);
+    }
+  };
+
+  const generateInterviewPrep = async () => {
+    if (!selectedItem) return;
+    setInterviewLoading(true);
+    try {
+      const data = await onGenerateInterviewPrep(selectedItem.sourceKey, '');
+      if (data) setInterviewPrep(data);
+    } finally {
+      setInterviewLoading(false);
+    }
+  };
+
   const changeStatus = async (sourceKey: string, decisionStatus: DecisionStatus) => {
     await onUpdateStatus(sourceKey, decisionStatus);
   };
@@ -222,6 +275,7 @@ export function Pipeline({
       setSelectedJob(null);
       setReport(null);
       setResumeSuggestion(null);
+      setInterviewPrep(null);
     }
   };
 
@@ -275,14 +329,15 @@ export function Pipeline({
             <table className="w-full table-fixed text-left text-xs">
               <colgroup>
                 <col className="w-[7%]" />
-                <col className="w-[14%]" />
-                <col className="w-[20%]" />
-                <col className="w-[5%]" />
-                <col className="w-[8%]" />
-                <col className="w-[11%]" />
+                <col className="w-[13%]" />
                 <col className="w-[18%]" />
+                <col className="w-[5%]" />
+                <col className="w-[7%]" />
+                <col className="w-[10%]" />
+                <col className="w-[15%]" />
+                <col className="w-[14%]" />
+                <col className="w-[5%]" />
                 <col className="w-[6%]" />
-                <col className="w-[11%]" />
               </colgroup>
               <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800 shadow-sm z-10">
                 <tr>
@@ -293,6 +348,7 @@ export function Pipeline({
                   <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.salary')}</th>
                   <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.score')}</th>
                   <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.llm')}</th>
+                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.materials')}</th>
                   <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.added')}</th>
                   <th className="px-4 py-2.5 font-medium text-zinc-400 w-40">{t('pipeline.action')}</th>
                 </tr>
@@ -349,6 +405,14 @@ export function Pipeline({
                         ) : (
                           <span className="text-zinc-600">-</span>
                         )}
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          <MaterialBadge label={t('pipeline.materialShort.llm')} ready={Boolean(item.reportPath)} tone="emerald" />
+                          <MaterialBadge label={t('pipeline.materialShort.resumeSuggestion')} ready={Boolean(item.resumeSuggestionPath)} tone="indigo" />
+                          <MaterialBadge label={t('pipeline.materialShort.resumeDraft')} ready={Boolean(item.resumeDraftPath)} tone="indigo" />
+                          <MaterialBadge label={t('pipeline.materialShort.interviewPrep')} ready={Boolean(item.interviewPrepPath)} tone="cyan" />
+                        </div>
                       </td>
                       <td className="px-4 py-2 text-zinc-500 truncate" title={item.addedAt || '-'}>{item.addedAt || '-'}</td>
                       <td className="px-4 py-2">
@@ -423,6 +487,16 @@ export function Pipeline({
                 {t('pipeline.deleteItem')}
               </button>
 
+              <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3 space-y-3">
+                <div className="text-xs font-medium text-zinc-300">{t('pipeline.materials')}</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <MaterialBadge label={t('pipeline.material.llm')} ready={Boolean(selectedItem.reportPath)} tone="emerald" />
+                  <MaterialBadge label={t('pipeline.material.resumeSuggestion')} ready={Boolean(selectedItem.resumeSuggestionPath)} tone="indigo" />
+                  <MaterialBadge label={t('pipeline.material.resumeDraft')} ready={Boolean(selectedItem.resumeDraftPath)} tone="indigo" />
+                  <MaterialBadge label={t('pipeline.material.interviewPrep')} ready={Boolean(selectedItem.interviewPrepPath)} tone="cyan" />
+                </div>
+              </div>
+
               {detailLoading && (
                 <div className="flex items-center gap-2 text-sm text-zinc-500">
                   <Loader2 size={14} className="animate-spin" />
@@ -493,6 +567,18 @@ export function Pipeline({
                 {selectedItem.resumeSuggestionPath && (
                   <div className="break-all text-[10px] text-zinc-500">{selectedItem.resumeSuggestionPath}</div>
                 )}
+                <div className="rounded border border-zinc-800/80 bg-zinc-950/60 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-zinc-500">{t('pipeline.material.resumeDraft')}</span>
+                    <MaterialBadge label={selectedItem.resumeDraftPath ? t('pipeline.ready') : t('pipeline.notReady')} ready={Boolean(selectedItem.resumeDraftPath)} tone="indigo" />
+                  </div>
+                  {selectedItem.resumeDraftedAt && (
+                    <div className="mt-1 text-[10px] text-zinc-500">{t('pipeline.generatedAt', { date: selectedItem.resumeDraftedAt })}</div>
+                  )}
+                  {selectedItem.resumeDraftPath && (
+                    <div className="mt-1 break-all text-[10px] text-zinc-500">{selectedItem.resumeDraftPath}</div>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={generateResumeSuggestion}
@@ -510,6 +596,44 @@ export function Pipeline({
                     >
                       {resumeLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
                       {t('pipeline.viewSuggestions')}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded border border-cyan-900/50 bg-cyan-950/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-cyan-400">{t('pipeline.material.interviewPrep')}</span>
+                  {selectedItem.interviewPrepId && (
+                    <span className="text-xs font-semibold text-cyan-200">{selectedItem.interviewPrepId}</span>
+                  )}
+                </div>
+                <div className="text-xs leading-relaxed text-zinc-400">
+                  {t('pipeline.interviewPrepHint')}
+                </div>
+                {selectedItem.interviewPreparedAt && (
+                  <div className="text-[10px] text-zinc-500">{t('pipeline.generatedAt', { date: selectedItem.interviewPreparedAt })}</div>
+                )}
+                {selectedItem.interviewPrepPath && (
+                  <div className="break-all text-[10px] text-zinc-500">{selectedItem.interviewPrepPath}</div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={generateInterviewPrep}
+                    disabled={isSelectedInterviewPreparing || interviewLoading}
+                    className="inline-flex items-center gap-2 rounded border border-cyan-800/70 bg-cyan-950/40 px-2.5 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
+                  >
+                    {isSelectedInterviewPreparing || interviewLoading ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+                    {selectedItem.interviewPrepPath ? t('pipeline.regenerateInterviewPrep') : t('pipeline.generateInterviewPrep')}
+                  </button>
+                  {selectedItem.interviewPrepPath && (
+                    <button
+                      onClick={viewInterviewPrep}
+                      disabled={interviewLoading}
+                      className="inline-flex items-center gap-2 rounded border border-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-50 transition-colors"
+                    >
+                      {interviewLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
+                      {t('pipeline.viewInterviewPrep')}
                     </button>
                   )}
                 </div>
@@ -612,6 +736,45 @@ export function Pipeline({
               <article className="max-w-none text-sm leading-7 text-zinc-300 [&_h1]:mb-5 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:text-zinc-100 [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:border-b [&_h2]:border-zinc-800 [&_h2]:pb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-100 [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-zinc-100 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_strong]:text-zinc-100 [&_code]:rounded [&_code]:bg-zinc-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-indigo-300 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-zinc-800 [&_pre]:bg-zinc-900 [&_pre]:p-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-zinc-800 [&_th]:bg-zinc-900 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-zinc-100 [&_td]:border [&_td]:border-zinc-800 [&_td]:px-3 [&_td]:py-2 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-indigo-700 [&_blockquote]:pl-4 [&_blockquote]:text-zinc-400">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {resumeSuggestion.content}
+                </ReactMarkdown>
+              </article>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {interviewPrep && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5"
+          onClick={() => setInterviewPrep(null)}
+        >
+          <div
+            className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <BrainCircuit size={16} className="text-cyan-400" />
+                  <h3 className="truncate text-base font-semibold text-zinc-100">
+                    {t('pipeline.interviewPrepTitle', { id: interviewPrep.interviewPrepId })}
+                  </h3>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                  <span className="max-w-3xl truncate">{interviewPrep.prepPath}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setInterviewPrep(null)}
+                className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="overflow-auto px-8 py-6">
+              <article className="max-w-none text-sm leading-7 text-zinc-300 [&_h1]:mb-5 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:text-zinc-100 [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:border-b [&_h2]:border-zinc-800 [&_h2]:pb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-100 [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-zinc-100 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_strong]:text-zinc-100 [&_code]:rounded [&_code]:bg-zinc-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-cyan-300 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-zinc-800 [&_pre]:bg-zinc-900 [&_pre]:p-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-zinc-800 [&_th]:bg-zinc-900 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-zinc-100 [&_td]:border [&_td]:border-zinc-800 [&_td]:px-3 [&_td]:py-2 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-cyan-700 [&_blockquote]:pl-4 [&_blockquote]:text-zinc-400">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {interviewPrep.content}
                 </ReactMarkdown>
               </article>
             </div>

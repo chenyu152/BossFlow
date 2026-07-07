@@ -217,12 +217,15 @@ export default function App() {
                 onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
                 llmEvaluatingKeys={boss.llmEvaluatingKeys}
                 resumeSuggestingKeys={boss.resumeSuggestingKeys}
+                interviewPreparingKeys={boss.interviewPreparingKeys}
                 sortByLlmScore={boss.sortPipelineByLlmScore}
                 setSortByLlmScore={boss.setSortPipelineByLlmScore}
                 onLoadJobDetail={boss.loadJobDetail}
                 onLoadReport={boss.loadPipelineReport}
                 onGenerateResumeSuggestions={boss.generateResumeSuggestions}
                 onLoadResumeSuggestion={boss.loadResumeSuggestion}
+                onGenerateInterviewPrep={boss.generateInterviewPrep}
+                onLoadInterviewPrep={boss.loadInterviewPrep}
                 onUpdateStatus={boss.updatePipelineStatus}
                 onDeleteItem={boss.deletePipelineItem}
               />
