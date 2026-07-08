@@ -16,6 +16,7 @@ export function Jobs({
   onExport,
   onScoreJobs,
   scoringJobIds,
+  selectedJobId,
   onAddToPipeline,
 }: {
   jobs: Job[];
@@ -28,6 +29,7 @@ export function Jobs({
   onExport: () => void;
   onScoreJobs: (jobIds: number[]) => void;
   scoringJobIds: number[];
+  selectedJobId?: number | null;
   onAddToPipeline: (jobs: Job[]) => void;
 }) {
   const { t } = useAppTranslation();
@@ -115,6 +117,25 @@ export function Jobs({
   const scoringVisible = visibleIds.some((id) => scoringSet.has(id));
   const scoringAll = allIds.some((id) => scoringSet.has(id));
   const scoringSelected = selectedJobs.some((job) => scoringSet.has(job.id));
+
+  useEffect(() => {
+    if (!selectedJobId) return;
+    const job = jobs.find((item) => item.id === selectedJobId);
+    if (!job) return;
+    setCityFilter('all');
+    setCategoryFilter('all');
+    setScoreFilter('all');
+    setExperienceFilter('all');
+    setEducationFilter('all');
+    setMinAvgFilter('');
+    setSelectedJob(job);
+  }, [jobs, selectedJobId]);
+
+  useEffect(() => {
+    if (!selectedJobId) return;
+    const index = displayJobs.findIndex((job) => job.id === selectedJobId);
+    if (index >= 0) setPage(Math.floor(index / pageSize) + 1);
+  }, [displayJobs, pageSize, selectedJobId]);
 
   useEffect(() => {
     if (selectedJob) {

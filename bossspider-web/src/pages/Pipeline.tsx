@@ -1,5 +1,5 @@
 import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DetailItem } from '../components/DetailItem';
@@ -90,6 +90,7 @@ export function Pipeline({
   onLoadInterviewPrep,
   onUpdateStatus,
   onDeleteItem,
+  targetSourceKey,
 }: {
   pipeline: PipelineResponse | null;
   onRefresh: () => void;
@@ -109,6 +110,7 @@ export function Pipeline({
   onLoadInterviewPrep: (sourceKey: string) => Promise<InterviewPrepResponse | null>;
   onUpdateStatus: (sourceKey: string, decisionStatus: string) => Promise<boolean>;
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
+  targetSourceKey?: string;
 }) {
   const { t } = useAppTranslation();
 
@@ -143,6 +145,7 @@ export function Pipeline({
   const [reportLoading, setReportLoading] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
   const [interviewLoading, setInterviewLoading] = useState(false);
+  const appliedTargetRef = useRef('');
   const evaluatingSet = new Set(llmEvaluatingKeys);
   const suggestingSet = new Set(resumeSuggestingKeys);
   const preparingSet = new Set(interviewPreparingKeys);
@@ -194,6 +197,15 @@ export function Pipeline({
       setDetailLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!targetSourceKey || appliedTargetRef.current === targetSourceKey) return;
+    const item = pending.find((entry) => entry.sourceKey === targetSourceKey);
+    if (!item) return;
+    appliedTargetRef.current = targetSourceKey;
+    setStatusFilter('all');
+    void selectItem(item);
+  }, [pending, targetSourceKey]);
 
   const viewReport = async () => {
     if (!selectedItem?.reportPath) return;

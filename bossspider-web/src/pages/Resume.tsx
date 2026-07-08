@@ -49,6 +49,7 @@ export function Resume({
   onLoadSuggestion,
   onLoadDraft,
   onGenerateDraft,
+  selectedSourceKey,
 }: {
   items: ResumeItem[];
   draftingKeys: string[];
@@ -56,6 +57,7 @@ export function Resume({
   onLoadSuggestion: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
   onLoadDraft: (sourceKey: string) => Promise<ResumeDraftResponse | null>;
   onGenerateDraft: (sourceKey: string, approvedSuggestionIds: string[], userNotes: string) => Promise<ResumeDraftResponse | null>;
+  selectedSourceKey?: string;
 }) {
   const { t } = useAppTranslation();
   const [selectedKey, setSelectedKey] = useState('');
@@ -77,6 +79,11 @@ export function Resume({
   useEffect(() => {
     if (!selectedKey && items[0]) setSelectedKey(items[0].sourceKey);
   }, [items, selectedKey]);
+
+  useEffect(() => {
+    if (!selectedSourceKey) return;
+    if (items.some((item) => item.sourceKey === selectedSourceKey)) setSelectedKey(selectedSourceKey);
+  }, [items, selectedSourceKey]);
 
   useEffect(() => {
     let cancelled = false;

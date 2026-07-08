@@ -19,7 +19,7 @@ import {
 import { NavItem } from './components/NavItem';
 import { StatusBadge } from './components/StatusBadge';
 import { useBossSpider } from './hooks/useBossSpider';
-import { Dashboard } from './pages/Dashboard';
+import { Dashboard, type DashboardTaskTarget } from './pages/Dashboard';
 import { Interview } from './pages/Interview';
 import { Jobs } from './pages/Jobs';
 import { Logs } from './pages/Logs';
@@ -75,6 +75,10 @@ export default function App() {
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
   const [storyDraftSeed, setStoryDraftSeed] = useState<InterviewStory | null>(null);
   const [selectedInterviewKey, setSelectedInterviewKey] = useState('');
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [selectedPipelineKey, setSelectedPipelineKey] = useState('');
+  const [selectedResumeKey, setSelectedResumeKey] = useState('');
+  const [selectedStoryDraftId, setSelectedStoryDraftId] = useState('');
   const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
     discovery: true,
     evaluation: true,
@@ -86,6 +90,17 @@ export default function App() {
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
 
   const setActiveTabStable = useCallback((tab: Tab) => {
+    setActiveTab(tab);
+  }, []);
+
+  const openDashboardTask = useCallback((tab: Tab, target?: DashboardTaskTarget) => {
+    if (target?.jobId) setSelectedJobId(target.jobId);
+    if (target?.sourceKey) {
+      if (tab === 'Pipeline') setSelectedPipelineKey(target.sourceKey);
+      if (tab === 'Resume') setSelectedResumeKey(target.sourceKey);
+      if (tab === 'Interview') setSelectedInterviewKey(target.sourceKey);
+    }
+    if (target?.draftId) setSelectedStoryDraftId(target.draftId);
     setActiveTab(tab);
   }, []);
 
@@ -262,9 +277,11 @@ export default function App() {
                 autoSqlite={boss.autoSqlite}
                 setAutoSqlite={boss.setAutoSqlite}
                 setActiveTab={setActiveTab}
+                onOpenTask={openDashboardTask}
                 recentLogs={boss.recentLogs}
                 onLogin={startLogin}
                 onProcessPartial={processPartial}
+                onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
               />
             )}
             {activeTab === 'Scope' && boss.config && (
@@ -290,6 +307,7 @@ export default function App() {
                 onExport={boss.exportJobs}
                 onScoreJobs={boss.scoreJobs}
                 scoringJobIds={boss.jobScoringIds}
+                selectedJobId={selectedJobId}
                 onAddToPipeline={async (jobs) => {
                   if (await boss.addJobsToPipeline(jobs.map((job) => job.id))) setActiveTab('Pipeline');
                 }}
@@ -315,6 +333,7 @@ export default function App() {
                 onLoadInterviewPrep={boss.loadInterviewPrep}
                 onUpdateStatus={boss.updatePipelineStatus}
                 onDeleteItem={boss.deletePipelineItem}
+                targetSourceKey={selectedPipelineKey}
               />
             )}
             {activeTab === 'Resume' && (
@@ -325,6 +344,7 @@ export default function App() {
                 onLoadSuggestion={boss.loadResumeSuggestion}
                 onLoadDraft={boss.loadResumeDraft}
                 onGenerateDraft={boss.generateResumeDraft}
+                selectedSourceKey={selectedResumeKey}
               />
             )}
             {activeTab === 'Story' && (
@@ -335,6 +355,7 @@ export default function App() {
                 onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
                 onPromoteStoryDraft={boss.promoteInterviewStoryDraft}
                 incomingDraft={storyDraftSeed}
+                selectedDraftId={selectedStoryDraftId}
                 onIncomingDraftConsumed={() => setStoryDraftSeed(null)}
               />
             )}

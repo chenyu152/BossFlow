@@ -72,6 +72,7 @@ export function Story({
   onSaveStoryDrafts,
   onPromoteStoryDraft,
   incomingDraft,
+  selectedDraftId,
   onIncomingDraftConsumed,
 }: {
   onLoadStoryBank: () => Promise<InterviewStoryBankResponse | null>;
@@ -80,6 +81,7 @@ export function Story({
   onSaveStoryDrafts: (drafts: InterviewStoryDraft[]) => Promise<InterviewStoryDraftsResponse | null>;
   onPromoteStoryDraft: (draftId: string, draft: InterviewStoryDraft) => Promise<InterviewStoryDraftPromoteResponse | null>;
   incomingDraft?: InterviewStory | null;
+  selectedDraftId?: string;
   onIncomingDraftConsumed?: () => void;
 }) {
   const { t } = useAppTranslation();
@@ -99,6 +101,14 @@ export function Story({
   const drafts = useMemo(() => visibleDrafts(draftStore?.drafts || []), [draftStore]);
   const activeList = mode === 'drafts' ? drafts : stories;
   const canPromoteDraft = mode === 'drafts' && Boolean(storyDraft.title.trim()) && hasPromotableStoryFields(storyDraft);
+
+  useEffect(() => {
+    if (!selectedDraftId) return;
+    const index = drafts.findIndex((draft) => draft.draftId === selectedDraftId);
+    if (index < 0) return;
+    setMode('drafts');
+    setSelectedIndex(index);
+  }, [drafts, selectedDraftId]);
 
   const queueIncomingDraft = (story: InterviewStory) => {
     const draft = newDraftFromStory(story);

@@ -1,10 +1,163 @@
-import { BarChart3, FileText, Inbox, Settings, Sparkles, Terminal } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  BookOpenText,
+  Briefcase,
+  CheckCircle2,
+  Clock3,
+  FileCheck2,
+  FileText,
+  Inbox,
+  ListChecks,
+  PlayCircle,
+  RefreshCw,
+  Settings,
+  Sparkles,
+  Terminal,
+} from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
 import { STRATEGIES } from '../constants';
-import { MetricCard } from '../components/MetricCard';
 import { OptionToggle } from '../components/OptionToggle';
 import { StrategyCard } from '../components/StrategyCard';
-import type { ConfigPayload, Job, ParsedLog, PipelineResponse, Tab } from '../types';
+import type {
+  ConfigPayload,
+  InterviewStoryDraft,
+  InterviewStoryDraftsResponse,
+  Job,
+  ParsedLog,
+  PipelineItem,
+  PipelineResponse,
+  Tab,
+} from '../types';
+
+type TaskTone = 'amber' | 'emerald' | 'indigo' | 'cyan' | 'zinc';
+
+export type DashboardTaskTarget = {
+  jobId?: number;
+  sourceKey?: string;
+  draftId?: string;
+};
+
+type DashboardTask = {
+  id: string;
+  title: string;
+  detail: string;
+  meta: string;
+  tone: TaskTone;
+  tab: Tab;
+  action: string;
+  target?: DashboardTaskTarget;
+};
+
+const toneClasses: Record<TaskTone, { border: string; icon: string; pill: string }> = {
+  amber: {
+    border: 'border-amber-900/60 bg-amber-950/20',
+    icon: 'text-amber-300',
+    pill: 'border-amber-900/70 bg-amber-950/40 text-amber-300',
+  },
+  emerald: {
+    border: 'border-emerald-900/60 bg-emerald-950/20',
+    icon: 'text-emerald-300',
+    pill: 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300',
+  },
+  indigo: {
+    border: 'border-indigo-900/60 bg-indigo-950/20',
+    icon: 'text-indigo-300',
+    pill: 'border-indigo-900/70 bg-indigo-950/40 text-indigo-300',
+  },
+  cyan: {
+    border: 'border-cyan-900/60 bg-cyan-950/20',
+    icon: 'text-cyan-300',
+    pill: 'border-cyan-900/70 bg-cyan-950/40 text-cyan-300',
+  },
+  zinc: {
+    border: 'border-zinc-800 bg-zinc-900/40',
+    icon: 'text-zinc-400',
+    pill: 'border-zinc-800 bg-zinc-900 text-zinc-400',
+  },
+};
+
+function parseTime(value?: string) {
+  if (!value) return 0;
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const time = new Date(normalized).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function isToday(value?: string) {
+  const time = parseTime(value);
+  if (!time) return false;
+  const date = new Date(time);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate();
+}
+
+function itemScore(item: PipelineItem) {
+  return Math.max(item.llmScore ?? 0, item.score ?? 0);
+}
+
+function TaskRow({
+  task,
+  icon,
+  onOpen,
+}: {
+  task: DashboardTask;
+  icon: ReactNode;
+  onOpen: (task: DashboardTask) => void;
+}) {
+  const tone = toneClasses[task.tone];
+  return (
+    <button
+      onClick={() => onOpen(task)}
+      className={`group flex w-full items-start gap-3 rounded border p-3 text-left transition-colors hover:border-zinc-600 hover:bg-zinc-900/80 ${tone.border}`}
+    >
+      <span className={`mt-0.5 shrink-0 ${tone.icon}`}>{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-zinc-100">{task.title}</span>
+        <span className="mt-1 line-clamp-2 block text-xs leading-relaxed text-zinc-400">{task.detail}</span>
+        <span className={`mt-2 inline-flex rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${tone.pill}`}>
+          {task.meta}
+        </span>
+      </span>
+      <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 group-hover:text-zinc-200">
+        {task.action}
+        <ArrowRight size={12} />
+      </span>
+    </button>
+  );
+}
+
+function TaskSection({
+  title,
+  subtitle,
+  empty,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  empty: string;
+  children: ReactNode;
+}) {
+  const hasItems = Boolean(children);
+  return (
+    <section className="rounded-md border border-zinc-800 bg-zinc-950">
+      <div className="border-b border-zinc-800 px-4 py-3">
+        <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
+        <p className="mt-0.5 text-xs text-zinc-500">{subtitle}</p>
+      </div>
+      <div className="space-y-2 p-3">
+        {hasItems ? children : (
+          <div className="rounded border border-dashed border-zinc-800 bg-zinc-900/30 p-4 text-sm text-zinc-500">
+            {empty}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export function Dashboard({
   config,
@@ -19,9 +172,11 @@ export function Dashboard({
   autoSqlite,
   setAutoSqlite,
   setActiveTab,
+  onOpenTask,
   recentLogs,
   onLogin,
   onProcessPartial,
+  onLoadStoryDrafts,
 }: {
   config: ConfigPayload;
   jobs: Job[];
@@ -35,119 +190,310 @@ export function Dashboard({
   autoSqlite: boolean;
   setAutoSqlite: (value: boolean) => void;
   setActiveTab: (tab: Tab) => void;
+  onOpenTask: (tab: Tab, target?: DashboardTaskTarget) => void;
   recentLogs: ParsedLog[];
   onLogin: () => void;
   onProcessPartial: () => void;
+  onLoadStoryDrafts: () => Promise<InterviewStoryDraftsResponse | null>;
 }) {
   const { t } = useAppTranslation();
   const pending = pipeline?.pending || [];
   const processed = pipeline?.processed || [];
-  const scoredJobs = jobs.filter((job) => job.score);
-  const highFitJobs = jobs.filter((job) => (job.score ?? 0) >= 4);
-  const worthReviewingJobs = jobs.filter((job) => (job.score ?? 0) >= 3.5 && (job.score ?? 0) < 4);
-  const llmReports = pending.filter((item) => item.reportPath).length + processed.filter((item) => item.reportPath).length;
-  const resumeSuggestions = pending.filter((item) => item.resumeSuggestionPath).length + processed.filter((item) => item.resumeSuggestionPath).length;
-  const readyToGreet = pending.filter((item) => item.decisionStatus === 'ready_to_greet').length;
-  const needsLlm = pending.filter((item) => item.decisionStatus === 'needs_llm').length;
-  const needsReview = pending.filter((item) => item.decisionStatus === 'needs_review').length;
-  const avgScore = scoredJobs.length
-    ? scoredJobs.reduce((sum, job) => sum + (job.score || 0), 0) / scoredJobs.length
-    : 0;
-  const topCities = Array.from(
-    jobs.reduce((map, job) => map.set(job.city || '-', (map.get(job.city || '-') || 0) + 1), new Map<string, number>()),
-  ).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const topCategories = Array.from(
-    jobs.reduce((map, job) => {
-      const category = job.cats[0] || job.tier || '-';
-      map.set(category, (map.get(category) || 0) + 1);
-      return map;
-    }, new Map<string, number>()),
-  ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const allPipelineItems = useMemo(() => [...pending, ...processed], [pending, processed]);
+  const [storyDrafts, setStoryDrafts] = useState<InterviewStoryDraft[]>([]);
+  const [storyDraftsLoading, setStoryDraftsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setStoryDraftsLoading(true);
+      try {
+        const data = await onLoadStoryDrafts();
+        if (!cancelled) setStoryDrafts(data?.drafts || []);
+      } finally {
+        if (!cancelled) setStoryDraftsLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [onLoadStoryDrafts]);
+
+  const todayJobs = useMemo(
+    () => jobs
+      .filter((job) => isToday(job.lastSeen))
+      .sort((a, b) => parseTime(b.lastSeen) - parseTime(a.lastSeen))
+      .slice(0, 5),
+    [jobs],
+  );
+
+  const recentJobs = useMemo(
+    () => [...jobs]
+      .sort((a, b) => parseTime(b.lastSeen) - parseTime(a.lastSeen))
+      .slice(0, 5),
+    [jobs],
+  );
+
+  const focusItems = useMemo(
+    () => pending
+      .filter((item) => item.decisionStatus !== 'skipped' && itemScore(item) >= 4)
+      .sort((a, b) => itemScore(b) - itemScore(a))
+      .slice(0, 5),
+    [pending],
+  );
+
+  const waitingItems = useMemo(() => {
+    const reviewTasks = pending
+      .filter((item) => item.decisionStatus === 'needs_review')
+      .slice(0, 3)
+      .map((item): DashboardTask => ({
+        id: `review:${item.sourceKey}`,
+        title: `${item.company} · ${item.title}`,
+        detail: item.llmRecommendation || t('dashboardTasks.waitingReviewDetail'),
+        meta: t('dashboardTasks.waitingReviewMeta'),
+        tone: 'amber',
+        tab: 'Pipeline',
+        action: t('dashboardTasks.openCandidate'),
+        target: { sourceKey: item.sourceKey },
+      }));
+
+    const storyTasks = storyDrafts
+      .filter((draft) => draft.status === 'needs_confirmation' || draft.status === 'editing')
+      .slice(0, 3)
+      .map((draft): DashboardTask => ({
+        id: `story:${draft.draftId}`,
+        title: draft.title || t('dashboardTasks.untitledStoryDraft'),
+        detail: draft.sourceLabel || draft.prepPath || t('dashboardTasks.storyDraftDetail'),
+        meta: t('dashboardTasks.storyDraftMeta'),
+        tone: 'cyan',
+        tab: 'Story',
+        action: t('dashboardTasks.openStoryBank'),
+        target: { draftId: draft.draftId },
+      }));
+
+    return [...reviewTasks, ...storyTasks].slice(0, 6);
+  }, [pending, storyDrafts, t]);
+
+  const materialTasks = useMemo(() => {
+    const tasks: DashboardTask[] = [];
+    for (const item of pending) {
+      if (item.reportPath && !item.resumeSuggestionPath) {
+        tasks.push({
+          id: `report:${item.sourceKey}`,
+          title: `${item.company} · ${item.title}`,
+          detail: item.llmRecommendation || t('dashboardTasks.reportUnusedDetail'),
+          meta: t('dashboardTasks.reportUnusedMeta'),
+          tone: 'emerald',
+          tab: 'Pipeline',
+          action: t('dashboardTasks.generateSuggestions'),
+          target: { sourceKey: item.sourceKey },
+        });
+      } else if (item.resumeSuggestionPath && !item.resumeDraftPath) {
+        tasks.push({
+          id: `suggestion:${item.sourceKey}`,
+          title: `${item.company} · ${item.title}`,
+          detail: t('dashboardTasks.suggestionUnusedDetail'),
+          meta: item.resumeSuggestedAt || t('dashboardTasks.materialReadyMeta'),
+          tone: 'indigo',
+          tab: 'Resume',
+          action: t('dashboardTasks.openResume'),
+          target: { sourceKey: item.sourceKey },
+        });
+      } else if (item.resumeDraftPath && item.decisionStatus !== 'ready_to_greet' && item.decisionStatus !== 'greeted') {
+        tasks.push({
+          id: `draft:${item.sourceKey}`,
+          title: `${item.company} · ${item.title}`,
+          detail: t('dashboardTasks.draftUnusedDetail'),
+          meta: item.resumeDraftedAt || t('dashboardTasks.materialReadyMeta'),
+          tone: 'indigo',
+          tab: 'Pipeline',
+          action: t('dashboardTasks.openCandidate'),
+          target: { sourceKey: item.sourceKey },
+        });
+      } else if (item.interviewPrepPath && !storyDrafts.some((draft) => draft.sourceKey === item.sourceKey && draft.status === 'promoted')) {
+        tasks.push({
+          id: `prep:${item.sourceKey}`,
+          title: `${item.company} · ${item.title}`,
+          detail: t('dashboardTasks.interviewPrepUnusedDetail'),
+          meta: item.interviewPreparedAt || t('dashboardTasks.materialReadyMeta'),
+          tone: 'cyan',
+          tab: 'Interview',
+          action: t('dashboardTasks.openInterview'),
+          target: { sourceKey: item.sourceKey },
+        });
+      }
+    }
+    return tasks.slice(0, 6);
+  }, [pending, storyDrafts, t]);
+
+  const storyGapTasks = useMemo(
+    () => storyDrafts
+      .filter((draft) => draft.status !== 'promoted' && draft.status !== 'dismissed')
+      .slice(0, 5)
+      .map((draft): DashboardTask => ({
+        id: `gap:${draft.draftId}`,
+        title: draft.title || t('dashboardTasks.untitledStoryDraft'),
+        detail: draft.theme || draft.sourceLabel || t('dashboardTasks.storyGapDetail'),
+        meta: draft.status === 'ready' ? t('dashboardTasks.storyReadyMeta') : t('dashboardTasks.storyNeedsConfirmationMeta'),
+        tone: draft.status === 'ready' ? 'emerald' : 'cyan',
+        tab: 'Story',
+        action: t('dashboardTasks.openStoryBank'),
+        target: { draftId: draft.draftId },
+      })),
+    [storyDrafts, t],
+  );
+
+  const highValueCount = focusItems.length;
+  const waitingCount = waitingItems.length;
+  const materialCount = materialTasks.length;
+  const storyGapCount = storyGapTasks.length;
+  const todayCount = todayJobs.length;
+  const jobsToShow = todayJobs.length ? todayJobs : recentJobs;
+  const jobSectionTitle = todayJobs.length ? t('dashboardTasks.todayJobs') : t('dashboardTasks.recentJobs');
+  const jobSectionSubtitle = todayJobs.length ? t('dashboardTasks.todayJobsSubtitle') : t('dashboardTasks.recentJobsSubtitle');
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-4 gap-4">
-        <MetricCard label={t('dashboard.totalJobs')} value={config.jobCount.toLocaleString()} />
-        <MetricCard label={t('dashboard.pipeline')} value={pending.length.toLocaleString()} hint={`${processed.length.toLocaleString()} ${t('dashboard.processed')}`} />
-        <MetricCard label={t('dashboard.highFit')} value={highFitJobs.length.toLocaleString()} hint={`${worthReviewingJobs.length.toLocaleString()} ${t('dashboard.worthReviewing')}`} />
-        <MetricCard label={t('dashboard.resumeSuggestions')} value={resumeSuggestions.toLocaleString()} hint={`${llmReports.toLocaleString()} ${t('dashboard.llmReports')}`} />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-indigo-300">
+            <ListChecks size={14} />
+            {t('dashboardTasks.eyebrow')}
+          </div>
+          <h2 className="mt-2 text-2xl font-semibold text-zinc-100">{t('dashboardTasks.title')}</h2>
+          <p className="mt-1 text-sm text-zinc-500">{t('dashboardTasks.subtitle')}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setActiveTab('Jobs')} className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-900 transition-colors">
+            <Briefcase size={14} />
+            {t('dashboard.openJobs')}
+          </button>
+          <button onClick={() => setActiveTab('Pipeline')} className="inline-flex items-center gap-2 rounded border border-indigo-900/70 bg-indigo-950/30 px-3 py-1.5 text-sm font-medium text-indigo-200 hover:bg-indigo-900/30 transition-colors">
+            <Inbox size={14} />
+            {t('dashboard.openPipeline')}
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
-                <BarChart3 size={15} className="text-indigo-400" />
-                {t('dashboard.scoring')}
-              </div>
-              <div className="space-y-3 text-xs text-zinc-400">
-                <div className="flex items-center justify-between">
-                  <span>{t('dashboard.scoredJobs')}</span>
-                  <span className="font-medium text-zinc-100">{scoredJobs.length.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{t('dashboard.averageScore')}</span>
-                  <span className="font-medium text-zinc-100">{avgScore ? avgScore.toFixed(1) : '-'}</span>
-                </div>
-                <button onClick={() => setActiveTab('Jobs')} className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                  {t('dashboard.openJobs')}
-                </button>
-              </div>
-            </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">{t('dashboardTasks.todayNew')}</div>
+          <div className="mt-2 text-2xl font-semibold text-zinc-100">{todayCount}</div>
+        </div>
+        <div className="rounded border border-emerald-900/50 bg-emerald-950/20 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-emerald-500">{t('dashboardTasks.focusCount')}</div>
+          <div className="mt-2 text-2xl font-semibold text-emerald-200">{highValueCount}</div>
+        </div>
+        <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-amber-500">{t('dashboardTasks.waitingCount')}</div>
+          <div className="mt-2 text-2xl font-semibold text-amber-200">{waitingCount}</div>
+        </div>
+        <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-indigo-500">{t('dashboardTasks.materialCount')}</div>
+          <div className="mt-2 text-2xl font-semibold text-indigo-200">{materialCount}</div>
+        </div>
+        <div className="rounded border border-cyan-900/50 bg-cyan-950/20 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-cyan-500">{t('dashboardTasks.storyGapCount')}</div>
+          <div className="mt-2 text-2xl font-semibold text-cyan-200">{storyDraftsLoading ? '...' : storyGapCount}</div>
+        </div>
+      </div>
 
-            <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
-                <Inbox size={15} className="text-emerald-400" />
-                {t('dashboard.pipeline')}
-              </div>
-              <div className="space-y-3 text-xs text-zinc-400">
-                <div className="flex items-center justify-between">
-                  <span>{t('dashboard.needsLlm')}</span>
-                  <span className="font-medium text-sky-300">{needsLlm.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{t('dashboard.needsReview')}</span>
-                  <span className="font-medium text-amber-300">{needsReview.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{t('dashboard.readyToGreet')}</span>
-                  <span className="font-medium text-emerald-300">{readyToGreet.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-5">
+          <TaskSection
+            title={jobSectionTitle}
+            subtitle={jobSectionSubtitle}
+            empty={t('dashboardTasks.noTodayJobs')}
+          >
+            {jobsToShow.length ? jobsToShow.map((job) => (
+              <TaskRow
+                key={job.id}
+                task={{
+                  id: `job:${job.id}`,
+                  title: `${job.company} · ${job.title}`,
+                  detail: `${job.city || '-'} · ${job.salary || '-'} · ${job.fitLevel || t('dashboardTasks.notScored')}`,
+                  meta: job.lastSeen || t('dashboardTasks.noTime'),
+                  tone: (job.score ?? 0) >= 4 ? 'emerald' : 'zinc',
+                  tab: 'Jobs',
+                  action: t('dashboardTasks.openJobs'),
+                  target: { jobId: job.id },
+                }}
+                icon={<Briefcase size={15} />}
+                onOpen={(task) => onOpenTask(task.tab, task.target)}
+              />
+            )) : null}
+          </TaskSection>
 
-            <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
-                <FileText size={15} className="text-indigo-400" />
-                {t('dashboard.materials')}
-              </div>
-              <div className="space-y-3 text-xs text-zinc-400">
-                <div className="flex items-center justify-between">
-                  <span>{t('dashboard.llmReports')}</span>
-                  <span className="font-medium text-zinc-100">{llmReports.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>{t('dashboard.resumeSuggestions')}</span>
-                  <span className="font-medium text-zinc-100">{resumeSuggestions.toLocaleString()}</span>
-                </div>
-                <button onClick={() => setActiveTab('Pipeline')} className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                  {t('dashboard.openPipeline')}
-                </button>
-              </div>
-            </div>
+          <TaskSection
+            title={t('dashboardTasks.focusJobs')}
+            subtitle={t('dashboardTasks.focusJobsSubtitle')}
+            empty={t('dashboardTasks.noFocusJobs')}
+          >
+            {focusItems.length ? focusItems.map((item) => (
+              <TaskRow
+                key={item.sourceKey}
+                task={{
+                  id: `focus:${item.sourceKey}`,
+                  title: `${item.company} · ${item.title}`,
+                  detail: item.llmRecommendation || `${item.city || '-'} · ${item.salary || '-'}`,
+                  meta: `${t('dashboardTasks.score')} ${itemScore(item).toFixed(1)}`,
+                  tone: 'emerald',
+                  tab: 'Pipeline',
+                  action: t('dashboardTasks.openCandidate'),
+                  target: { sourceKey: item.sourceKey },
+                }}
+                icon={<Sparkles size={15} />}
+                onOpen={(task) => onOpenTask(task.tab, task.target)}
+              />
+            )) : null}
+          </TaskSection>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <TaskSection
+              title={t('dashboardTasks.waitingConfirm')}
+              subtitle={t('dashboardTasks.waitingConfirmSubtitle')}
+              empty={t('dashboardTasks.noWaitingConfirm')}
+            >
+              {waitingItems.length ? waitingItems.map((task) => (
+                <TaskRow key={task.id} task={task} icon={<AlertCircle size={15} />} onOpen={(item) => onOpenTask(item.tab, item.target)} />
+              )) : null}
+            </TaskSection>
+
+            <TaskSection
+              title={t('dashboardTasks.storyGaps')}
+              subtitle={t('dashboardTasks.storyGapsSubtitle')}
+              empty={storyDraftsLoading ? t('dashboardTasks.loadingStoryDrafts') : t('dashboardTasks.noStoryGaps')}
+            >
+              {storyGapTasks.length ? storyGapTasks.map((task) => (
+                <TaskRow key={task.id} task={task} icon={<BookOpenText size={15} />} onOpen={(item) => onOpenTask(item.tab, item.target)} />
+              )) : null}
+            </TaskSection>
           </div>
 
-          <div className="border border-zinc-800 bg-zinc-900/30 rounded-md overflow-hidden">
-            <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Settings size={14} className="text-zinc-400" /> {t('dashboard.currentRunConfig')}
-              </h2>
+          <TaskSection
+            title={t('dashboardTasks.unusedMaterials')}
+            subtitle={t('dashboardTasks.unusedMaterialsSubtitle')}
+            empty={t('dashboardTasks.noUnusedMaterials')}
+          >
+            {materialTasks.length ? materialTasks.map((task) => (
+              <TaskRow key={task.id} task={task} icon={<FileCheck2 size={15} />} onOpen={(item) => onOpenTask(item.tab, item.target)} />
+            )) : null}
+          </TaskSection>
+        </div>
+
+        <aside className="space-y-5">
+          <section className="rounded-md border border-zinc-800 bg-zinc-950">
+            <div className="border-b border-zinc-800 px-4 py-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
+                <Settings size={14} className="text-zinc-400" />
+                {t('dashboard.currentRunConfig')}
+              </h3>
             </div>
-            <div className="p-5 space-y-6">
+            <div className="space-y-5 p-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wider">{t('dashboard.strategy')}</label>
-                <div className="grid grid-cols-3 gap-3">
+                <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.strategy')}</label>
+                <div className="space-y-2">
                   {STRATEGIES.map((strategy, index) => (
                     <StrategyCard
                       key={strategy.title}
@@ -161,80 +507,83 @@ export function Dashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wider">{t('dashboard.options')}</label>
-                <div className="flex gap-6">
+                <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.options')}</label>
+                <div className="space-y-2">
                   <OptionToggle label={t('dashboard.quickMode')} active={quickMode} onToggle={() => setQuickMode(!quickMode)} />
                   <OptionToggle label={t('dashboard.headless')} active={headlessMode} onToggle={() => setHeadlessMode(!headlessMode)} />
                   <OptionToggle label={t('dashboard.autoSqlite')} active={autoSqlite} onToggle={() => setAutoSqlite(!autoSqlite)} />
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-zinc-800 flex items-center gap-3">
-                <button onClick={onLogin} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded text-sm font-medium transition-colors">
+              <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 pt-4">
+                <button onClick={onLogin} className="inline-flex items-center justify-center gap-2 rounded bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 transition-colors">
+                  <PlayCircle size={14} />
                   {t('dashboard.loginSaveCookie')}
                 </button>
-                <button onClick={onProcessPartial} className="border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-4 py-2 rounded text-sm font-medium transition-colors">
+                <button onClick={onProcessPartial} className="inline-flex items-center justify-center gap-2 rounded border border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 transition-colors">
+                  <RefreshCw size={14} />
                   {t('dashboard.recoverPartial')}
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </section>
 
-        <div className="col-span-1 space-y-6">
-          <div className="border border-zinc-800 bg-zinc-950 rounded-md overflow-hidden">
-            <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Sparkles size={14} className="text-zinc-400" /> {t('dashboard.snapshot')}
-              </h2>
+          <section className="rounded-md border border-zinc-800 bg-zinc-950">
+            <div className="border-b border-zinc-800 px-4 py-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
+                <Clock3 size={14} className="text-zinc-400" />
+                {t('dashboardTasks.workflowSnapshot')}
+              </h3>
             </div>
-            <div className="p-4 space-y-5">
-              <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.topCities')}</div>
-                <div className="space-y-2">
-                  {topCities.length ? topCities.map(([city, count]) => (
-                    <div key={city} className="flex items-center justify-between text-xs">
-                      <span className="truncate text-zinc-300">{city}</span>
-                      <span className="text-zinc-500">{count}</span>
-                    </div>
-                  )) : <div className="text-xs text-zinc-600">{t('dashboard.noJobsLoaded')}</div>}
-                </div>
+            <div className="space-y-3 p-4 text-xs text-zinc-400">
+              <div className="flex items-center justify-between">
+                <span>{t('dashboard.totalJobs')}</span>
+                <span className="font-medium text-zinc-100">{config.jobCount.toLocaleString()}</span>
               </div>
-              <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.topCategories')}</div>
-                <div className="space-y-2">
-                  {topCategories.length ? topCategories.map(([category, count]) => (
-                    <div key={category} className="flex items-center justify-between gap-3 text-xs">
-                      <span className="truncate text-zinc-300">{category}</span>
-                      <span className="text-zinc-500">{count}</span>
-                    </div>
-                  )) : <div className="text-xs text-zinc-600">{t('dashboard.noCategoriesLoaded')}</div>}
-                </div>
+              <div className="flex items-center justify-between">
+                <span>{t('dashboard.pipeline')}</span>
+                <span className="font-medium text-zinc-100">{pending.length.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>{t('dashboard.processed')}</span>
+                <span className="font-medium text-zinc-100">{processed.length.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>{t('dashboardTasks.generatedMaterials')}</span>
+                <span className="font-medium text-zinc-100">{materialCount.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>{t('dashboardTasks.confirmedDone')}</span>
+                <span className="font-medium text-emerald-300">
+                  <CheckCircle2 size={13} className="mr-1 inline" />
+                  {allPipelineItems.filter((item) => item.decisionStatus === 'ready_to_greet' || item.decisionStatus === 'greeted').length}
+                </span>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="border border-zinc-800 bg-zinc-950 rounded-md overflow-hidden h-full flex flex-col">
-            <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Terminal size={14} className="text-zinc-400" /> {t('dashboard.recentLogs')}
-              </h2>
+          <section className="rounded-md border border-zinc-800 bg-zinc-950">
+            <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
+                <Terminal size={14} className="text-zinc-400" />
+                {t('dashboard.recentLogs')}
+              </h3>
               <button onClick={() => setActiveTab('Logs')} className="text-xs text-indigo-400 hover:text-indigo-300">{t('dashboard.fullLogs')}</button>
             </div>
-            <div className="p-3 font-mono text-[11px] leading-relaxed space-y-1 flex-1 bg-zinc-950 overflow-hidden">
+            <div className="space-y-1 p-3 font-mono text-[11px] leading-relaxed">
               {recentLogs.length === 0 ? (
                 <div className="text-zinc-600">{t('dashboard.noLogsYet')}</div>
               ) : recentLogs.map((log, index) => (
                 <div key={`${log.time}-${index}`} className="flex gap-3">
-                  <span className="text-zinc-600 shrink-0">{log.time}</span>
+                  <span className="shrink-0 text-zinc-600">{log.time}</span>
                   <span className={`${log.level === 'error' ? 'text-red-400' : log.level === 'warn' ? 'text-amber-400' : 'text-zinc-300'} truncate`}>
                     {log.msg}
                   </span>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </section>
+        </aside>
       </div>
     </div>
   );
