@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { bossApi } from '../api';
-import type { PipelineResponse } from '../types';
+import type { GreetingDraftResponse, GreetingDraftStatus, PipelineResponse } from '../types';
 
 export function usePipeline({
   showNotice,
@@ -96,6 +96,30 @@ export function usePipeline({
     }
   }, [showNotice, t]);
 
+  const loadGreetingDraft = useCallback(async (sourceKey: string): Promise<GreetingDraftResponse | null> => {
+    try {
+      return await bossApi.getGreetingDraft(sourceKey);
+    } catch (error) {
+      showNotice(t('notices.loadGreetingDraftFailed', { error: (error as Error).message }));
+      return null;
+    }
+  }, [showNotice, t]);
+
+  const saveGreetingDraft = useCallback(async (
+    sourceKey: string,
+    editedText: string,
+    status: GreetingDraftStatus,
+  ): Promise<GreetingDraftResponse | null> => {
+    try {
+      const data = await bossApi.saveGreetingDraft(sourceKey, editedText, status);
+      showNotice(t('notices.greetingDraftSaved'));
+      return data;
+    } catch (error) {
+      showNotice(t('notices.greetingDraftSaveFailed', { error: (error as Error).message }));
+      return null;
+    }
+  }, [showNotice, t]);
+
   const updatePipelineStatus = useCallback(async (sourceKey: string, decisionStatus: string) => {
     try {
       const data = await bossApi.updatePipelineStatus(sourceKey, decisionStatus);
@@ -141,6 +165,8 @@ export function usePipeline({
     llmEvaluatePipelineItem,
     loadJobDetail,
     loadPipelineReport,
+    loadGreetingDraft,
+    saveGreetingDraft,
     updatePipelineStatus,
     deletePipelineItem,
   };

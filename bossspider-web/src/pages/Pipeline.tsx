@@ -1,10 +1,20 @@
-import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, Trash2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { DetailItem } from '../components/DetailItem';
-import { JobDescription } from '../components/JobDescription';
-import type { DecisionStatus, InterviewPrepResponse, Job, PipelineItem, PipelineReportResponse, PipelineResponse, ResumeSuggestionResponse } from '../types';
+import { JobWorkspace } from '../components/JobWorkspace';
+import type {
+  DecisionStatus,
+  GreetingDraft,
+  GreetingDraftResponse,
+  GreetingDraftStatus,
+  InterviewPrepResponse,
+  Job,
+  PipelineItem,
+  PipelineReportResponse,
+  PipelineResponse,
+  ResumeSuggestionResponse,
+} from '../types';
 import { useAppTranslation } from '../i18n';
 
 function getDecisionLabel(status: DecisionStatus, t: (key: string) => string): string {
@@ -82,6 +92,8 @@ export function Pipeline({
   setSortByLlmScore,
   onLoadJobDetail,
   onLoadReport,
+  onLoadGreetingDraft,
+  onSaveGreetingDraft,
   onGenerateResumeSuggestions,
   onLoadResumeSuggestion,
   onGenerateInterviewPrep,
@@ -101,6 +113,8 @@ export function Pipeline({
   setSortByLlmScore: (value: boolean | ((current: boolean) => boolean)) => void;
   onLoadJobDetail: (project: string, jobId: number) => Promise<Job | null>;
   onLoadReport: (sourceKey: string) => Promise<PipelineReportResponse | null>;
+  onLoadGreetingDraft: (sourceKey: string) => Promise<GreetingDraftResponse | null>;
+  onSaveGreetingDraft: (sourceKey: string, editedText: string, status: GreetingDraftStatus) => Promise<GreetingDraftResponse | null>;
   onGenerateResumeSuggestions: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
   onLoadResumeSuggestion: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
   onGenerateInterviewPrep: (sourceKey: string, userNotes: string) => Promise<InterviewPrepResponse | null>;
@@ -137,10 +151,13 @@ export function Pipeline({
   const [selectedSourceKey, setSelectedSourceKey] = useState('');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [report, setReport] = useState<PipelineReportResponse | null>(null);
+  const [greetingDraft, setGreetingDraft] = useState<GreetingDraft | null>(null);
   const [resumeSuggestion, setResumeSuggestion] = useState<ResumeSuggestionResponse | null>(null);
   const [interviewPrep, setInterviewPrep] = useState<InterviewPrepResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [greetingLoading, setGreetingLoading] = useState(false);
+  const [greetingSaving, setGreetingSaving] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
   const [interviewLoading, setInterviewLoading] = useState(false);
   const appliedTargetRef = useRef('');
@@ -169,6 +186,7 @@ export function Pipeline({
       setSelectedSourceKey('');
       setSelectedJob(null);
       setReport(null);
+      setGreetingDraft(null);
       setResumeSuggestion(null);
       setInterviewPrep(null);
     }
@@ -185,6 +203,7 @@ export function Pipeline({
     setSelectedSourceKey(item.sourceKey);
     setSelectedJob(null);
     setReport(null);
+    setGreetingDraft(null);
     setResumeSuggestion(null);
     setInterviewPrep(null);
     if (!item.project || !item.jobId) return;
@@ -196,6 +215,27 @@ export function Pipeline({
       setDetailLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadDraft = async () => {
+      if (!selectedItem?.sourceKey) {
+        setGreetingDraft(null);
+        return;
+      }
+      setGreetingLoading(true);
+      try {
+        const data = await onLoadGreetingDraft(selectedItem.sourceKey);
+        if (!cancelled) setGreetingDraft(data?.draft || null);
+      } finally {
+        if (!cancelled) setGreetingLoading(false);
+      }
+    };
+    void loadDraft();
+    return () => {
+      cancelled = true;
+    };
+  }, [onLoadGreetingDraft, selectedItem?.sourceKey]);
 
   useEffect(() => {
     if (!targetSourceKey || !targetRequestId) return;
@@ -275,6 +315,18 @@ export function Pipeline({
     }
   };
 
+  const saveGreetingDraft = async (editedText: string, status: GreetingDraftStatus) => {
+    if (!selectedItem) return null;
+    setGreetingSaving(true);
+    try {
+      const data = await onSaveGreetingDraft(selectedItem.sourceKey, editedText, status);
+      if (data) setGreetingDraft(data.draft);
+      return data;
+    } finally {
+      setGreetingSaving(false);
+    }
+  };
+
   const changeStatus = async (sourceKey: string, decisionStatus: DecisionStatus) => {
     await onUpdateStatus(sourceKey, decisionStatus);
   };
@@ -287,6 +339,7 @@ export function Pipeline({
       setSelectedSourceKey('');
       setSelectedJob(null);
       setReport(null);
+      setGreetingDraft(null);
       setResumeSuggestion(null);
       setInterviewPrep(null);
     }
@@ -454,211 +507,31 @@ export function Pipeline({
         </div>
 
         {selectedItem && (
-          <div className="w-[34rem] border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-              <h3 className="font-semibold text-zinc-100">{t('pipeline.jobDetails')}</h3>
-              <button onClick={() => setSelectedSourceKey('')} className="text-zinc-500 hover:text-zinc-300">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="p-4 flex-1 overflow-y-auto space-y-5">
-              <div className="grid grid-cols-2 gap-2">
-                {STATUS_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => { void changeStatus(selectedItem.sourceKey, option.value); }}
-                    className={`rounded border px-2.5 py-1.5 text-xs font-medium transition-colors ${statusButtonClass(option.value, selectedItem.decisionStatus === option.value)}`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={deleteSelected}
-                className="w-full flex items-center justify-center gap-2 rounded border border-red-900/70 bg-red-950/20 px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-950/40 transition-colors"
-              >
-                <Trash2 size={15} />
-                {t('pipeline.deleteItem')}
-              </button>
-
-              <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3 space-y-3">
-                <div className="text-xs font-medium text-zinc-300">{t('pipeline.materials')}</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <MaterialBadge label={t('pipeline.material.llm')} ready={Boolean(selectedItem.reportPath)} tone="emerald" />
-                  <MaterialBadge label={t('pipeline.material.resumeSuggestion')} ready={Boolean(selectedItem.resumeSuggestionPath)} tone="indigo" />
-                  <MaterialBadge label={t('pipeline.material.resumeDraft')} ready={Boolean(selectedItem.resumeDraftPath)} tone="indigo" />
-                  <MaterialBadge label={t('pipeline.material.interviewPrep')} ready={Boolean(selectedItem.interviewPrepPath)} tone="cyan" />
-                </div>
-              </div>
-
-              {detailLoading && (
-                <div className="flex items-center gap-2 text-sm text-zinc-500">
-                  <Loader2 size={14} className="animate-spin" />
-                  {t('pipeline.loadingDetails')}
-                </div>
-              )}
-
-              <DetailItem label={t('pipeline.jobTitle')} value={selectedItem.title} strong />
-              <div className="grid grid-cols-2 gap-4">
-                <DetailItem label={t('pipeline.company')} value={selectedItem.company} />
-                <DetailItem label={t('pipeline.city')} value={selectedItem.city} />
-                <DetailItem label={t('pipeline.salary')} value={selectedItem.salary} accent />
-                <DetailItem label={t('pipeline.avgSalary')} value={`${(selectedJob?.avg ?? selectedItem.avg ?? 0).toFixed(1)}k`} />
-                <DetailItem label={t('pipeline.experience')} value={selectedJob?.exp || '-'} />
-                <DetailItem label={t('pipeline.education')} value={selectedJob?.edu || '-'} />
-              </div>
-
-              <div className="rounded border border-zinc-800 bg-zinc-900/50 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-500">{t('pipeline.score')}</span>
-                  <span className="text-sm font-semibold text-zinc-100">{selectedItem.score ? selectedItem.score.toFixed(1) : '-'} / 5.0</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                  <div>{t('pipeline.coverage', { n: selectedItem.coverage ?? 0 })}</div>
-                  <div>{t('pipeline.jdQuality', { n: selectedItem.jdQuality ?? 0 })}</div>
-                  <div>{t('pipeline.expRisk', { risk: riskText(selectedItem.experienceRisk) })}</div>
-                  <div>{t('pipeline.eduRisk', { risk: riskText(selectedItem.educationRisk) })}</div>
-                </div>
-              </div>
-
-              <div className="rounded border border-emerald-900/50 bg-emerald-950/20 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-emerald-500">{t('pipeline.llm')}</span>
-                  <span className="text-sm font-semibold text-emerald-200">{selectedItem.llmScore ? selectedItem.llmScore.toFixed(1) : selectedItem.reportId || '-'} / 5.0</span>
-                </div>
-                {selectedItem.llmFitLevel && <div className="text-xs text-emerald-400">{selectedItem.llmFitLevel}</div>}
-                {selectedItem.llmRecommendation && <div className="text-xs leading-relaxed text-zinc-300">{selectedItem.llmRecommendation}</div>}
-                {selectedItem.reportPath ? (
-                  <>
-                    <div className="break-all text-[10px] text-zinc-500">{selectedItem.reportPath}</div>
-                    <button
-                      onClick={viewReport}
-                      disabled={reportLoading}
-                      className="inline-flex items-center gap-2 rounded border border-emerald-900/70 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50 transition-colors"
-                    >
-                      {reportLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
-                      {t('pipeline.viewReport')}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => onLlmEvaluate(selectedItem.sourceKey)}
-                    disabled={isSelectedLlmEvaluating}
-                    className="inline-flex items-center gap-2 rounded border border-emerald-900/70 bg-emerald-950/40 px-3 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
-                  >
-                    {isSelectedLlmEvaluating && <Loader2 size={14} className="animate-spin" />}
-                    {isSelectedLlmEvaluating ? t('pipeline.generating') : t('pipeline.llmEval')}
-                  </button>
-                )}
-              </div>
-
-              <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-indigo-400">{t('nav.resume')}</span>
-                  {selectedItem.resumeSuggestionId && (
-                    <span className="text-xs font-semibold text-indigo-200">{selectedItem.resumeSuggestionId}</span>
-                  )}
-                </div>
-                <div className="text-xs leading-relaxed text-zinc-400">
-                  {t('pipeline.resumeHint')}
-                </div>
-                {selectedItem.resumeSuggestedAt && (
-                  <div className="text-[10px] text-zinc-500">{t('pipeline.generatedAt', { date: selectedItem.resumeSuggestedAt })}</div>
-                )}
-                {selectedItem.resumeSuggestionPath && (
-                  <div className="break-all text-[10px] text-zinc-500">{selectedItem.resumeSuggestionPath}</div>
-                )}
-                <div className="rounded border border-zinc-800/80 bg-zinc-950/60 p-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-zinc-500">{t('pipeline.material.resumeDraft')}</span>
-                    <MaterialBadge label={selectedItem.resumeDraftPath ? t('pipeline.ready') : t('pipeline.notReady')} ready={Boolean(selectedItem.resumeDraftPath)} tone="indigo" />
-                  </div>
-                  {selectedItem.resumeDraftedAt && (
-                    <div className="mt-1 text-[10px] text-zinc-500">{t('pipeline.generatedAt', { date: selectedItem.resumeDraftedAt })}</div>
-                  )}
-                  {selectedItem.resumeDraftPath && (
-                    <div className="mt-1 break-all text-[10px] text-zinc-500">{selectedItem.resumeDraftPath}</div>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={generateResumeSuggestion}
-                    disabled={isSelectedResumeSuggesting || resumeLoading}
-                    className="inline-flex items-center gap-2 rounded border border-indigo-800/70 bg-indigo-950/40 px-2.5 py-1.5 text-xs font-medium text-indigo-200 hover:bg-indigo-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
-                  >
-                    {isSelectedResumeSuggesting || resumeLoading ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
-                    {selectedItem.resumeSuggestionPath ? t('pipeline.regenerateSuggestions') : t('pipeline.generateSuggestions')}
-                  </button>
-                  {selectedItem.resumeSuggestionPath && (
-                    <button
-                      onClick={viewResumeSuggestion}
-                      disabled={resumeLoading}
-                      className="inline-flex items-center gap-2 rounded border border-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-50 transition-colors"
-                    >
-                      {resumeLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
-                      {t('pipeline.viewSuggestions')}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded border border-cyan-900/50 bg-cyan-950/20 p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-cyan-400">{t('pipeline.material.interviewPrep')}</span>
-                  {selectedItem.interviewPrepId && (
-                    <span className="text-xs font-semibold text-cyan-200">{selectedItem.interviewPrepId}</span>
-                  )}
-                </div>
-                <div className="text-xs leading-relaxed text-zinc-400">
-                  {t('pipeline.interviewPrepHint')}
-                </div>
-                {selectedItem.interviewPreparedAt && (
-                  <div className="text-[10px] text-zinc-500">{t('pipeline.generatedAt', { date: selectedItem.interviewPreparedAt })}</div>
-                )}
-                {selectedItem.interviewPrepPath && (
-                  <div className="break-all text-[10px] text-zinc-500">{selectedItem.interviewPrepPath}</div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={generateInterviewPrep}
-                    disabled={isSelectedInterviewPreparing || interviewLoading}
-                    className="inline-flex items-center gap-2 rounded border border-cyan-800/70 bg-cyan-950/40 px-2.5 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
-                  >
-                    {isSelectedInterviewPreparing || interviewLoading ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
-                    {selectedItem.interviewPrepPath ? t('pipeline.regenerateInterviewPrep') : t('pipeline.generateInterviewPrep')}
-                  </button>
-                  {selectedItem.interviewPrepPath && (
-                    <button
-                      onClick={viewInterviewPrep}
-                      disabled={interviewLoading}
-                      className="inline-flex items-center gap-2 rounded border border-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-50 transition-colors"
-                    >
-                      {interviewLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
-                      {t('pipeline.viewInterviewPrep')}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs text-zinc-500 mb-1">{t('jobs.tableHeaders.category')}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {((selectedJob?.cats.length ? selectedJob.cats : [selectedJob?.tier || '-'])).map((cat) => (
-                    <span key={cat} className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 text-xs">{cat}</span>
-                  ))}
-                </div>
-              </div>
-
-              <JobDescription text={selectedJob?.desc} />
-
-              {(selectedJob?.url || selectedItem.url) && (
-                <a href={selectedJob?.url || selectedItem.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline">
-                  {t('jobs.viewOriginalLink')}
-                </a>
-              )}
-            </div>
-          </div>
+          <JobWorkspace
+            item={selectedItem}
+            job={selectedJob}
+            detailLoading={detailLoading}
+            statusOptions={STATUS_OPTIONS}
+            onClose={() => setSelectedSourceKey('')}
+            onStatusChange={(status) => { void changeStatus(selectedItem.sourceKey, status); }}
+            onDelete={deleteSelected}
+            onLlmEvaluate={() => onLlmEvaluate(selectedItem.sourceKey)}
+            isLlmEvaluating={isSelectedLlmEvaluating}
+            onViewReport={viewReport}
+            reportLoading={reportLoading}
+            greetingDraft={greetingDraft}
+            greetingLoading={greetingLoading}
+            greetingSaving={greetingSaving}
+            onSaveGreetingDraft={saveGreetingDraft}
+            onGenerateResumeSuggestions={generateResumeSuggestion}
+            onViewResumeSuggestion={viewResumeSuggestion}
+            isResumeSuggesting={isSelectedResumeSuggesting}
+            resumeLoading={resumeLoading}
+            onGenerateInterviewPrep={generateInterviewPrep}
+            onViewInterviewPrep={viewInterviewPrep}
+            isInterviewPreparing={isSelectedInterviewPreparing}
+            interviewLoading={interviewLoading}
+          />
         )}
       </div>
 

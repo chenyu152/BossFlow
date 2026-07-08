@@ -9,6 +9,7 @@ import requests
 from fastapi import HTTPException
 
 from backend.services.job_service import get_jobs_by_ids
+from backend.services.greeting_service import sync_greeting_draft_from_report
 from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
 from backend.services.project_service import resolve_project
 from backend.storage.paths import BASE_DIR
@@ -269,6 +270,7 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
             "decisionStatus": "needs_review",
         },
     )
+    sync_greeting_draft_from_report(source_key)
 
     return {
         "ok": True,

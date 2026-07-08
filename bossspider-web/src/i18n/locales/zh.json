@@ -265,6 +265,50 @@
       "unknown": "未知"
     }
   },
+  "jobWorkspace": {
+    "title": "岗位档案",
+    "tabs": {
+      "overview": "概览",
+      "info": "岗位信息",
+      "evaluation": "匹配评估",
+      "materials": "简历材料",
+      "interview": "面试准备",
+      "records": "记录"
+    },
+    "nextAction": "下一步",
+    "nextActions": {
+      "llm": "先生成 LLM 精评，判断这个岗位是否值得继续推进。",
+      "resume": "精评已完成，下一步生成针对 JD 的简历修改建议。",
+      "interview": "简历材料已具备，可以继续生成面试准备文档。",
+      "confirm": "材料已经推进到待确认阶段，请判断是否进入打招呼或跳过。",
+      "review": "这个岗位的核心材料已经具备，可以回看报告或更新状态。"
+    },
+    "materialProgress": "材料进度",
+    "currentStatus": "当前状态",
+    "basicInfo": "基础信息",
+    "coarseEvaluation": "粗筛评估",
+    "llmEvaluation": "LLM 精评",
+    "greeting": "沟通准备",
+    "greetingPlaceholder": "打招呼草稿和发送状态将在后续阶段接入。",
+    "loadingGreeting": "正在加载打招呼草稿...",
+    "greetingStatus": "状态：{{status}}",
+    "greetingEmpty": "暂未提取到打招呼草稿。",
+    "greetingEmptyHint": "请先生成 LLM 精评。若报告中包含 Boss 打招呼草稿段落，会自动提取到这里。",
+    "saveGreeting": "保存草稿",
+    "copyGreeting": "复制",
+    "markGreetingSent": "标记已发送",
+    "greetingStatuses": {
+      "draft": "草稿",
+      "edited": "已编辑",
+      "copied": "已复制",
+      "sent": "已发送",
+      "dismissed": "已忽略"
+    },
+    "storyMatch": "故事匹配",
+    "storyPlaceholder": "后续会在这里展示本岗位关联故事、缺口故事和确认状态。",
+    "statusFlow": "状态流转",
+    "timeline": "时间记录"
+  },
   "resume": {
     "title": "简历",
     "jobsWithMaterials": "个岗位有简历材料",
@@ -415,6 +459,9 @@
     "llmEvalFailed": "LLM 精评失败：{{error}}",
     "loadJobDetailFailed": "加载岗位详情失败：{{error}}",
     "loadReportFailed": "加载报告失败：{{error}}",
+    "loadGreetingDraftFailed": "加载打招呼草稿失败：{{error}}",
+    "greetingDraftSaved": "打招呼草稿已保存",
+    "greetingDraftSaveFailed": "保存打招呼草稿失败：{{error}}",
     "resumeSuggestionGenerating": "定制简历建议生成中，可能需要几十秒",
     "resumeSuggestionGenerated": "定制简历建议已生成：{{id}}",
     "resumeSuggestionFailed": "定制简历建议生成失败：{{error}}",

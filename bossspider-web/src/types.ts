@@ -350,6 +350,31 @@ export type InterviewPrepResponse = {
   pipeline?: PipelineResponse;
 };
 
+export type GreetingDraftStatus = 'draft' | 'edited' | 'copied' | 'sent' | 'dismissed';
+
+export type GreetingDraft = {
+  sourceKey: string;
+  project: string;
+  jobId: number | null;
+  company: string;
+  title: string;
+  channel: string;
+  draftText: string;
+  editedText: string;
+  status: GreetingDraftStatus;
+  sourceReportPath: string;
+  sourceReportId: string;
+  createdAt: string;
+  updatedAt: string;
+  usedAt: string;
+};
+
+export type GreetingDraftResponse = {
+  ok: boolean;
+  path: string;
+  draft: GreetingDraft;
+};
+
 export type TaskStatusResponse = {
   running: boolean;
   status: Status;

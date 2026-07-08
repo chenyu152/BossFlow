@@ -132,7 +132,7 @@ export default function App() {
             <div className="w-5 h-5 bg-indigo-600 rounded flex items-center justify-center text-[10px]">
               <Crosshair size={12} className="text-white" />
             </div>
-            BossSpider
+            BossFlow
           </div>
         </div>
 
@@ -326,6 +326,8 @@ export default function App() {
                 setSortByLlmScore={boss.setSortPipelineByLlmScore}
                 onLoadJobDetail={boss.loadJobDetail}
                 onLoadReport={boss.loadPipelineReport}
+                onLoadGreetingDraft={boss.loadGreetingDraft}
+                onSaveGreetingDraft={boss.saveGreetingDraft}
                 onGenerateResumeSuggestions={boss.generateResumeSuggestions}
                 onLoadResumeSuggestion={boss.loadResumeSuggestion}
                 onGenerateInterviewPrep={boss.generateInterviewPrep}

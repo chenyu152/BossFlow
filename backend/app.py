@@ -7,11 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
+from backend.schemas.greeting import GreetingDraftSaveRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
+from backend.services.greeting_service import read_greeting_draft, save_greeting_draft
 from backend.services.interview_service import (
     generate_interview_prep,
     list_interview_items,
@@ -106,6 +108,16 @@ def get_pipeline():
 @app.get("/api/pipeline/report")
 def get_pipeline_report(sourceKey: str):
     return read_pipeline_report(sourceKey)
+
+
+@app.get("/api/greetings/draft")
+def get_greeting_draft(sourceKey: str):
+    return read_greeting_draft(sourceKey)
+
+
+@app.put("/api/greetings/draft")
+def update_greeting_draft(payload: GreetingDraftSaveRequest):
+    return save_greeting_draft(payload.sourceKey, payload.editedText, payload.status)
 
 
 @app.post("/api/pipeline/jobs")

@@ -1,6 +1,8 @@
 import type {
   ConfigPayload,
   EvaluatePipelineResponse,
+  GreetingDraftResponse,
+  GreetingDraftStatus,
   InterviewItemsResponse,
   InterviewPrepResponse,
   InterviewStoryBankResponse,
@@ -78,6 +80,17 @@ export const bossApi = {
 
   getPipelineReport(sourceKey: string) {
     return request<PipelineReportResponse>(`/api/pipeline/report?sourceKey=${encodeURIComponent(sourceKey)}`);
+  },
+
+  getGreetingDraft(sourceKey: string) {
+    return request<GreetingDraftResponse>(`/api/greetings/draft?sourceKey=${encodeURIComponent(sourceKey)}`);
+  },
+
+  saveGreetingDraft(sourceKey: string, editedText: string, status: GreetingDraftStatus) {
+    return request<GreetingDraftResponse>('/api/greetings/draft', {
+      method: 'PUT',
+      body: JSON.stringify({ sourceKey, editedText, status }),
+    });
   },
 
   addJobsToPipeline(project: string, jobIds: number[]) {

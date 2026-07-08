@@ -26,6 +26,7 @@ output/resumes/
 output/**/*.md
 output/**/*.json
 data/pipeline.md
+data/greetings/
 data/interview-prep/
 data/*.json
 *.sqlite

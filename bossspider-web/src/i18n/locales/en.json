@@ -264,6 +264,50 @@
       "unknown": "unknown"
     }
   },
+  "jobWorkspace": {
+    "title": "Job Workspace",
+    "tabs": {
+      "overview": "Overview",
+      "info": "Job Info",
+      "evaluation": "Evaluation",
+      "materials": "Materials",
+      "interview": "Interview",
+      "records": "Records"
+    },
+    "nextAction": "Next action",
+    "nextActions": {
+      "llm": "Generate an LLM evaluation first to decide whether this role is worth pursuing.",
+      "resume": "The evaluation is ready. Generate JD-specific resume suggestions next.",
+      "interview": "Resume materials are ready. Generate interview prep next.",
+      "confirm": "Materials are ready for your decision. Confirm whether to greet or skip.",
+      "review": "Core materials are ready. Review the report or update the job status."
+    },
+    "materialProgress": "Material progress",
+    "currentStatus": "Current status",
+    "basicInfo": "Basic info",
+    "coarseEvaluation": "Coarse evaluation",
+    "llmEvaluation": "LLM evaluation",
+    "greeting": "Greeting prep",
+    "greetingPlaceholder": "Greeting drafts and sent status will be added in a later phase.",
+    "loadingGreeting": "Loading greeting draft...",
+    "greetingStatus": "Status: {{status}}",
+    "greetingEmpty": "No greeting draft extracted yet.",
+    "greetingEmptyHint": "Generate an LLM evaluation first. If the report contains a Boss greeting section, it will be extracted here automatically.",
+    "saveGreeting": "Save draft",
+    "copyGreeting": "Copy",
+    "markGreetingSent": "Mark sent",
+    "greetingStatuses": {
+      "draft": "Draft",
+      "edited": "Edited",
+      "copied": "Copied",
+      "sent": "Sent",
+      "dismissed": "Dismissed"
+    },
+    "storyMatch": "Story match",
+    "storyPlaceholder": "Related stories, missing stories, and confirmation status will appear here later.",
+    "statusFlow": "Status flow",
+    "timeline": "Timeline"
+  },
   "resume": {
     "title": "Resume",
     "jobsWithMaterials": "jobs with resume materials",
@@ -414,6 +458,9 @@
     "llmEvalFailed": "LLM evaluation failed: {{error}}",
     "loadJobDetailFailed": "Load job detail failed: {{error}}",
     "loadReportFailed": "Load report failed: {{error}}",
+    "loadGreetingDraftFailed": "Load greeting draft failed: {{error}}",
+    "greetingDraftSaved": "Greeting draft saved",
+    "greetingDraftSaveFailed": "Save greeting draft failed: {{error}}",
     "resumeSuggestionGenerating": "Resume suggestion generation in progress, may take tens of seconds",
     "resumeSuggestionGenerated": "Resume suggestion generated: {{id}}",
     "resumeSuggestionFailed": "Resume suggestion generation failed: {{error}}",

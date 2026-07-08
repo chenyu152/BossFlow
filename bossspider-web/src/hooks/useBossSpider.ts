@@ -44,6 +44,8 @@ export function useBossSpider() {
     llmEvaluatePipelineItem,
     loadJobDetail,
     loadPipelineReport,
+    loadGreetingDraft,
+    saveGreetingDraft,
     updatePipelineStatus,
     deletePipelineItem: deletePipelineItemBase,
   } = usePipeline({ showNotice, t });
@@ -226,6 +228,8 @@ export function useBossSpider() {
     llmEvaluatePipelineItem,
     loadJobDetail,
     loadPipelineReport,
+    loadGreetingDraft,
+    saveGreetingDraft,
     generateResumeSuggestions,
     loadResumeSuggestion,
     generateResumeDraft,
