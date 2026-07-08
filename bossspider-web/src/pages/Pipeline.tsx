@@ -324,20 +324,20 @@ export function Pipeline({
       </div>
 
       <div className="border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex-1 min-h-0 flex">
-        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 min-w-0 overflow-auto">
           {displayedPending.length ? (
-            <table className="w-full table-fixed text-left text-xs">
+            <table className="w-full min-w-[1720px] table-fixed text-left text-xs">
               <colgroup>
-                <col className="w-[7%]" />
-                <col className="w-[13%]" />
-                <col className="w-[18%]" />
-                <col className="w-[5%]" />
-                <col className="w-[7%]" />
-                <col className="w-[10%]" />
-                <col className="w-[15%]" />
-                <col className="w-[14%]" />
-                <col className="w-[5%]" />
-                <col className="w-[6%]" />
+                <col className="w-28" />
+                <col className="w-52" />
+                <col className="w-72" />
+                <col className="w-20" />
+                <col className="w-28" />
+                <col className="w-40" />
+                <col className="w-64" />
+                <col className="w-60" />
+                <col className="w-36" />
+                <col className="w-44" />
               </colgroup>
               <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800 shadow-sm z-10">
                 <tr>
@@ -416,13 +416,13 @@ export function Pipeline({
                       </td>
                       <td className="px-4 py-2 text-zinc-500 truncate" title={item.addedAt || '-'}>{item.addedAt || '-'}</td>
                       <td className="px-4 py-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
                               onEvaluate(item.sourceKey);
                             }}
-                            className="inline-flex items-center gap-1.5 rounded border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
                           >
                             <Wand2 size={13} />
                             {t('pipeline.scoreButton')}
@@ -433,7 +433,7 @@ export function Pipeline({
                               onLlmEvaluate(item.sourceKey);
                             }}
                             disabled={isLlmEvaluating}
-                            className="inline-flex items-center gap-1.5 rounded border border-emerald-900/70 bg-emerald-950/30 px-2.5 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded border border-emerald-900/70 bg-emerald-950/30 px-2.5 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
                           >
                             {isLlmEvaluating ? (
                               <>

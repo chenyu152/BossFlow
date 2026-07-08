@@ -13,15 +13,26 @@ type ParsedSuggestion = {
 
 function parseSuggestionItems(content: string): ParsedSuggestion[] {
   const items: ParsedSuggestion[] = [];
+  let current: ParsedSuggestion | null = null;
   for (const raw of content.split(/\r?\n/)) {
     const line = raw.trim();
-    const match = line.match(/^[-*]\s+\[[ xX]\]\s*(?:\*\*)?(S[\w-]+)(?:\*\*)?\s*[｜|]\s*(.+)$/);
-    if (!match) continue;
+    const match = line.match(/^[-*]\s+\[[ xX]\]\s*(?:\*\*)?([SC]\d[\w-]*)(?:\*\*)?\s*[:：｜|]\s*(.+)$/i);
+    if (!match) {
+      if (current && /风险级别/.test(line)) {
+        const riskMatch = line.replace(/\*\*/g, '').match(/风险级别\s*[:：]\s*([^（(]+)/);
+        if (riskMatch) current.risk = riskMatch[1].trim();
+      }
+      continue;
+    }
     const [, id, body] = match;
-    const text = body.replace(/\*\*/g, '').trim();
-    const parts = text.split(/[｜|]/).map((part) => part.trim()).filter(Boolean);
-    const risk = (parts[parts.length - 1] || '').replace(/[（）()]/g, '');
-    items.push({ id, text, risk });
+    const text = body
+      .replace(/\*\*/g, '')
+      .replace(/[｜|]/g, ' · ')
+      .trim();
+    const riskMatch = text.match(/风险级别\s*[:：]\s*([^（(]+)/);
+    const risk = riskMatch ? riskMatch[1].trim() : '';
+    current = { id: id.toUpperCase(), text, risk };
+    items.push(current);
   }
   return items;
 }

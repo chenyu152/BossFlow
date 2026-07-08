@@ -93,6 +93,7 @@ def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list
 - 如果某个 JD 要求在 CV 中没有证据，必须标记为“需要用户确认/补充证据”。
 - 不要覆盖或改写 cv.md。
 - 输出 Markdown。
+- 不要输出“好的，收到”等开场白或解释性废话，直接从指定 Markdown 标题开始。
 - 建议要能让用户逐条确认，避免一次性大段泛泛而谈。"""
     user = f"""请为以下 Boss 直聘岗位生成定制简历修改建议。
 
@@ -107,8 +108,9 @@ def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list
 用表格列出：JD 要求 | cv.md 中可复用证据 | 建议放入简历位置 | 证据强度。
 
 ## C. 建议改写或前置的简历内容
-输出 5-10 条可勾选建议。每条建议格式：
-- [ ] S编号｜建议动作｜涉及 CV 内容｜为什么匹配 JD｜风险级别
+输出 5-10 条可勾选建议。每条必须严格使用下面的单行格式：
+- [ ] S1｜建议动作｜涉及 CV 内容｜为什么匹配 JD｜风险级别：safe
+编号必须从 S1、S2、S3 递增；不要使用 C1、A1 或其他前缀；不要把“为什么匹配 JD”和“风险级别”拆成子 bullet。
 风险级别只能是 safe、needs confirmation、avoid fabrication。
 
 ## D. 需要用户补充确认的事实
