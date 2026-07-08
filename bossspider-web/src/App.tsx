@@ -1,8 +1,10 @@
-import { useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useState } from 'react';
 import { useAppTranslation } from './i18n';
 import {
   Briefcase,
   BookOpenText,
+  ChevronDown,
+  ChevronRight,
   Crosshair,
   Database,
   FileJson,
@@ -29,6 +31,43 @@ import { Story } from './pages/Story';
 import type { InterviewStory, Tab } from './types';
 
 const STORY_DRAFT_TRANSFER_KEY = 'bossspider:story-draft-transfer';
+type NavStage = 'discovery' | 'evaluation' | 'materials' | 'interview';
+
+function NavSection({
+  icon,
+  label,
+  active,
+  expanded,
+  onToggle,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  active: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          active ? 'bg-zinc-900/80 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+        }`}
+      >
+        <span className={active ? 'text-indigo-400' : 'text-zinc-500'}>{icon}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        {expanded ? <ChevronDown size={15} className="text-zinc-500" /> : <ChevronRight size={15} className="text-zinc-500" />}
+      </button>
+      {expanded && (
+        <div className="ml-5 mt-1 space-y-1 border-l border-zinc-800/80 pl-2">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function App() {
   const { t, i18n } = useAppTranslation();
@@ -36,6 +75,12 @@ export default function App() {
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
   const [storyDraftSeed, setStoryDraftSeed] = useState<InterviewStory | null>(null);
   const [selectedInterviewKey, setSelectedInterviewKey] = useState('');
+  const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
+    discovery: true,
+    evaluation: true,
+    materials: true,
+    interview: true,
+  });
   const boss = useBossSpider();
   const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
@@ -43,6 +88,10 @@ export default function App() {
   const setActiveTabStable = useCallback((tab: Tab) => {
     setActiveTab(tab);
   }, []);
+
+  const toggleStage = (stage: NavStage) => {
+    setExpandedStages((current) => ({ ...current, [stage]: !current[stage] }));
+  };
 
   const startCrawl = async () => {
     if (await boss.startCrawl()) setActiveTab('Logs');
@@ -72,16 +121,54 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          <NavItem icon={<LayoutDashboard size={16} />} label={t('nav.dashboard')} active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} />
-          <NavItem icon={<Crosshair size={16} />} label={t('nav.scope')} active={activeTab === 'Scope'} onClick={() => setActiveTab('Scope')} />
-          <NavItem icon={<FileJson size={16} />} label={t('nav.rules')} active={activeTab === 'Rules'} onClick={() => setActiveTab('Rules')} />
-          <NavItem icon={<Briefcase size={16} />} label={t('nav.jobs')} active={activeTab === 'Jobs'} onClick={() => setActiveTab('Jobs')} />
-          <NavItem icon={<Inbox size={16} />} label={t('nav.pipeline')} active={activeTab === 'Pipeline'} onClick={() => setActiveTab('Pipeline')} />
-          <NavItem icon={<FileText size={16} />} label={t('nav.resume')} active={activeTab === 'Resume'} onClick={() => setActiveTab('Resume')} />
-          <NavItem icon={<MessageSquareText size={16} />} label={t('nav.interview')} active={activeTab === 'Interview'} onClick={() => setActiveTab('Interview')} />
-          <NavItem icon={<BookOpenText size={16} />} label={t('nav.story')} active={activeTab === 'Story'} onClick={() => setActiveTab('Story')} />
-          <NavItem icon={<Terminal size={16} />} label={t('nav.logs')} active={activeTab === 'Logs'} onClick={() => setActiveTab('Logs')} />
+        <nav className="flex-1 space-y-2 overflow-y-auto p-3">
+          <div className="space-y-1">
+            <NavItem icon={<LayoutDashboard size={16} />} label={t('nav.dashboard')} active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} />
+          </div>
+
+          <NavSection
+            icon={<Crosshair size={16} />}
+            label={t('nav.stages.discovery')}
+            active={activeTab === 'Scope' || activeTab === 'Rules' || activeTab === 'Jobs' || activeTab === 'Logs'}
+            expanded={expandedStages.discovery}
+            onToggle={() => toggleStage('discovery')}
+          >
+            <NavItem icon={<Crosshair size={16} />} label={t('nav.scope')} active={activeTab === 'Scope'} onClick={() => setActiveTab('Scope')} />
+            <NavItem icon={<FileJson size={16} />} label={t('nav.rules')} active={activeTab === 'Rules'} onClick={() => setActiveTab('Rules')} />
+            <NavItem icon={<Briefcase size={16} />} label={t('nav.jobs')} active={activeTab === 'Jobs'} onClick={() => setActiveTab('Jobs')} />
+            <NavItem icon={<Terminal size={16} />} label={t('nav.logs')} active={activeTab === 'Logs'} onClick={() => setActiveTab('Logs')} />
+          </NavSection>
+
+          <NavSection
+            icon={<Inbox size={16} />}
+            label={t('nav.stages.evaluation')}
+            active={activeTab === 'Pipeline'}
+            expanded={expandedStages.evaluation}
+            onToggle={() => toggleStage('evaluation')}
+          >
+            <NavItem icon={<Inbox size={16} />} label={t('nav.pipeline')} active={activeTab === 'Pipeline'} onClick={() => setActiveTab('Pipeline')} />
+          </NavSection>
+
+          <NavSection
+            icon={<FileText size={16} />}
+            label={t('nav.stages.materials')}
+            active={activeTab === 'Resume'}
+            expanded={expandedStages.materials}
+            onToggle={() => toggleStage('materials')}
+          >
+            <NavItem icon={<FileText size={16} />} label={t('nav.resume')} active={activeTab === 'Resume'} onClick={() => setActiveTab('Resume')} />
+          </NavSection>
+
+          <NavSection
+            icon={<MessageSquareText size={16} />}
+            label={t('nav.stages.interview')}
+            active={activeTab === 'Interview' || activeTab === 'Story'}
+            expanded={expandedStages.interview}
+            onToggle={() => toggleStage('interview')}
+          >
+            <NavItem icon={<MessageSquareText size={16} />} label={t('nav.interview')} active={activeTab === 'Interview'} onClick={() => setActiveTab('Interview')} />
+            <NavItem icon={<BookOpenText size={16} />} label={t('nav.story')} active={activeTab === 'Story'} onClick={() => setActiveTab('Story')} />
+          </NavSection>
         </nav>
 
         <div className="p-4 border-t border-zinc-800 text-xs text-zinc-600">

@@ -1,15 +1,21 @@
 {
   "nav": {
-    "dashboard": "仪表盘",
-    "scope": "采集范围",
-    "rules": "清洗规则",
-    "jobs": "数据浏览",
-    "pipeline": "Pipeline",
-    "resume": "简历",
-    "interview": "面试",
+    "dashboard": "总览",
+    "scope": "搜索范围",
+    "rules": "匹配规则",
+    "jobs": "岗位列表",
+    "pipeline": "候选岗位",
+    "resume": "简历材料",
+    "interview": "面试准备文档",
     "story": "故事库",
     "logs": "运行日志",
-    "webConsole": "Web 控制台"
+    "webConsole": "Web 控制台",
+    "stages": {
+      "discovery": "发现岗位",
+      "evaluation": "岗位评估",
+      "materials": "材料准备",
+      "interview": "面试准备"
+    }
   },
   "header": {
     "project": "项目",

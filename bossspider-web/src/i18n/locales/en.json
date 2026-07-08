@@ -1,15 +1,21 @@
 {
   "nav": {
-    "dashboard": "Dashboard",
+    "dashboard": "Overview",
     "scope": "Scope",
     "rules": "Rules",
     "jobs": "Jobs",
-    "pipeline": "Pipeline",
-    "resume": "Resume",
-    "interview": "Interview",
-    "story": "Story",
+    "pipeline": "Candidate Jobs",
+    "resume": "Resume Materials",
+    "interview": "Interview Prep Docs",
+    "story": "Story Bank",
     "logs": "Logs",
-    "webConsole": "Web Console"
+    "webConsole": "Web Console",
+    "stages": {
+      "discovery": "Discover Jobs",
+      "evaluation": "Evaluate Roles",
+      "materials": "Prepare Materials",
+      "interview": "Interview Prep"
+    }
   },
   "header": {
     "project": "Project",
