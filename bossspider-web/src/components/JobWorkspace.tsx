@@ -240,9 +240,18 @@ export function JobWorkspace({
               <span>{t('pipeline.llm')} {item.llmScore ? item.llmScore.toFixed(1) : '-'}</span>
             </div>
           </div>
-          <button onClick={onClose} className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors">
-            <X size={16} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              onClick={onDelete}
+              title={t('pipeline.deleteItem')}
+              className="rounded border border-red-900/70 bg-red-950/20 p-1.5 text-red-300 transition-colors hover:bg-red-950/40 hover:text-red-200"
+            >
+              <Trash2 size={16} />
+            </button>
+            <button onClick={onClose} className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors">
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-1.5">

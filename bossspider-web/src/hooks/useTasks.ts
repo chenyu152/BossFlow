@@ -29,6 +29,7 @@ export function useTasks({
   const [status, setStatus] = useState<Status>('ready');
   const [logs, setLogs] = useState<string[]>([]);
   const firstStatusLoad = useRef(true);
+  const wasRunningRef = useRef(false);
 
   const parsedLogs = useMemo(() => logs.map(parseLog), [logs]);
   const recentLogs = parsedLogs.slice(-6);
@@ -40,7 +41,8 @@ export function useTasks({
         const data = await bossApi.getTaskStatus();
         setStatus(data.status || (data.running ? 'crawling' : 'ready'));
         setLogs(data.logs || []);
-        if (!data.running && !firstStatusLoad.current) await refreshJobs();
+        if (!firstStatusLoad.current && wasRunningRef.current && !data.running) await refreshJobs();
+        wasRunningRef.current = data.running;
         firstStatusLoad.current = false;
       } catch {
         // Avoid noisy UI while the backend is starting.
@@ -54,6 +56,7 @@ export function useTasks({
     if (!configReady) return false;
     try {
       await bossApi.startCrawl({ ...requestBody(), strategyIndex, quickMode, headlessMode, autoSqlite });
+      wasRunningRef.current = true;
       setStatus('crawling');
       return true;
     } catch (error) {
@@ -65,6 +68,7 @@ export function useTasks({
   const startLogin = useCallback(async () => {
     try {
       await bossApi.startLogin(requestBody());
+      wasRunningRef.current = true;
       setStatus('login');
       return true;
     } catch (error) {
@@ -76,6 +80,7 @@ export function useTasks({
   const processPartial = useCallback(async () => {
     try {
       await bossApi.processPartial({ ...requestBody(), autoSqlite });
+      wasRunningRef.current = true;
       setStatus('processing-partial');
       return true;
     } catch (error) {

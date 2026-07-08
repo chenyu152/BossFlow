@@ -1,16 +1,17 @@
 import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { JobWorkspace } from '../components/JobWorkspace';
+import { useGreetingDraftEditor } from '../hooks/useGreetingDraftEditor';
+import { useJobWorkspaceArtifacts } from '../hooks/useJobWorkspaceArtifacts';
+import { useSelectedPipelineItem } from '../hooks/useSelectedPipelineItem';
 import type {
   DecisionStatus,
-  GreetingDraft,
   GreetingDraftResponse,
   GreetingDraftStatus,
   InterviewPrepResponse,
   Job,
-  PipelineItem,
   PipelineReportResponse,
   PipelineResponse,
   ResumeSuggestionResponse,
@@ -148,27 +149,76 @@ export function Pipeline({
   const pending = pipeline?.pending || [];
   const processed = pipeline?.processed || [];
   const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all');
-  const [selectedSourceKey, setSelectedSourceKey] = useState('');
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [report, setReport] = useState<PipelineReportResponse | null>(null);
-  const [greetingDraft, setGreetingDraft] = useState<GreetingDraft | null>(null);
-  const [resumeSuggestion, setResumeSuggestion] = useState<ResumeSuggestionResponse | null>(null);
-  const [interviewPrep, setInterviewPrep] = useState<InterviewPrepResponse | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [greetingLoading, setGreetingLoading] = useState(false);
-  const [greetingSaving, setGreetingSaving] = useState(false);
-  const [resumeLoading, setResumeLoading] = useState(false);
-  const [interviewLoading, setInterviewLoading] = useState(false);
-  const appliedTargetRef = useRef('');
   const evaluatingSet = new Set(llmEvaluatingKeys);
   const suggestingSet = new Set(resumeSuggestingKeys);
   const preparingSet = new Set(interviewPreparingKeys);
+  const resetWorkspaceRef = useRef<() => void>(() => {});
 
-  const selectedItem = useMemo(
-    () => pending.find((item) => item.sourceKey === selectedSourceKey) || null,
-    [pending, selectedSourceKey],
-  );
+  const resetWorkspace = useCallback(() => {
+    resetWorkspaceRef.current();
+  }, []);
+  const revealTargetInAllStatuses = useCallback(() => {
+    setStatusFilter('all');
+  }, []);
+
+  const {
+    selectedSourceKey,
+    selectedItem,
+    selectedJob,
+    detailLoading,
+    selectItem,
+    clearSelection,
+  } = useSelectedPipelineItem({
+    pending,
+    onLoadJobDetail,
+    onSelectionReset: resetWorkspace,
+    onTargetSelected: revealTargetInAllStatuses,
+    targetSourceKey,
+    targetRequestId,
+  });
+
+  const {
+    report,
+    resumeSuggestion,
+    interviewPrep,
+    reportLoading,
+    resumeLoading,
+    interviewLoading,
+    viewReport,
+    closeReport,
+    viewResumeSuggestion,
+    closeResumeSuggestion,
+    generateResumeSuggestion,
+    viewInterviewPrep,
+    closeInterviewPrep,
+    generateInterviewPrep,
+    clearArtifacts,
+  } = useJobWorkspaceArtifacts({
+    selectedItem,
+    onLoadReport,
+    onGenerateResumeSuggestions,
+    onLoadResumeSuggestion,
+    onGenerateInterviewPrep,
+    onLoadInterviewPrep,
+  });
+
+  const {
+    greetingDraft,
+    greetingLoading,
+    greetingSaving,
+    saveGreetingDraft,
+    clearGreetingDraft,
+  } = useGreetingDraftEditor({
+    selectedItem,
+    onLoadGreetingDraft,
+    onSaveGreetingDraft,
+  });
+
+  resetWorkspaceRef.current = () => {
+    clearArtifacts();
+    clearGreetingDraft();
+  };
+
   const isSelectedResumeSuggesting = selectedItem ? suggestingSet.has(selectedItem.sourceKey) : false;
   const isSelectedInterviewPreparing = selectedItem ? preparingSet.has(selectedItem.sourceKey) : false;
   const isSelectedLlmEvaluating = selectedItem ? evaluatingSet.has(selectedItem.sourceKey) : false;
@@ -181,150 +231,11 @@ export function Pipeline({
     return [...filtered].sort((a, b) => (b.llmScore ?? -1) - (a.llmScore ?? -1));
   }, [pending, sortByLlmScore, statusFilter]);
 
-  useEffect(() => {
-    if (selectedSourceKey && !selectedItem) {
-      setSelectedSourceKey('');
-      setSelectedJob(null);
-      setReport(null);
-      setGreetingDraft(null);
-      setResumeSuggestion(null);
-      setInterviewPrep(null);
-    }
-  }, [selectedItem, selectedSourceKey]);
-
   const riskText = (risk?: string) => {
     if (risk === 'matched') return t('pipeline.risk.ok');
     if (risk === 'near') return t('pipeline.risk.near');
     if (risk === 'risk') return t('pipeline.risk.risk');
     return t('pipeline.risk.unknown');
-  };
-
-  const selectItem = async (item: PipelineItem) => {
-    setSelectedSourceKey(item.sourceKey);
-    setSelectedJob(null);
-    setReport(null);
-    setGreetingDraft(null);
-    setResumeSuggestion(null);
-    setInterviewPrep(null);
-    if (!item.project || !item.jobId) return;
-    setDetailLoading(true);
-    try {
-      const job = await onLoadJobDetail(item.project, item.jobId);
-      if (job) setSelectedJob(job);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadDraft = async () => {
-      if (!selectedItem?.sourceKey) {
-        setGreetingDraft(null);
-        return;
-      }
-      setGreetingLoading(true);
-      try {
-        const data = await onLoadGreetingDraft(selectedItem.sourceKey);
-        if (!cancelled) setGreetingDraft(data?.draft || null);
-      } finally {
-        if (!cancelled) setGreetingLoading(false);
-      }
-    };
-    void loadDraft();
-    return () => {
-      cancelled = true;
-    };
-  }, [onLoadGreetingDraft, selectedItem?.sourceKey]);
-
-  useEffect(() => {
-    if (!targetSourceKey || !targetRequestId) return;
-    const targetKey = `${targetRequestId}:${targetSourceKey}`;
-    if (appliedTargetRef.current === targetKey) return;
-    const item = pending.find((entry) => entry.sourceKey === targetSourceKey);
-    if (!item) return;
-    appliedTargetRef.current = targetKey;
-    setStatusFilter('all');
-    void selectItem(item);
-  }, [pending, targetRequestId, targetSourceKey]);
-
-  const viewReport = async () => {
-    if (!selectedItem?.reportPath) return;
-    if (report?.sourceKey === selectedItem.sourceKey) {
-      setReport(null);
-      return;
-    }
-    setReportLoading(true);
-    try {
-      const data = await onLoadReport(selectedItem.sourceKey);
-      if (data) setReport(data);
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
-  const viewResumeSuggestion = async () => {
-    if (!selectedItem?.resumeSuggestionPath) return;
-    if (resumeSuggestion?.sourceKey === selectedItem.sourceKey) {
-      setResumeSuggestion(null);
-      return;
-    }
-    setResumeLoading(true);
-    try {
-      const data = await onLoadResumeSuggestion(selectedItem.sourceKey);
-      if (data) setResumeSuggestion(data);
-    } finally {
-      setResumeLoading(false);
-    }
-  };
-
-  const generateResumeSuggestion = async () => {
-    if (!selectedItem) return;
-    setResumeLoading(true);
-    try {
-      const data = await onGenerateResumeSuggestions(selectedItem.sourceKey);
-      if (data) setResumeSuggestion(data);
-    } finally {
-      setResumeLoading(false);
-    }
-  };
-
-  const viewInterviewPrep = async () => {
-    if (!selectedItem?.interviewPrepPath) return;
-    if (interviewPrep?.sourceKey === selectedItem.sourceKey) {
-      setInterviewPrep(null);
-      return;
-    }
-    setInterviewLoading(true);
-    try {
-      const data = await onLoadInterviewPrep(selectedItem.sourceKey);
-      if (data) setInterviewPrep(data);
-    } finally {
-      setInterviewLoading(false);
-    }
-  };
-
-  const generateInterviewPrep = async () => {
-    if (!selectedItem) return;
-    setInterviewLoading(true);
-    try {
-      const data = await onGenerateInterviewPrep(selectedItem.sourceKey, '');
-      if (data) setInterviewPrep(data);
-    } finally {
-      setInterviewLoading(false);
-    }
-  };
-
-  const saveGreetingDraft = async (editedText: string, status: GreetingDraftStatus) => {
-    if (!selectedItem) return null;
-    setGreetingSaving(true);
-    try {
-      const data = await onSaveGreetingDraft(selectedItem.sourceKey, editedText, status);
-      if (data) setGreetingDraft(data.draft);
-      return data;
-    } finally {
-      setGreetingSaving(false);
-    }
   };
 
   const changeStatus = async (sourceKey: string, decisionStatus: DecisionStatus) => {
@@ -336,12 +247,7 @@ export function Pipeline({
     const ok = window.confirm(t('pipeline.confirmDelete'));
     if (!ok) return;
     if (await onDeleteItem(selectedItem.sourceKey)) {
-      setSelectedSourceKey('');
-      setSelectedJob(null);
-      setReport(null);
-      setGreetingDraft(null);
-      setResumeSuggestion(null);
-      setInterviewPrep(null);
+      clearSelection();
     }
   };
 
@@ -512,7 +418,7 @@ export function Pipeline({
             job={selectedJob}
             detailLoading={detailLoading}
             statusOptions={STATUS_OPTIONS}
-            onClose={() => setSelectedSourceKey('')}
+            onClose={clearSelection}
             onStatusChange={(status) => { void changeStatus(selectedItem.sourceKey, status); }}
             onDelete={deleteSelected}
             onLlmEvaluate={() => onLlmEvaluate(selectedItem.sourceKey)}
@@ -544,7 +450,7 @@ export function Pipeline({
       {report && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5"
-          onClick={() => setReport(null)}
+          onClick={closeReport}
         >
           <div
             className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
@@ -562,7 +468,7 @@ export function Pipeline({
                 </div>
               </div>
               <button
-                onClick={() => setReport(null)}
+                onClick={closeReport}
                 className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
               >
                 <X size={16} />
@@ -582,7 +488,7 @@ export function Pipeline({
       {resumeSuggestion && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5"
-          onClick={() => setResumeSuggestion(null)}
+          onClick={closeResumeSuggestion}
         >
           <div
             className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
@@ -601,7 +507,7 @@ export function Pipeline({
                 </div>
               </div>
               <button
-                onClick={() => setResumeSuggestion(null)}
+                onClick={closeResumeSuggestion}
                 className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
               >
                 <X size={16} />
@@ -621,7 +527,7 @@ export function Pipeline({
       {interviewPrep && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-5"
-          onClick={() => setInterviewPrep(null)}
+          onClick={closeInterviewPrep}
         >
           <div
             className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
@@ -640,7 +546,7 @@ export function Pipeline({
                 </div>
               </div>
               <button
-                onClick={() => setInterviewPrep(null)}
+                onClick={closeInterviewPrep}
                 className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
               >
                 <X size={16} />
