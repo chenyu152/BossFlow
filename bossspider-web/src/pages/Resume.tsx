@@ -1,5 +1,5 @@
 import { BookOpenText, CheckSquare, FileText, Loader2, RefreshCw, Square, Wand2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ResumeDraftResponse, ResumeItem, ResumeSuggestionResponse } from '../types';
@@ -50,6 +50,7 @@ export function Resume({
   onLoadDraft,
   onGenerateDraft,
   selectedSourceKey,
+  targetRequestId,
 }: {
   items: ResumeItem[];
   draftingKeys: string[];
@@ -58,6 +59,7 @@ export function Resume({
   onLoadDraft: (sourceKey: string) => Promise<ResumeDraftResponse | null>;
   onGenerateDraft: (sourceKey: string, approvedSuggestionIds: string[], userNotes: string) => Promise<ResumeDraftResponse | null>;
   selectedSourceKey?: string;
+  targetRequestId?: number;
 }) {
   const { t } = useAppTranslation();
   const [selectedKey, setSelectedKey] = useState('');
@@ -66,6 +68,7 @@ export function Resume({
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
   const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const appliedTargetRef = useRef('');
   const draftingSet = new Set(draftingKeys);
 
   const selectedItem = useMemo(
@@ -81,9 +84,12 @@ export function Resume({
   }, [items, selectedKey]);
 
   useEffect(() => {
-    if (!selectedSourceKey) return;
+    if (!selectedSourceKey || !targetRequestId) return;
+    const targetKey = `${targetRequestId}:${selectedSourceKey}`;
+    if (appliedTargetRef.current === targetKey) return;
     if (items.some((item) => item.sourceKey === selectedSourceKey)) setSelectedKey(selectedSourceKey);
-  }, [items, selectedSourceKey]);
+    appliedTargetRef.current = targetKey;
+  }, [items, selectedSourceKey, targetRequestId]);
 
   useEffect(() => {
     let cancelled = false;

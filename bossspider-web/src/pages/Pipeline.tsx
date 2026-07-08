@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -74,8 +74,6 @@ function MaterialBadge({ label, ready, tone = 'zinc' }: { label: string; ready: 
 export function Pipeline({
   pipeline,
   onRefresh,
-  onEvaluate,
-  onScoreAll,
   onLlmEvaluate,
   llmEvaluatingKeys,
   resumeSuggestingKeys,
@@ -91,11 +89,10 @@ export function Pipeline({
   onUpdateStatus,
   onDeleteItem,
   targetSourceKey,
+  targetRequestId,
 }: {
   pipeline: PipelineResponse | null;
   onRefresh: () => void;
-  onEvaluate: (sourceKey: string) => void;
-  onScoreAll: () => void;
   onLlmEvaluate: (sourceKey: string) => void;
   llmEvaluatingKeys: string[];
   resumeSuggestingKeys: string[];
@@ -111,6 +108,7 @@ export function Pipeline({
   onUpdateStatus: (sourceKey: string, decisionStatus: string) => Promise<boolean>;
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
   targetSourceKey?: string;
+  targetRequestId?: number;
 }) {
   const { t } = useAppTranslation();
 
@@ -156,6 +154,7 @@ export function Pipeline({
   );
   const isSelectedResumeSuggesting = selectedItem ? suggestingSet.has(selectedItem.sourceKey) : false;
   const isSelectedInterviewPreparing = selectedItem ? preparingSet.has(selectedItem.sourceKey) : false;
+  const isSelectedLlmEvaluating = selectedItem ? evaluatingSet.has(selectedItem.sourceKey) : false;
 
   const displayedPending = useMemo(() => {
     const filtered = statusFilter === 'all'
@@ -199,13 +198,15 @@ export function Pipeline({
   };
 
   useEffect(() => {
-    if (!targetSourceKey || appliedTargetRef.current === targetSourceKey) return;
+    if (!targetSourceKey || !targetRequestId) return;
+    const targetKey = `${targetRequestId}:${targetSourceKey}`;
+    if (appliedTargetRef.current === targetKey) return;
     const item = pending.find((entry) => entry.sourceKey === targetSourceKey);
     if (!item) return;
-    appliedTargetRef.current = targetSourceKey;
+    appliedTargetRef.current = targetKey;
     setStatusFilter('all');
     void selectItem(item);
-  }, [pending, targetSourceKey]);
+  }, [pending, targetRequestId, targetSourceKey]);
 
   const viewReport = async () => {
     if (!selectedItem?.reportPath) return;
@@ -308,14 +309,6 @@ export function Pipeline({
           >
             <ArrowDownWideNarrow size={14} />
             {t('pipeline.llmSort')}
-          </button>
-          <button
-            onClick={onScoreAll}
-            disabled={!pending.length}
-            className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 transition-colors"
-          >
-            <Wand2 size={14} />
-            {t('pipeline.rescorePending')}
           </button>
           <button onClick={onRefresh} className="p-1.5 border border-zinc-800 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors">
             <RefreshCw size={14} />
@@ -432,16 +425,6 @@ export function Pipeline({
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              onEvaluate(item.sourceKey);
-                            }}
-                            className="inline-flex shrink-0 items-center gap-1.5 rounded border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
-                          >
-                            <Wand2 size={13} />
-                            {t('pipeline.scoreButton')}
-                          </button>
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
                               onLlmEvaluate(item.sourceKey);
                             }}
                             disabled={isLlmEvaluating}
@@ -471,7 +454,7 @@ export function Pipeline({
         </div>
 
         {selectedItem && (
-          <div className="w-96 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
+          <div className="w-[34rem] border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <h3 className="font-semibold text-zinc-100">{t('pipeline.jobDetails')}</h3>
               <button onClick={() => setSelectedSourceKey('')} className="text-zinc-500 hover:text-zinc-300">
@@ -539,29 +522,36 @@ export function Pipeline({
                 </div>
               </div>
 
-              {(selectedItem.reportPath || selectedItem.llmRecommendation) && (
-                <div className="rounded border border-emerald-900/50 bg-emerald-950/20 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-emerald-500">{t('pipeline.llm')}</span>
-                    <span className="text-sm font-semibold text-emerald-200">{selectedItem.llmScore ? selectedItem.llmScore.toFixed(1) : selectedItem.reportId || '-'} / 5.0</span>
-                  </div>
-                  {selectedItem.llmFitLevel && <div className="text-xs text-emerald-400">{selectedItem.llmFitLevel}</div>}
-                  {selectedItem.llmRecommendation && <div className="text-xs leading-relaxed text-zinc-300">{selectedItem.llmRecommendation}</div>}
-                  {selectedItem.reportPath && (
-                    <>
-                      <div className="break-all text-[10px] text-zinc-500">{selectedItem.reportPath}</div>
-                      <button
-                        onClick={viewReport}
-                        disabled={reportLoading}
-                        className="inline-flex items-center gap-2 rounded border border-emerald-900/70 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50 transition-colors"
-                      >
-                        {reportLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
-                        {t('pipeline.viewReport')}
-                      </button>
-                    </>
-                  )}
+              <div className="rounded border border-emerald-900/50 bg-emerald-950/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-emerald-500">{t('pipeline.llm')}</span>
+                  <span className="text-sm font-semibold text-emerald-200">{selectedItem.llmScore ? selectedItem.llmScore.toFixed(1) : selectedItem.reportId || '-'} / 5.0</span>
                 </div>
-              )}
+                {selectedItem.llmFitLevel && <div className="text-xs text-emerald-400">{selectedItem.llmFitLevel}</div>}
+                {selectedItem.llmRecommendation && <div className="text-xs leading-relaxed text-zinc-300">{selectedItem.llmRecommendation}</div>}
+                {selectedItem.reportPath ? (
+                  <>
+                    <div className="break-all text-[10px] text-zinc-500">{selectedItem.reportPath}</div>
+                    <button
+                      onClick={viewReport}
+                      disabled={reportLoading}
+                      className="inline-flex items-center gap-2 rounded border border-emerald-900/70 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50 transition-colors"
+                    >
+                      {reportLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
+                      {t('pipeline.viewReport')}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => onLlmEvaluate(selectedItem.sourceKey)}
+                    disabled={isSelectedLlmEvaluating}
+                    className="inline-flex items-center gap-2 rounded border border-emerald-900/70 bg-emerald-950/40 px-3 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
+                  >
+                    {isSelectedLlmEvaluating && <Loader2 size={14} className="animate-spin" />}
+                    {isSelectedLlmEvaluating ? t('pipeline.generating') : t('pipeline.llmEval')}
+                  </button>
+                )}
+              </div>
 
               <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3 space-y-3">
                 <div className="flex items-center justify-between">

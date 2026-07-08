@@ -79,6 +79,7 @@ export default function App() {
   const [selectedPipelineKey, setSelectedPipelineKey] = useState('');
   const [selectedResumeKey, setSelectedResumeKey] = useState('');
   const [selectedStoryDraftId, setSelectedStoryDraftId] = useState('');
+  const [dashboardTargetRequestId, setDashboardTargetRequestId] = useState(0);
   const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
     discovery: true,
     evaluation: true,
@@ -94,13 +95,12 @@ export default function App() {
   }, []);
 
   const openDashboardTask = useCallback((tab: Tab, target?: DashboardTaskTarget) => {
-    if (target?.jobId) setSelectedJobId(target.jobId);
-    if (target?.sourceKey) {
-      if (tab === 'Pipeline') setSelectedPipelineKey(target.sourceKey);
-      if (tab === 'Resume') setSelectedResumeKey(target.sourceKey);
-      if (tab === 'Interview') setSelectedInterviewKey(target.sourceKey);
-    }
-    if (target?.draftId) setSelectedStoryDraftId(target.draftId);
+    setDashboardTargetRequestId((value) => value + 1);
+    setSelectedJobId(tab === 'Jobs' ? target?.jobId ?? null : null);
+    setSelectedPipelineKey(tab === 'Pipeline' ? target?.sourceKey ?? '' : '');
+    setSelectedResumeKey(tab === 'Resume' ? target?.sourceKey ?? '' : '');
+    setSelectedStoryDraftId(tab === 'Story' ? target?.draftId ?? '' : '');
+    if (tab === 'Interview' && target?.sourceKey) setSelectedInterviewKey(target.sourceKey);
     setActiveTab(tab);
   }, []);
 
@@ -308,6 +308,7 @@ export default function App() {
                 onScoreJobs={boss.scoreJobs}
                 scoringJobIds={boss.jobScoringIds}
                 selectedJobId={selectedJobId}
+                targetRequestId={dashboardTargetRequestId}
                 onAddToPipeline={async (jobs) => {
                   if (await boss.addJobsToPipeline(jobs.map((job) => job.id))) setActiveTab('Pipeline');
                 }}
@@ -317,8 +318,6 @@ export default function App() {
               <Pipeline
                 pipeline={boss.pipeline}
                 onRefresh={() => { void boss.refreshPipeline(); }}
-                onEvaluate={(sourceKey) => { void boss.evaluatePipelineItem(sourceKey); }}
-                onScoreAll={() => { void boss.scoreAllPipeline(); }}
                 onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
                 llmEvaluatingKeys={boss.llmEvaluatingKeys}
                 resumeSuggestingKeys={boss.resumeSuggestingKeys}
@@ -334,6 +333,7 @@ export default function App() {
                 onUpdateStatus={boss.updatePipelineStatus}
                 onDeleteItem={boss.deletePipelineItem}
                 targetSourceKey={selectedPipelineKey}
+                targetRequestId={dashboardTargetRequestId}
               />
             )}
             {activeTab === 'Resume' && (
@@ -345,6 +345,7 @@ export default function App() {
                 onLoadDraft={boss.loadResumeDraft}
                 onGenerateDraft={boss.generateResumeDraft}
                 selectedSourceKey={selectedResumeKey}
+                targetRequestId={dashboardTargetRequestId}
               />
             )}
             {activeTab === 'Story' && (
@@ -356,6 +357,7 @@ export default function App() {
                 onPromoteStoryDraft={boss.promoteInterviewStoryDraft}
                 incomingDraft={storyDraftSeed}
                 selectedDraftId={selectedStoryDraftId}
+                targetRequestId={dashboardTargetRequestId}
                 onIncomingDraftConsumed={() => setStoryDraftSeed(null)}
               />
             )}

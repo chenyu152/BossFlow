@@ -17,6 +17,7 @@ export function Jobs({
   onScoreJobs,
   scoringJobIds,
   selectedJobId,
+  targetRequestId,
   onAddToPipeline,
 }: {
   jobs: Job[];
@@ -30,6 +31,7 @@ export function Jobs({
   onScoreJobs: (jobIds: number[]) => void;
   scoringJobIds: number[];
   selectedJobId?: number | null;
+  targetRequestId?: number;
   onAddToPipeline: (jobs: Job[]) => void;
 }) {
   const { t } = useAppTranslation();
@@ -58,6 +60,8 @@ export function Jobs({
     mode: 'add',
   });
   const suppressRowClickRef = useRef(false);
+  const appliedTargetRef = useRef('');
+  const pagedTargetRef = useRef('');
   const [dragRange, setDragRange] = useState<{ start: number; end: number } | null>(null);
 
   const cityOptions = useMemo(
@@ -119,9 +123,12 @@ export function Jobs({
   const scoringSelected = selectedJobs.some((job) => scoringSet.has(job.id));
 
   useEffect(() => {
-    if (!selectedJobId) return;
+    if (!selectedJobId || !targetRequestId) return;
+    const targetKey = `${targetRequestId}:${selectedJobId}`;
+    if (appliedTargetRef.current === targetKey) return;
     const job = jobs.find((item) => item.id === selectedJobId);
     if (!job) return;
+    appliedTargetRef.current = targetKey;
     setCityFilter('all');
     setCategoryFilter('all');
     setScoreFilter('all');
@@ -129,13 +136,18 @@ export function Jobs({
     setEducationFilter('all');
     setMinAvgFilter('');
     setSelectedJob(job);
-  }, [jobs, selectedJobId]);
+  }, [jobs, selectedJobId, targetRequestId]);
 
   useEffect(() => {
-    if (!selectedJobId) return;
+    if (!selectedJobId || !targetRequestId) return;
+    const targetKey = `${targetRequestId}:${selectedJobId}`;
+    if (pagedTargetRef.current === targetKey) return;
     const index = displayJobs.findIndex((job) => job.id === selectedJobId);
-    if (index >= 0) setPage(Math.floor(index / pageSize) + 1);
-  }, [displayJobs, pageSize, selectedJobId]);
+    if (index >= 0) {
+      pagedTargetRef.current = targetKey;
+      setPage(Math.floor(index / pageSize) + 1);
+    }
+  }, [displayJobs, pageSize, selectedJobId, targetRequestId]);
 
   useEffect(() => {
     if (selectedJob) {
@@ -555,7 +567,7 @@ export function Jobs({
         </div>
 
         {selectedJob && (
-          <div className="w-80 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
+          <div className="w-[30rem] border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <h3 className="font-semibold text-zinc-100">{t('jobs.jobDetails')}</h3>
               <button onClick={() => setSelectedJob(null)} className="text-zinc-500 hover:text-zinc-300">

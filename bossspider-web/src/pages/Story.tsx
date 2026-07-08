@@ -73,6 +73,7 @@ export function Story({
   onPromoteStoryDraft,
   incomingDraft,
   selectedDraftId,
+  targetRequestId,
   onIncomingDraftConsumed,
 }: {
   onLoadStoryBank: () => Promise<InterviewStoryBankResponse | null>;
@@ -82,6 +83,7 @@ export function Story({
   onPromoteStoryDraft: (draftId: string, draft: InterviewStoryDraft) => Promise<InterviewStoryDraftPromoteResponse | null>;
   incomingDraft?: InterviewStory | null;
   selectedDraftId?: string;
+  targetRequestId?: number;
   onIncomingDraftConsumed?: () => void;
 }) {
   const { t } = useAppTranslation();
@@ -96,6 +98,7 @@ export function Story({
   const [loading, setLoading] = useState(false);
   const [pendingIncomingDraftId, setPendingIncomingDraftId] = useState('');
   const pendingIncomingDraftRef = useRef<InterviewStoryDraft | null>(null);
+  const appliedSelectedDraftRef = useRef('');
 
   const stories = storyBank?.stories || [];
   const drafts = useMemo(() => visibleDrafts(draftStore?.drafts || []), [draftStore]);
@@ -103,12 +106,15 @@ export function Story({
   const canPromoteDraft = mode === 'drafts' && Boolean(storyDraft.title.trim()) && hasPromotableStoryFields(storyDraft);
 
   useEffect(() => {
-    if (!selectedDraftId) return;
+    if (!selectedDraftId || !targetRequestId) return;
+    const targetKey = `${targetRequestId}:${selectedDraftId}`;
+    if (appliedSelectedDraftRef.current === targetKey) return;
     const index = drafts.findIndex((draft) => draft.draftId === selectedDraftId);
     if (index < 0) return;
+    appliedSelectedDraftRef.current = targetKey;
     setMode('drafts');
     setSelectedIndex(index);
-  }, [drafts, selectedDraftId]);
+  }, [drafts, selectedDraftId, targetRequestId]);
 
   const queueIncomingDraft = (story: InterviewStory) => {
     const draft = newDraftFromStory(story);
