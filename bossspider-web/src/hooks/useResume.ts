@@ -1,15 +1,11 @@
 import { useCallback, useState } from 'react';
 import { bossApi } from '../api';
-import type { PipelineResponse, ResumeDraftResponse, ResumeItem, ResumeSuggestionResponse } from '../types';
+import type { ResumeDraftResponse, ResumeItem, ResumeSuggestionResponse } from '../types';
 
 export function useResume({
-  refreshInterviewItems,
-  setPipeline,
   showNotice,
   t,
 }: {
-  refreshInterviewItems: () => Promise<unknown>;
-  setPipeline: (pipeline: PipelineResponse) => void;
   showNotice: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
@@ -28,9 +24,6 @@ export function useResume({
     showNotice(t('notices.resumeSuggestionGenerating'));
     try {
       const data = await bossApi.generateResumeSuggestions(sourceKey);
-      if (data.pipeline) setPipeline(data.pipeline);
-      await refreshResumeItems();
-      await refreshInterviewItems();
       showNotice(t('notices.resumeSuggestionGenerated', { id: data.resumeSuggestionId }));
       return data;
     } catch (error) {
@@ -39,7 +32,7 @@ export function useResume({
     } finally {
       setResumeSuggestingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshInterviewItems, refreshResumeItems, setPipeline, showNotice, t]);
+  }, [showNotice, t]);
 
   const loadResumeSuggestion = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
     try {
@@ -59,9 +52,6 @@ export function useResume({
     showNotice(t('notices.resumeDraftGenerating'));
     try {
       const data = await bossApi.generateResumeDraft(sourceKey, approvedSuggestionIds, userNotes);
-      if (data.pipeline) setPipeline(data.pipeline);
-      await refreshResumeItems();
-      await refreshInterviewItems();
       showNotice(t('notices.resumeDraftGenerated', { id: data.resumeDraftId }));
       return data;
     } catch (error) {
@@ -70,7 +60,7 @@ export function useResume({
     } finally {
       setResumeDraftingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshInterviewItems, refreshResumeItems, setPipeline, showNotice, t]);
+  }, [showNotice, t]);
 
   const loadResumeDraft = useCallback(async (sourceKey: string): Promise<ResumeDraftResponse | null> => {
     try {

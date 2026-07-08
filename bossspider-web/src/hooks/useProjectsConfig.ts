@@ -1,19 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bossApi } from '../api';
-import type { ConfigPatch, ConfigPayload, PipelineResponse, ResumeItem, InterviewItem } from '../types';
+import type { ConfigPatch, ConfigPayload } from '../types';
 
 export function useProjectsConfig({
-  loadJobs,
-  refreshInterviewItems,
-  refreshPipeline,
-  refreshResumeItems,
+  loadInitialResources,
   showNotice,
   t,
 }: {
-  loadJobs: (targetProject: string, search?: string) => Promise<void>;
-  refreshInterviewItems: () => Promise<InterviewItem[]>;
-  refreshPipeline: () => Promise<PipelineResponse>;
-  refreshResumeItems: () => Promise<ResumeItem[]>;
+  loadInitialResources: (projectName: string) => Promise<void>;
   showNotice: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
@@ -39,16 +33,13 @@ export function useProjectsConfig({
       setConfig(data);
       setProject(data.project);
       projectRef.current = data.project;
-      await loadJobs(data.project, '');
-      await refreshPipeline();
-      await refreshResumeItems();
-      await refreshInterviewItems();
+      await loadInitialResources(data.project);
     } catch (error) {
       showNotice(tRef.current('notices.loadFailed', { error: (error as Error).message }));
     } finally {
       setLoading(false);
     }
-  }, [loadJobs, refreshInterviewItems, refreshPipeline, refreshResumeItems, showNotice]);
+  }, [loadInitialResources, showNotice]);
 
   useEffect(() => {
     bossApi.getProjects()

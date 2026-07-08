@@ -8,15 +8,12 @@ import type {
   InterviewStoryDraft,
   InterviewStoryDraftPromoteResponse,
   InterviewStoryDraftsResponse,
-  PipelineResponse,
 } from '../types';
 
 export function useInterview({
-  setPipeline,
   showNotice,
   t,
 }: {
-  setPipeline: (pipeline: PipelineResponse) => void;
   showNotice: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
@@ -91,8 +88,6 @@ export function useInterview({
     showNotice(t('notices.interviewPrepGenerating'));
     try {
       const data = await bossApi.generateInterviewPrep(sourceKey, userNotes);
-      if (data.pipeline) setPipeline(data.pipeline);
-      await refreshInterviewItems();
       showNotice(t('notices.interviewPrepGenerated', { id: data.interviewPrepId }));
       return data;
     } catch (error) {
@@ -101,7 +96,7 @@ export function useInterview({
     } finally {
       setInterviewPreparingKeys((keys) => keys.filter((key) => key !== sourceKey));
     }
-  }, [refreshInterviewItems, setPipeline, showNotice, t]);
+  }, [showNotice, t]);
 
   const loadInterviewPrep = useCallback(async (sourceKey: string): Promise<InterviewPrepResponse | null> => {
     try {

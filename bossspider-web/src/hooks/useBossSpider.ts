@@ -8,6 +8,8 @@ import { useProjectsConfig } from './useProjectsConfig';
 import { useResume } from './useResume';
 import { useTasks } from './useTasks';
 
+type ResourceKey = 'jobs' | 'pipeline' | 'resume' | 'interview';
+
 export function useBossSpider() {
   const { t } = useTranslation('common');
   const [strategyIndex, setStrategyIndex] = useState(0);
@@ -32,7 +34,6 @@ export function useBossSpider() {
 
   const {
     pipeline,
-    setPipeline,
     sortPipelineByLlmScore,
     setSortPipelineByLlmScore,
     llmEvaluatingKeys,
@@ -56,25 +57,29 @@ export function useBossSpider() {
     loadInterviewStoryDrafts,
     saveInterviewStoryDrafts,
     promoteInterviewStoryDraft,
-    generateInterviewPrep,
+    generateInterviewPrep: generateInterviewPrepBase,
     loadInterviewPrep,
-  } = useInterview({ setPipeline, showNotice, t });
+  } = useInterview({ showNotice, t });
 
   const {
     resumeItems,
     resumeSuggestingKeys,
     resumeDraftingKeys,
     refreshResumeItems,
-    generateResumeSuggestions,
+    generateResumeSuggestions: generateResumeSuggestionsBase,
     loadResumeSuggestion,
-    generateResumeDraft,
+    generateResumeDraft: generateResumeDraftBase,
     loadResumeDraft,
-  } = useResume({
-    refreshInterviewItems,
-    setPipeline,
-    showNotice,
-    t,
-  });
+  } = useResume({ showNotice, t });
+
+  const loadInitialResources = useCallback(async (projectName: string) => {
+    await Promise.all([
+      loadJobs(projectName, ''),
+      refreshPipeline(),
+      refreshResumeItems(),
+      refreshInterviewItems(),
+    ]);
+  }, [loadJobs, refreshInterviewItems, refreshPipeline, refreshResumeItems]);
 
   const {
     projects,
@@ -86,10 +91,7 @@ export function useBossSpider() {
     requestBody,
     saveConfig,
   } = useProjectsConfig({
-    loadJobs,
-    refreshInterviewItems,
-    refreshPipeline,
-    refreshResumeItems,
+    loadInitialResources,
     showNotice,
     t,
   });
@@ -132,12 +134,43 @@ export function useBossSpider() {
     scoreJobsForProject(config?.project, jobIds)
   ), [config?.project, scoreJobsForProject]);
 
-  const deletePipelineItem = useCallback(async (sourceKey: string) => (
-    deletePipelineItemBase(sourceKey, async () => {
-      await refreshResumeItems();
-      await refreshInterviewItems();
-    })
-  ), [deletePipelineItemBase, refreshInterviewItems, refreshResumeItems]);
+  const invalidate = useCallback(async (resources: ResourceKey[]) => {
+    const unique = new Set(resources);
+    const tasks: Promise<unknown>[] = [];
+    if (unique.has('jobs')) tasks.push(refreshJobsForProject(config?.project, jobSearch));
+    if (unique.has('pipeline')) tasks.push(refreshPipeline());
+    if (unique.has('resume')) tasks.push(refreshResumeItems());
+    if (unique.has('interview')) tasks.push(refreshInterviewItems());
+    await Promise.all(tasks);
+  }, [config?.project, jobSearch, refreshInterviewItems, refreshJobsForProject, refreshPipeline, refreshResumeItems]);
+
+  const generateResumeSuggestions = useCallback(async (sourceKey: string) => {
+    const data = await generateResumeSuggestionsBase(sourceKey);
+    if (data) await invalidate(['pipeline', 'resume', 'interview']);
+    return data;
+  }, [generateResumeSuggestionsBase, invalidate]);
+
+  const generateResumeDraft = useCallback(async (
+    sourceKey: string,
+    approvedSuggestionIds: string[],
+    userNotes: string,
+  ) => {
+    const data = await generateResumeDraftBase(sourceKey, approvedSuggestionIds, userNotes);
+    if (data) await invalidate(['pipeline', 'resume', 'interview']);
+    return data;
+  }, [generateResumeDraftBase, invalidate]);
+
+  const generateInterviewPrep = useCallback(async (sourceKey: string, userNotes: string) => {
+    const data = await generateInterviewPrepBase(sourceKey, userNotes);
+    if (data) await invalidate(['pipeline', 'interview']);
+    return data;
+  }, [generateInterviewPrepBase, invalidate]);
+
+  const deletePipelineItem = useCallback(async (sourceKey: string) => {
+    const ok = await deletePipelineItemBase(sourceKey);
+    if (ok) await invalidate(['resume', 'interview']);
+    return ok;
+  }, [deletePipelineItemBase, invalidate]);
 
   return {
     status,

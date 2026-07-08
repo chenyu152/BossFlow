@@ -108,11 +108,10 @@ export function usePipeline({
     }
   }, [showNotice, t]);
 
-  const deletePipelineItem = useCallback(async (sourceKey: string, afterDelete?: () => Promise<void>) => {
+  const deletePipelineItem = useCallback(async (sourceKey: string) => {
     try {
       const data = await bossApi.deletePipelineItem(sourceKey);
       setPipeline(data);
-      await afterDelete?.();
       const deletedResumeCount = data.deletedResumeArtifacts?.length || 0;
       const deletedInterviewCount = data.deletedInterviewArtifacts?.length || 0;
       const reportsDeleted = data.deletedReports.length ? t('notices.withReportsDeleted', { count: data.deletedReports.length }) : '';
@@ -132,7 +131,6 @@ export function usePipeline({
 
   return {
     pipeline,
-    setPipeline,
     sortPipelineByLlmScore,
     setSortPipelineByLlmScore,
     llmEvaluatingKeys,
