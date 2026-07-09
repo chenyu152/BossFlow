@@ -252,7 +252,23 @@ export type ResumeSuggestionResponse = {
   suggestionPath: string;
   jsonPath?: string;
   content: string;
+  evidenceMap?: ResumeEvidenceClaim[];
   pipeline?: PipelineResponse;
+};
+
+export type ResumeEvidenceSource = {
+  type: string;
+  field: string;
+  quote: string;
+};
+
+export type ResumeEvidenceClaim = {
+  claimId: string;
+  claim: string;
+  risk: string;
+  sources: ResumeEvidenceSource[];
+  userDecision: string;
+  usedIn: string[];
 };
 
 export type ResumeItem = {
@@ -289,6 +305,7 @@ export type ResumeDraftResponse = {
   draftPath: string;
   jsonPath?: string;
   content: string;
+  evidenceMap?: ResumeEvidenceClaim[];
   pipeline?: PipelineResponse;
 };
 

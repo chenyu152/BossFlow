@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,23 @@ def _safe_resume_draft_path(path_value: str) -> Path:
 def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list[dict[str, str]]:
     cv_text = _read_text(CV_PATH, 16000)
     profile_text = _read_text(PROFILE_PATH, 6000)
+    evidence_map_example = json.dumps(
+        [
+            {
+                "claimId": "S1",
+                "claim": "建议动作摘要",
+                "risk": "safe",
+                "sources": [
+                    {"type": "cv", "field": "涉及 CV 内容", "quote": "cv.md 中可对应的原文或摘要"},
+                    {"type": "jd", "field": "为什么匹配 JD", "quote": "JD 需求或匹配理由"},
+                ],
+                "userDecision": "pending",
+                "usedIn": [],
+            }
+        ],
+        ensure_ascii=False,
+        indent=2,
+    )
     system = """你是 BossSpider 的定制简历建议助手。
 你的任务是根据 Boss 直聘岗位 JD、候选人的 cv.md、可选 profile.yml、以及已有岗位精评报告，生成一份“简历修改建议”，而不是最终简历。
 
@@ -122,6 +140,16 @@ def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list
 ## F. 后续生成定制简历时的策略
 说明如果用户确认建议，最终 Markdown 简历应该如何组织：标题、技能摘要、项目顺序、bullet 风格。
 
+末尾必须输出机器可读 evidence map。它必须是合法 JSON，不要放进 Markdown 代码块：
+---BOSSSPIDER_EVIDENCE_MAP---
+{evidence_map_example}
+---END_EVIDENCE_MAP---
+
+要求：
+- evidence map 中的 `claimId` 必须和 C 节建议编号一一对应。
+- `risk` 只能是 safe、needs_confirmation、avoid_fabrication。
+- `sources.quote` 必须来自输入材料或对输入材料的短摘要；不能编造新事实。
+
 岗位信息：
 ```text
 {_job_text(job)}
@@ -148,11 +176,131 @@ profile.yml：
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
+def _normalize_risk(value: str) -> str:
+    risk = value.strip().lower().replace(" ", "_").replace("-", "_")
+    if risk in {"safe", "low"}:
+        return "safe"
+    if risk in {"needs_confirmation", "needs_confirm", "confirm", "需要用户确认", "需确认"}:
+        return "needs_confirmation"
+    if risk in {"avoid_fabrication", "avoid", "fabrication", "avoid_fabricating", "避免编造"}:
+        return "avoid_fabrication"
+    if "avoid" in risk or "fabricat" in risk or "编造" in risk:
+        return "avoid_fabrication"
+    if "confirm" in risk or "确认" in risk:
+        return "needs_confirmation"
+    return "safe" if not risk else risk
+
+
+def _clean_source_quote(value: str) -> str:
+    return re.sub(r"\s+", " ", value.replace("风险级别", "")).strip(" ：:|｜")
+
+
+def _evidence_map_from_markdown(content: str) -> list[dict[str, Any]]:
+    claims: list[dict[str, Any]] = []
+    for raw in content.splitlines():
+        line = raw.strip()
+        match = re.match(r"^[-*]\s+\[[ xX]\]\s*(S\d[\w-]*)\s*[｜|:：]\s*(.+)$", line, flags=re.IGNORECASE)
+        if not match:
+            continue
+        claim_id = match.group(1).upper()
+        parts = [part.strip() for part in re.split(r"[｜|]", match.group(2)) if part.strip()]
+        action = parts[0] if parts else match.group(2).strip()
+        cv_part = parts[1] if len(parts) > 1 else ""
+        reason = parts[2] if len(parts) > 2 else ""
+        risk_text = ""
+        for part in parts:
+            risk_match = re.search(r"风险级别\s*[:：]\s*(.+)$", part)
+            if risk_match:
+                risk_text = risk_match.group(1)
+                break
+        sources = []
+        if cv_part:
+            sources.append({"type": "cv", "field": "涉及 CV 内容", "quote": _clean_source_quote(cv_part)})
+        if reason:
+            sources.append({"type": "jd", "field": "为什么匹配 JD", "quote": _clean_source_quote(reason)})
+        claims.append(
+            {
+                "claimId": claim_id,
+                "claim": _clean_source_quote(action),
+                "risk": _normalize_risk(risk_text),
+                "sources": sources,
+                "userDecision": "pending",
+                "usedIn": [],
+            }
+        )
+    return claims
+
+
+def _parse_evidence_map(content: str) -> list[dict[str, Any]]:
+    match = re.search(r"---BOSSSPIDER_EVIDENCE_MAP---\s*([\s\S]*?)---END_EVIDENCE_MAP---", content)
+    if match:
+        try:
+            data = json.loads(match.group(1).strip())
+            if isinstance(data, list):
+                return [_clean_evidence_claim(item) for item in data if isinstance(item, dict)]
+        except json.JSONDecodeError:
+            pass
+    return _evidence_map_from_markdown(content)
+
+
+def _strip_evidence_map_block(content: str) -> str:
+    return re.sub(
+        r"\n?---BOSSSPIDER_EVIDENCE_MAP---\s*[\s\S]*?---END_EVIDENCE_MAP---\s*",
+        "\n",
+        content,
+    ).rstrip() + "\n"
+
+
+def _clean_evidence_claim(item: dict[str, Any]) -> dict[str, Any]:
+    sources = item.get("sources") if isinstance(item.get("sources"), list) else []
+    clean_sources = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        clean_sources.append(
+            {
+                "type": str(source.get("type") or "").strip() or "unknown",
+                "field": str(source.get("field") or "").strip(),
+                "quote": str(source.get("quote") or "").strip(),
+            }
+        )
+    return {
+        "claimId": str(item.get("claimId") or "").strip().upper(),
+        "claim": str(item.get("claim") or "").strip(),
+        "risk": _normalize_risk(str(item.get("risk") or "")),
+        "sources": clean_sources,
+        "userDecision": str(item.get("userDecision") or "pending").strip() or "pending",
+        "usedIn": item.get("usedIn") if isinstance(item.get("usedIn"), list) else [],
+    }
+
+
+def _load_resume_json(path: Path) -> dict[str, Any]:
+    json_path = path.with_suffix(".json")
+    if not json_path.exists():
+        return {}
+    try:
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _decisioned_evidence_map(evidence_map: list[dict[str, Any]], approved_ids: list[str]) -> list[dict[str, Any]]:
+    approved = {item.upper() for item in approved_ids}
+    result = []
+    for raw_claim in evidence_map:
+        claim = _clean_evidence_claim(raw_claim)
+        claim["userDecision"] = "approved" if claim["claimId"] in approved else "rejected"
+        result.append(claim)
+    return result
+
+
 def _draft_prompt(
     job: dict[str, Any],
     item: dict[str, Any],
     suggestion_text: str,
     approved_suggestion_ids: list[str],
+    approved_evidence_map: list[dict[str, Any]],
     user_notes: str,
     report_text: str,
 ) -> list[dict[str, str]]:
@@ -165,6 +313,8 @@ def _draft_prompt(
 硬性规则：
 - 只能改写、重排、提炼 cv.md 中已有事实，不能编造经历、指标、项目、公司、学历、年限、薪资或成果。
 - 用户备注可以作为方向，但如果备注包含未经证实的新事实，只能标记为待确认，不要写成确定事实。
+- 优先使用 approvedEvidenceMap 中 userDecision=approved 且 risk=safe 或 needs_confirmation 的建议。
+- risk=avoid_fabrication 的建议只能放入“待用户确认后可补充”，不能写成确定事实。
 - 不覆盖 cv.md，只输出一份新的 Markdown 草稿。
 - 输出必须适合用户继续人工编辑。
 - 不要输出 PDF、HTML 或解释性废话。"""
@@ -200,6 +350,11 @@ def _draft_prompt(
 简历修改建议：
 ```markdown
 {suggestion_text or "暂无简历修改建议。"}
+```
+
+已确认 evidence map：
+```json
+{json.dumps(approved_evidence_map, ensure_ascii=False, indent=2)}
 ```
 
 用户确认的建议编号：
@@ -252,7 +407,9 @@ def _resume_item_from_pipeline_item(item: dict[str, Any]) -> dict[str, Any]:
 def generate_resume_suggestions(source_key: str) -> dict[str, Any]:
     item, job = _load_pipeline_job(source_key)
     report_text = _safe_read_report(item)
-    content = _call_llm(_prompt(job, item, report_text))
+    raw_content = _call_llm(_prompt(job, item, report_text))
+    evidence_map = _parse_evidence_map(raw_content)
+    content = _strip_evidence_map_block(raw_content)
     resume_id = _next_resume_id()
     now = dt.datetime.now()
     filename = (
@@ -271,6 +428,7 @@ def generate_resume_suggestions(source_key: str) -> dict[str, Any]:
         "pipelineItem": item,
         "suggestionPath": str(suggestion_path),
         "sourceReportPath": item.get("reportPath", ""),
+        "evidenceMap": evidence_map,
     }
     json_path = suggestion_path.with_suffix(".json")
     json_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -292,6 +450,7 @@ def generate_resume_suggestions(source_key: str) -> dict[str, Any]:
         "suggestionPath": str(suggestion_path),
         "jsonPath": str(json_path),
         "content": content,
+        "evidenceMap": evidence_map,
         "pipeline": read_pipeline(),
     }
 
@@ -311,12 +470,17 @@ def read_resume_suggestion(source_key: str) -> dict[str, Any]:
     if not item:
         raise HTTPException(status_code=404, detail=f"Pipeline item not found: {source_key}")
     path = _safe_resume_suggestion_path(str(item.get("resumeSuggestionPath") or ""))
+    content = path.read_text(encoding="utf-8")
+    meta = _load_resume_json(path)
+    evidence_map = meta.get("evidenceMap") if isinstance(meta.get("evidenceMap"), list) else _parse_evidence_map(content)
     return {
         "ok": True,
         "sourceKey": source_key,
         "resumeSuggestionId": item.get("resumeSuggestionId", ""),
         "suggestionPath": str(path),
-        "content": path.read_text(encoding="utf-8"),
+        "jsonPath": str(path.with_suffix(".json")),
+        "content": content,
+        "evidenceMap": evidence_map,
     }
 
 
@@ -324,8 +488,15 @@ def generate_resume_draft(source_key: str, approved_suggestion_ids: list[str], u
     item, job = _load_pipeline_job(source_key)
     suggestion_path = _safe_resume_suggestion_path(str(item.get("resumeSuggestionPath") or ""))
     suggestion_text = suggestion_path.read_text(encoding="utf-8")
+    suggestion_meta = _load_resume_json(suggestion_path)
+    evidence_map = suggestion_meta.get("evidenceMap") if isinstance(suggestion_meta.get("evidenceMap"), list) else _parse_evidence_map(suggestion_text)
+    decisioned_evidence_map = _decisioned_evidence_map(evidence_map, approved_suggestion_ids)
+    approved_evidence_map = [
+        claim for claim in decisioned_evidence_map
+        if claim.get("userDecision") == "approved" and claim.get("risk") != "avoid_fabrication"
+    ]
     report_text = _safe_read_report(item)
-    content = _call_llm(_draft_prompt(job, item, suggestion_text, approved_suggestion_ids, user_notes, report_text))
+    content = _call_llm(_draft_prompt(job, item, suggestion_text, approved_suggestion_ids, approved_evidence_map, user_notes, report_text))
 
     draft_id = _next_resume_id()
     now = dt.datetime.now()
@@ -346,6 +517,8 @@ def generate_resume_draft(source_key: str, approved_suggestion_ids: list[str], u
         "draftPath": str(draft_path),
         "suggestionPath": str(suggestion_path),
         "approvedSuggestionIds": approved_suggestion_ids,
+        "evidenceMap": decisioned_evidence_map,
+        "approvedEvidenceMap": approved_evidence_map,
         "userNotes": user_notes,
     }
     json_path = draft_path.with_suffix(".json")
@@ -368,6 +541,7 @@ def generate_resume_draft(source_key: str, approved_suggestion_ids: list[str], u
         "draftPath": str(draft_path),
         "jsonPath": str(json_path),
         "content": content,
+        "evidenceMap": decisioned_evidence_map,
         "pipeline": read_pipeline(),
     }
 
@@ -377,10 +551,13 @@ def read_resume_draft(source_key: str) -> dict[str, Any]:
     if not item:
         raise HTTPException(status_code=404, detail=f"Pipeline item not found: {source_key}")
     path = _safe_resume_draft_path(str(item.get("resumeDraftPath") or ""))
+    meta = _load_resume_json(path)
     return {
         "ok": True,
         "sourceKey": source_key,
         "resumeDraftId": item.get("resumeDraftId", ""),
         "draftPath": str(path),
+        "jsonPath": str(path.with_suffix(".json")),
         "content": path.read_text(encoding="utf-8"),
+        "evidenceMap": meta.get("evidenceMap") if isinstance(meta.get("evidenceMap"), list) else [],
     }
