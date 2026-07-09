@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useState } from 'react';
+import { lazy, Suspense, type ReactNode, useCallback, useState } from 'react';
 import { useAppTranslation } from './i18n';
 import {
   Briefcase,
@@ -19,18 +19,28 @@ import {
 import { NavItem } from './components/NavItem';
 import { StatusBadge } from './components/StatusBadge';
 import { useBossSpider } from './hooks/useBossSpider';
-import { Dashboard, type DashboardTaskTarget } from './pages/Dashboard';
-import { Interview } from './pages/Interview';
-import { Jobs } from './pages/Jobs';
-import { Logs } from './pages/Logs';
-import { Pipeline } from './pages/Pipeline';
-import { Resume } from './pages/Resume';
-import { Rules } from './pages/Rules';
-import { Scope } from './pages/Scope';
-import { Story } from './pages/Story';
+import type { DashboardTaskTarget } from './pages/Dashboard';
 import type { ResumeNavigationTarget, Tab } from './types';
 
 type NavStage = 'discovery' | 'evaluation' | 'materials' | 'interview';
+
+const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const Interview = lazy(() => import('./pages/Interview').then((module) => ({ default: module.Interview })));
+const Jobs = lazy(() => import('./pages/Jobs').then((module) => ({ default: module.Jobs })));
+const Logs = lazy(() => import('./pages/Logs').then((module) => ({ default: module.Logs })));
+const Pipeline = lazy(() => import('./pages/Pipeline').then((module) => ({ default: module.Pipeline })));
+const Resume = lazy(() => import('./pages/Resume').then((module) => ({ default: module.Resume })));
+const Rules = lazy(() => import('./pages/Rules').then((module) => ({ default: module.Rules })));
+const Scope = lazy(() => import('./pages/Scope').then((module) => ({ default: module.Scope })));
+const Story = lazy(() => import('./pages/Story').then((module) => ({ default: module.Story })));
+
+function PageLoading({ label }: { label: string }) {
+  return (
+    <div className="flex h-full min-h-[240px] items-center justify-center rounded-lg border border-zinc-900 bg-zinc-950 text-sm text-zinc-500">
+      {label}
+    </div>
+  );
+}
 
 function NavSection({
   icon,
@@ -263,139 +273,141 @@ export default function App() {
 
         <main className="flex-1 overflow-auto bg-zinc-950 p-5">
           <div className={isWideWorkspace ? 'h-full w-full min-w-0' : 'max-w-6xl mx-auto h-full'}>
-            {activeTab === 'Dashboard' && boss.config && (
-              <Dashboard
-                config={boss.config}
-                jobs={boss.jobs}
-                pipeline={boss.pipeline}
-                strategyIndex={boss.strategyIndex}
-                setStrategyIndex={boss.setStrategyIndex}
-                quickMode={boss.quickMode}
-                setQuickMode={boss.setQuickMode}
-                headlessMode={boss.headlessMode}
-                setHeadlessMode={boss.setHeadlessMode}
-                autoSqlite={boss.autoSqlite}
-                setAutoSqlite={boss.setAutoSqlite}
-                setActiveTab={setActiveTab}
-                onOpenTask={openDashboardTask}
-                recentLogs={boss.recentLogs}
-                onLogin={startLogin}
-                onProcessPartial={processPartial}
-                onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
-              />
-            )}
-            {activeTab === 'Scope' && boss.config && (
-              <Scope
-                config={boss.config}
-                updateConfig={boss.updateConfig}
-                onSave={boss.saveConfig}
-                onReload={() => boss.config && boss.loadConfig(boss.config.project)}
-              />
-            )}
-            {activeTab === 'Rules' && boss.config && (
-              <Rules config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
-            )}
-            {activeTab === 'Jobs' && (
-              <Jobs
-                jobs={boss.jobs}
-                total={boss.jobsTotal}
-                search={boss.jobSearch}
-                setSearch={boss.setJobSearch}
-                sortByScore={boss.sortJobsByScore}
-                setSortByScore={boss.setSortJobsByScore}
-                onRefresh={() => boss.refreshJobs()}
-                onExport={boss.exportJobs}
-                onScoreJobs={boss.scoreJobs}
-                onUpdateLiveStatus={(jobIds, limit) => boss.updateJobLiveStatus({ jobIds, limit })}
-                scoringJobIds={boss.jobScoringIds}
-                taskRunning={boss.isRunning}
-                selectedJobId={selectedJobId}
-                targetRequestId={dashboardTargetRequestId}
-                onAddToPipeline={async (jobs) => {
-                  if (await boss.addJobsToPipeline(jobs.map((job) => job.id))) setActiveTab('Pipeline');
-                }}
-              />
-            )}
-            {activeTab === 'Pipeline' && (
-              <Pipeline
-                pipeline={boss.pipeline}
-                onRefresh={() => { void boss.refreshPipeline(); }}
-                onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
-                llmEvaluatingKeys={boss.llmEvaluatingKeys}
-                resumeSuggestingKeys={boss.resumeSuggestingKeys}
-                interviewPreparingKeys={boss.interviewPreparingKeys}
-                sortByLlmScore={boss.sortPipelineByLlmScore}
-                setSortByLlmScore={boss.setSortPipelineByLlmScore}
-                onLoadJobDetail={boss.loadJobDetail}
-                onLoadReport={boss.loadPipelineReport}
-                onLoadGreetingDraft={boss.loadGreetingDraft}
-                onSaveGreetingDraft={boss.saveGreetingDraft}
-                onGenerateResumeSuggestions={boss.generateResumeSuggestions}
-                onLoadResumeSuggestion={boss.loadResumeSuggestion}
-                onGenerateInterviewPrep={boss.generateInterviewPrep}
-                onLoadInterviewPrep={boss.loadInterviewPrep}
-                onUpdateStatus={boss.updatePipelineStatus}
-                onDeleteItem={boss.deletePipelineItem}
-                onOpenResumeMaterials={(target) => {
-                  setDashboardTargetRequestId((value) => value + 1);
-                  setSelectedResumeKey(target.sourceKey || '');
-                  setSelectedResumeTarget(target);
-                  void boss.refreshResumeItems();
-                  setActiveTabStable('Resume');
-                }}
-                targetSourceKey={selectedPipelineKey}
-                targetRequestId={dashboardTargetRequestId}
-              />
-            )}
-            {activeTab === 'Resume' && (
-              <Resume
-                items={boss.resumeItems}
-                draftingKeys={boss.resumeDraftingKeys}
-                onRefresh={() => { void boss.refreshResumeItems(); }}
-                onLoadSuggestion={boss.loadResumeSuggestion}
-                onLoadDraft={boss.loadResumeDraft}
-                onGenerateDraft={boss.generateResumeDraft}
-                selectedSourceKey={selectedResumeKey}
-                selectedTarget={selectedResumeTarget}
-                targetRequestId={dashboardTargetRequestId}
-                onTargetApplied={() => {
-                  setSelectedResumeKey('');
-                  setSelectedResumeTarget(null);
-                }}
-              />
-            )}
-            {activeTab === 'Story' && (
-              <Story
-                onLoadStoryBank={boss.loadInterviewStoryBank}
-                onSaveStoryBank={boss.saveInterviewStoryBank}
-                onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
-                onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
-                onPromoteStoryDraft={boss.promoteInterviewStoryDraft}
-                selectedDraftId={selectedStoryDraftId}
-                targetRequestId={dashboardTargetRequestId}
-              />
-            )}
-            {activeTab === 'Interview' && (
-              <Interview
-                items={boss.interviewItems}
-                preparingKeys={boss.interviewPreparingKeys}
-                selectedKey={selectedInterviewKey}
-                onSelectedKeyChange={setSelectedInterviewKey}
-                onRefresh={() => { void boss.refreshInterviewItems(); }}
-                onLoadStoryBank={boss.loadInterviewStoryBank}
-                onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
-                onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
-                onOpenStory={() => setActiveTabStable('Story')}
-                onOpenStoryDraft={(draftId) => {
-                  setDashboardTargetRequestId((value) => value + 1);
-                  setSelectedStoryDraftId(draftId);
-                  setActiveTabStable('Story');
-                }}
-                onLoadPrep={boss.loadInterviewPrep}
-                onGeneratePrep={boss.generateInterviewPrep}
-              />
-            )}
-            {activeTab === 'Logs' && <Logs status={boss.status} logs={boss.parsedLogs} />}
+            <Suspense fallback={<PageLoading label={currentLanguage.startsWith('zh') ? '加载页面...' : 'Loading page...'} />}>
+              {activeTab === 'Dashboard' && boss.config && (
+                <Dashboard
+                  config={boss.config}
+                  jobs={boss.jobs}
+                  pipeline={boss.pipeline}
+                  strategyIndex={boss.strategyIndex}
+                  setStrategyIndex={boss.setStrategyIndex}
+                  quickMode={boss.quickMode}
+                  setQuickMode={boss.setQuickMode}
+                  headlessMode={boss.headlessMode}
+                  setHeadlessMode={boss.setHeadlessMode}
+                  autoSqlite={boss.autoSqlite}
+                  setAutoSqlite={boss.setAutoSqlite}
+                  setActiveTab={setActiveTab}
+                  onOpenTask={openDashboardTask}
+                  recentLogs={boss.recentLogs}
+                  onLogin={startLogin}
+                  onProcessPartial={processPartial}
+                  onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
+                />
+              )}
+              {activeTab === 'Scope' && boss.config && (
+                <Scope
+                  config={boss.config}
+                  updateConfig={boss.updateConfig}
+                  onSave={boss.saveConfig}
+                  onReload={() => boss.config && boss.loadConfig(boss.config.project)}
+                />
+              )}
+              {activeTab === 'Rules' && boss.config && (
+                <Rules config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
+              )}
+              {activeTab === 'Jobs' && (
+                <Jobs
+                  jobs={boss.jobs}
+                  total={boss.jobsTotal}
+                  search={boss.jobSearch}
+                  setSearch={boss.setJobSearch}
+                  sortByScore={boss.sortJobsByScore}
+                  setSortByScore={boss.setSortJobsByScore}
+                  onRefresh={() => boss.refreshJobs()}
+                  onExport={boss.exportJobs}
+                  onScoreJobs={boss.scoreJobs}
+                  onUpdateLiveStatus={(jobIds, limit) => boss.updateJobLiveStatus({ jobIds, limit })}
+                  scoringJobIds={boss.jobScoringIds}
+                  taskRunning={boss.isRunning}
+                  selectedJobId={selectedJobId}
+                  targetRequestId={dashboardTargetRequestId}
+                  onAddToPipeline={async (jobs) => {
+                    if (await boss.addJobsToPipeline(jobs.map((job) => job.id))) setActiveTab('Pipeline');
+                  }}
+                />
+              )}
+              {activeTab === 'Pipeline' && (
+                <Pipeline
+                  pipeline={boss.pipeline}
+                  onRefresh={() => { void boss.refreshPipeline(); }}
+                  onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
+                  llmEvaluatingKeys={boss.llmEvaluatingKeys}
+                  resumeSuggestingKeys={boss.resumeSuggestingKeys}
+                  interviewPreparingKeys={boss.interviewPreparingKeys}
+                  sortByLlmScore={boss.sortPipelineByLlmScore}
+                  setSortByLlmScore={boss.setSortPipelineByLlmScore}
+                  onLoadJobDetail={boss.loadJobDetail}
+                  onLoadReport={boss.loadPipelineReport}
+                  onLoadGreetingDraft={boss.loadGreetingDraft}
+                  onSaveGreetingDraft={boss.saveGreetingDraft}
+                  onGenerateResumeSuggestions={boss.generateResumeSuggestions}
+                  onLoadResumeSuggestion={boss.loadResumeSuggestion}
+                  onGenerateInterviewPrep={boss.generateInterviewPrep}
+                  onLoadInterviewPrep={boss.loadInterviewPrep}
+                  onUpdateStatus={boss.updatePipelineStatus}
+                  onDeleteItem={boss.deletePipelineItem}
+                  onOpenResumeMaterials={(target) => {
+                    setDashboardTargetRequestId((value) => value + 1);
+                    setSelectedResumeKey(target.sourceKey || '');
+                    setSelectedResumeTarget(target);
+                    void boss.refreshResumeItems();
+                    setActiveTabStable('Resume');
+                  }}
+                  targetSourceKey={selectedPipelineKey}
+                  targetRequestId={dashboardTargetRequestId}
+                />
+              )}
+              {activeTab === 'Resume' && (
+                <Resume
+                  items={boss.resumeItems}
+                  draftingKeys={boss.resumeDraftingKeys}
+                  onRefresh={() => { void boss.refreshResumeItems(); }}
+                  onLoadSuggestion={boss.loadResumeSuggestion}
+                  onLoadDraft={boss.loadResumeDraft}
+                  onGenerateDraft={boss.generateResumeDraft}
+                  selectedSourceKey={selectedResumeKey}
+                  selectedTarget={selectedResumeTarget}
+                  targetRequestId={dashboardTargetRequestId}
+                  onTargetApplied={() => {
+                    setSelectedResumeKey('');
+                    setSelectedResumeTarget(null);
+                  }}
+                />
+              )}
+              {activeTab === 'Story' && (
+                <Story
+                  onLoadStoryBank={boss.loadInterviewStoryBank}
+                  onSaveStoryBank={boss.saveInterviewStoryBank}
+                  onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
+                  onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
+                  onPromoteStoryDraft={boss.promoteInterviewStoryDraft}
+                  selectedDraftId={selectedStoryDraftId}
+                  targetRequestId={dashboardTargetRequestId}
+                />
+              )}
+              {activeTab === 'Interview' && (
+                <Interview
+                  items={boss.interviewItems}
+                  preparingKeys={boss.interviewPreparingKeys}
+                  selectedKey={selectedInterviewKey}
+                  onSelectedKeyChange={setSelectedInterviewKey}
+                  onRefresh={() => { void boss.refreshInterviewItems(); }}
+                  onLoadStoryBank={boss.loadInterviewStoryBank}
+                  onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
+                  onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
+                  onOpenStory={() => setActiveTabStable('Story')}
+                  onOpenStoryDraft={(draftId) => {
+                    setDashboardTargetRequestId((value) => value + 1);
+                    setSelectedStoryDraftId(draftId);
+                    setActiveTabStable('Story');
+                  }}
+                  onLoadPrep={boss.loadInterviewPrep}
+                  onGeneratePrep={boss.generateInterviewPrep}
+                />
+              )}
+              {activeTab === 'Logs' && <Logs status={boss.status} logs={boss.parsedLogs} />}
+            </Suspense>
           </div>
         </main>
       </div>
