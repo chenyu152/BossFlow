@@ -79,6 +79,9 @@ def _ensure_story_bank() -> None:
         "### [Theme] Story title\n"
         "**Source:** Where this story comes from\n"
         "**Best for questions about:** ownership, ambiguity, collaboration\n"
+        "**Format:** freeform\n"
+        "**Structure status:** needs_structuring\n"
+        "**Raw note:** \n"
         "**S (Situation):** \n"
         "**T (Task):** \n"
         "**A (Action):** \n"
@@ -140,6 +143,9 @@ def _parse_story_bank(content: str) -> list[dict[str, Any]]:
             "theme": theme,
             "source": field("Source"),
             "tags": tags,
+            "rawNote": field("Raw note", "Raw Note"),
+            "format": field("Format") or "star",
+            "structureStatus": field("Structure status", "Structure Status") or "structured",
             "situation": field("S (Situation)", "Situation"),
             "task": field("T (Task)", "Task"),
             "action": field("A (Action)", "Action"),
@@ -147,7 +153,7 @@ def _parse_story_bank(content: str) -> list[dict[str, Any]]:
             "reflection": field("Reflection"),
         }
         if story["title"] and story["title"].lower() != "story title" and any(
-            story[key] for key in ("situation", "task", "action", "result", "reflection")
+            story[key] for key in ("rawNote", "situation", "task", "action", "result", "reflection")
         ):
             stories.append(story)
     return stories
@@ -162,6 +168,9 @@ def _clean_story(story: dict[str, Any]) -> dict[str, Any]:
         "theme": str(story.get("theme") or "").strip(),
         "source": str(story.get("source") or "").strip(),
         "tags": [str(tag).strip() for tag in tags if str(tag).strip()],
+        "rawNote": str(story.get("rawNote") or "").strip(),
+        "format": str(story.get("format") or "freeform").strip() or "freeform",
+        "structureStatus": str(story.get("structureStatus") or "needs_structuring").strip() or "needs_structuring",
         "situation": str(story.get("situation") or "").strip(),
         "task": str(story.get("task") or "").strip(),
         "action": str(story.get("action") or "").strip(),
@@ -208,6 +217,9 @@ def _render_story_bank(stories: list[dict[str, Any]]) -> str:
                 f"### {heading}",
                 f"**Source:** {story['source']}",
                 f"**Best for questions about:** {', '.join(story['tags'])}",
+                f"**Format:** {story['format']}",
+                f"**Structure status:** {story['structureStatus']}",
+                f"**Raw note:** {story['rawNote']}",
                 f"**S (Situation):** {story['situation']}",
                 f"**T (Task):** {story['task']}",
                 f"**A (Action):** {story['action']}",
@@ -310,7 +322,7 @@ def save_story_drafts(drafts: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _has_promotable_story_fields(story: dict[str, Any]) -> bool:
-    return any(story.get(key) for key in ("situation", "task", "action", "result"))
+    return any(story.get(key) for key in ("rawNote", "situation", "task", "action", "result"))
 
 
 def promote_story_draft(draft_id: str, draft: dict[str, Any]) -> dict[str, Any]:

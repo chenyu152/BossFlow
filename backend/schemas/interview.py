@@ -11,6 +11,9 @@ class InterviewStoryPayload(BaseModel):
     theme: str = ""
     source: str = ""
     tags: list[str] = []
+    rawNote: str = ""
+    format: str = "freeform"
+    structureStatus: str = "needs_structuring"
     situation: str = ""
     task: str = ""
     action: str = ""

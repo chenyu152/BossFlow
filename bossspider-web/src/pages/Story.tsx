@@ -5,12 +5,25 @@ import { emptyStory } from '../storyUtils';
 import type { InterviewStory, InterviewStoryBankResponse, InterviewStoryDraft, InterviewStoryDraftPromoteResponse, InterviewStoryDraftsResponse } from '../types';
 
 type StoryMode = 'drafts' | 'confirmed';
+type StoryFieldKey = 'situation' | 'task' | 'action' | 'result' | 'reflection';
 const STORY_DRAFT_TRANSFER_KEY = 'bossspider:story-draft-transfer';
+
+function normalizeStory(story: InterviewStory): InterviewStory {
+  return {
+    ...emptyStory(),
+    ...story,
+    tags: [...(story.tags || [])],
+    rawNote: story.rawNote || '',
+    format: story.format || 'freeform',
+    structureStatus: story.structureStatus || 'needs_structuring',
+  };
+}
 
 function newDraftFromStory(story: InterviewStory): InterviewStoryDraft {
   const now = new Date().toISOString();
+  const normalized = normalizeStory(story);
   return {
-    ...story,
+    ...normalized,
     draftId: `draft-${Date.now()}`,
     status: 'needs_confirmation',
     sourceKey: '',
@@ -24,18 +37,21 @@ function newDraftFromStory(story: InterviewStory): InterviewStoryDraft {
 }
 
 function storyFromDraft(draft: InterviewStoryDraft): InterviewStory {
-  return {
+  return normalizeStory({
     id: draft.id,
     title: draft.title,
     theme: draft.theme,
     source: draft.source,
     tags: draft.tags,
+    rawNote: draft.rawNote || '',
+    format: draft.format || 'freeform',
+    structureStatus: draft.structureStatus || 'needs_structuring',
     situation: draft.situation,
     task: draft.task,
     action: draft.action,
     result: draft.result,
     reflection: draft.reflection,
-  };
+  });
 }
 
 function emptyDraft(): InterviewStoryDraft {
@@ -55,7 +71,7 @@ function statusLabel(t: (key: string) => string, status: InterviewStoryDraft['st
 }
 
 function hasPromotableStoryFields(story: InterviewStory) {
-  return Boolean(story.situation.trim() || story.task.trim() || story.action.trim() || story.result.trim());
+  return Boolean(story.rawNote.trim() || story.situation.trim() || story.task.trim() || story.action.trim() || story.result.trim());
 }
 
 function formatDateTime(value?: string) {
@@ -63,6 +79,32 @@ function formatDateTime(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function structuredFieldEntries(format: InterviewStory['format'], t: (key: string) => string): Array<[StoryFieldKey, string]> {
+  if (format === 'car') {
+    return [
+      ['situation', t('story.cChallenge')],
+      ['action', t('story.aAction')],
+      ['result', t('story.rResult')],
+      ['reflection', t('story.reflectionOptional')],
+    ];
+  }
+  if (format === 'par') {
+    return [
+      ['situation', t('story.pProblem')],
+      ['action', t('story.aAction')],
+      ['result', t('story.rResult')],
+      ['reflection', t('story.reflectionOptional')],
+    ];
+  }
+  return [
+    ['situation', t('story.sSituation')],
+    ['task', t('story.tTask')],
+    ['action', t('story.aAction')],
+    ['result', t('story.rResult')],
+    ['reflection', t('story.reflection')],
+  ];
 }
 
 export function Story({
@@ -104,6 +146,8 @@ export function Story({
   const drafts = useMemo(() => visibleDrafts(draftStore?.drafts || []), [draftStore]);
   const activeList = mode === 'drafts' ? drafts : stories;
   const canPromoteDraft = mode === 'drafts' && Boolean(storyDraft.title.trim()) && hasPromotableStoryFields(storyDraft);
+  const structureFormatLabel = storyDraft.format === 'freeform' ? t('story.freeform') : storyDraft.format.toUpperCase();
+  const structuredFields = structuredFieldEntries(storyDraft.format, t);
 
   useEffect(() => {
     if (!selectedDraftId || !targetRequestId) return;
@@ -153,7 +197,7 @@ export function Story({
       setStoryDraft(draft ? storyFromDraft(draft) : emptyStory());
     } else {
       const story = stories[selectedIndex];
-      setStoryDraft(story ? { ...story, tags: [...story.tags] } : emptyStory());
+      setStoryDraft(story ? normalizeStory(story) : emptyStory());
       setDraftMeta(emptyDraft());
     }
     setDirty(false);
@@ -234,7 +278,7 @@ export function Story({
       const next = [...stories, emptyStory()];
       setStoryBank((current) => current ? { ...current, stories: next } : current);
       setSelectedIndex(next.length - 1);
-      setStoryDraft(next[next.length - 1]);
+      setStoryDraft(normalizeStory(next[next.length - 1]));
     }
     setDirty(true);
   };
@@ -404,13 +448,18 @@ export function Story({
                   >
                     <div className="truncate text-sm font-medium">{item.title || t('story.untitled')}</div>
                     <div className="mt-1 truncate text-xs text-zinc-500">{item.theme || t('story.general')}</div>
-                    {draft && (
-                      <div className="mt-2 inline-flex rounded bg-amber-950/50 px-1.5 py-0.5 text-[10px] text-amber-300">
-                        {statusLabel(t, draft.status)}
+                {draft && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="rounded bg-amber-950/50 px-1.5 py-0.5 text-[10px] text-amber-300">
+                          {statusLabel(t, draft.status)}
+                        </span>
+                        <span className="rounded bg-cyan-950/50 px-1.5 py-0.5 text-[10px] text-cyan-300">
+                          {draft.format === 'freeform' ? t('story.freeform') : draft.format.toUpperCase()}
+                        </span>
                       </div>
                     )}
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {item.tags.slice(0, 3).map((tag) => (
+                      {(item.tags || []).slice(0, 3).map((tag) => (
                         <span key={tag} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">{tag}</span>
                       ))}
                     </div>
@@ -510,17 +559,52 @@ export function Story({
                 className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-cyan-600"
               />
             </label>
-            {([
-              ['situation', t('story.sSituation')],
-              ['task', t('story.tTask')],
-              ['action', t('story.aAction')],
-              ['result', t('story.rResult')],
-              ['reflection', t('story.reflection')],
-            ] as [string, string][]).map(([key, label]) => (
+            <div className="col-span-2 grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <span className="text-xs uppercase text-zinc-500">{t('story.formatField')}</span>
+                <div className="flex flex-wrap gap-2">
+                  {(['freeform', 'star', 'car', 'par'] as const).map((format) => (
+                    <button
+                      key={format}
+                      type="button"
+                      onClick={() => updateStoryDraft({ format, structureStatus: format === 'freeform' ? 'needs_structuring' : storyDraft.structureStatus })}
+                      className={`rounded border px-2 py-1 text-xs transition-colors ${storyDraft.format === format ? 'border-cyan-700 bg-cyan-950/40 text-cyan-200' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900'}`}
+                    >
+                      {format === 'freeform' ? t('story.freeform') : format.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs uppercase text-zinc-500">{t('story.structureStatusField')}</span>
+                <select
+                  value={storyDraft.structureStatus}
+                  onChange={(event) => updateStoryDraft({ structureStatus: event.target.value })}
+                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-cyan-600"
+                >
+                  <option value="needs_structuring">{t('story.needsStructuring')}</option>
+                  <option value="structured">{t('story.structured')}</option>
+                  <option value="confirmed">{t('story.confirmedStructure')}</option>
+                </select>
+              </div>
+            </div>
+            <label className="col-span-2 space-y-1">
+              <span className="text-xs uppercase text-zinc-500">{t('story.rawNoteField')}</span>
+              <textarea
+                value={storyDraft.rawNote}
+                onChange={(event) => updateStoryDraft({ rawNote: event.target.value })}
+                placeholder={t('story.rawNotePlaceholder')}
+                className="h-36 w-full resize-none rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm leading-relaxed text-zinc-200 outline-none focus:border-cyan-600"
+              />
+            </label>
+            <div className="col-span-2 border-t border-zinc-800 pt-3 text-xs font-medium uppercase text-zinc-500">
+              {t('story.structuredFieldsFor', { format: structureFormatLabel })}
+            </div>
+            {structuredFields.map(([key, label]) => (
               <label key={key} className="col-span-2 space-y-1">
                 <span className="text-xs uppercase text-zinc-500">{label}</span>
                 <textarea
-                  value={String(storyDraft[key as keyof InterviewStory] || '')}
+                  value={storyDraft[key] || ''}
                   onChange={(event) => updateStoryDraft({ [key]: event.target.value } as Partial<InterviewStory>)}
                   className="h-24 w-full resize-none rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm leading-relaxed text-zinc-200 outline-none focus:border-cyan-600"
                 />

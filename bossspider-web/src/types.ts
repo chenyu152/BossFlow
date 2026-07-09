@@ -341,6 +341,9 @@ export type InterviewStory = {
   theme: string;
   source: string;
   tags: string[];
+  rawNote: string;
+  format: 'freeform' | 'star' | 'car' | 'par' | string;
+  structureStatus: 'needs_structuring' | 'structured' | 'confirmed' | string;
   situation: string;
   task: string;
   action: string;
