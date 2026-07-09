@@ -1,13 +1,60 @@
-import { BookOpenText, BrainCircuit, ExternalLink, FileText, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { BookOpenText, BrainCircuit, ExternalLink, FileText, Loader2, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppTranslation } from '../i18n';
 import { extractStoryDraftsFromPrep } from '../storyUtils';
-import type { InterviewItem, InterviewPrepResponse, InterviewStory, InterviewStoryBankResponse } from '../types';
+import type { InterviewItem, InterviewPrepResponse, InterviewStory, InterviewStoryBankResponse, InterviewStoryDraft, InterviewStoryDraftsResponse } from '../types';
+
+type PrepStoryStatus = 'new' | 'draft' | 'promoted' | 'dismissed';
+
+type PrepStoryRow = {
+  draft: InterviewStory;
+  draftId: string;
+  status: PrepStoryStatus;
+  existingDraft?: InterviewStoryDraft;
+};
 
 function markdownArticleClass() {
   return 'max-w-none text-sm leading-7 text-zinc-300 [&_h1]:mb-5 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:text-zinc-100 [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:border-b [&_h2]:border-zinc-800 [&_h2]:pb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-100 [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_h3]:text-zinc-100 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_strong]:text-zinc-100 [&_code]:rounded [&_code]:bg-zinc-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-cyan-300 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-zinc-800 [&_pre]:bg-zinc-900 [&_pre]:p-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-zinc-800 [&_th]:bg-zinc-900 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-zinc-100 [&_td]:border [&_td]:border-zinc-800 [&_td]:px-3 [&_td]:py-2';
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function normalizeStoryKeyPart(value?: string) {
+  return (value || '').trim().toLowerCase();
+}
+
+function prepStoryDraftId(sourceKey: string, prepPath: string, draft: InterviewStory) {
+  return `prep-story-${stableHash([
+    sourceKey,
+    prepPath,
+    normalizeStoryKeyPart(draft.theme),
+    normalizeStoryKeyPart(draft.title),
+  ].join('|'))}`;
+}
+
+function samePrepStory(draft: InterviewStoryDraft, sourceKey: string, prepPath: string, story: InterviewStory, draftId: string) {
+  if (draft.draftId === draftId) return true;
+  return (
+    draft.sourceKey === sourceKey
+    && draft.prepPath === prepPath
+    && normalizeStoryKeyPart(draft.theme) === normalizeStoryKeyPart(story.theme)
+    && normalizeStoryKeyPart(draft.title) === normalizeStoryKeyPart(story.title)
+  );
+}
+
+function storyExistsInBank(storyBank: InterviewStoryBankResponse | null, draft: InterviewStory) {
+  return Boolean(storyBank?.stories.some((story) => (
+    normalizeStoryKeyPart(story.theme) === normalizeStoryKeyPart(draft.theme)
+    && normalizeStoryKeyPart(story.title) === normalizeStoryKeyPart(draft.title)
+  )));
 }
 
 export function Interview({
@@ -17,8 +64,10 @@ export function Interview({
   onSelectedKeyChange,
   onRefresh,
   onLoadStoryBank,
+  onLoadStoryDrafts,
+  onSaveStoryDrafts,
   onOpenStory,
-  onCreateStoryDraft,
+  onOpenStoryDraft,
   onLoadPrep,
   onGeneratePrep,
 }: {
@@ -28,13 +77,16 @@ export function Interview({
   onSelectedKeyChange: (sourceKey: string) => void;
   onRefresh: () => void;
   onLoadStoryBank: () => Promise<InterviewStoryBankResponse | null>;
+  onLoadStoryDrafts: () => Promise<InterviewStoryDraftsResponse | null>;
+  onSaveStoryDrafts: (drafts: InterviewStoryDraft[]) => Promise<InterviewStoryDraftsResponse | null>;
   onOpenStory: () => void;
-  onCreateStoryDraft: (draft: InterviewStory) => void;
+  onOpenStoryDraft: (draftId: string) => void;
   onLoadPrep: (sourceKey: string) => Promise<InterviewPrepResponse | null>;
   onGeneratePrep: (sourceKey: string, userNotes: string) => Promise<InterviewPrepResponse | null>;
 }) {
   const { t } = useAppTranslation();
   const [storyBank, setStoryBank] = useState<InterviewStoryBankResponse | null>(null);
+  const [storyDraftStore, setStoryDraftStore] = useState<InterviewStoryDraftsResponse | null>(null);
   const [prep, setPrep] = useState<InterviewPrepResponse | null>(null);
   const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,6 +98,23 @@ export function Interview({
   );
   const isPreparing = selectedItem ? preparingSet.has(selectedItem.sourceKey) : false;
   const prepStoryDrafts = useMemo(() => extractStoryDraftsFromPrep(prep?.content || ''), [prep]);
+  const prepStoryRows = useMemo<PrepStoryRow[]>(() => {
+    if (!selectedItem || !prep) return [];
+    return prepStoryDrafts.map((draft) => {
+      const draftId = prepStoryDraftId(selectedItem.sourceKey, prep.prepPath, draft);
+      const existingDraft = storyDraftStore?.drafts.find((item) => samePrepStory(item, selectedItem.sourceKey, prep.prepPath, draft, draftId));
+      const status: PrepStoryStatus = existingDraft?.status === 'promoted' || storyExistsInBank(storyBank, draft)
+        ? 'promoted'
+        : existingDraft?.status === 'dismissed'
+          ? 'dismissed'
+          : existingDraft
+            ? 'draft'
+            : 'new';
+      return { draft, draftId, status, existingDraft };
+    }).filter((row) => row.status !== 'dismissed');
+  }, [prep, prepStoryDrafts, selectedItem, storyBank, storyDraftStore?.drafts]);
+  const actionablePrepStoryCount = prepStoryRows.filter((row) => row.status === 'new' || row.status === 'draft').length;
+  const promotedPrepStoryCount = prepStoryRows.filter((row) => row.status === 'promoted').length;
 
   useEffect(() => {
     if (!selectedKey && items[0]) onSelectedKeyChange(items[0].sourceKey);
@@ -53,15 +122,17 @@ export function Interview({
 
   useEffect(() => {
     let cancelled = false;
-    const loadStoryBank = async () => {
-      const data = await onLoadStoryBank();
-      if (!cancelled) setStoryBank(data);
+    const loadStoryData = async () => {
+      const [bank, drafts] = await Promise.all([onLoadStoryBank(), onLoadStoryDrafts()]);
+      if (cancelled) return;
+      setStoryBank(bank);
+      setStoryDraftStore(drafts);
     };
-    void loadStoryBank();
+    void loadStoryData();
     return () => {
       cancelled = true;
     };
-  }, [onLoadStoryBank]);
+  }, [onLoadStoryBank, onLoadStoryDrafts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +157,59 @@ export function Interview({
     if (!selectedItem) return;
     const data = await onGeneratePrep(selectedItem.sourceKey, userNotes);
     if (data) setPrep(data);
+  };
+
+  const draftFromPrepStory = (row: PrepStoryRow, status: InterviewStoryDraft['status']): InterviewStoryDraft | null => {
+    if (!selectedItem || !prep) return null;
+    const now = new Date().toISOString();
+    return {
+      ...row.draft,
+      draftId: row.draftId,
+      status,
+      sourceKey: selectedItem.sourceKey,
+      sourceLabel: `${selectedItem.company} · ${selectedItem.title}`,
+      prepPath: prep.prepPath,
+      createdAt: row.existingDraft?.createdAt || now,
+      updatedAt: now,
+      promotedAt: row.existingDraft?.promotedAt || '',
+      promotedStoryId: row.existingDraft?.promotedStoryId || '',
+    };
+  };
+
+  const savePrepStoryDraft = async (nextDraft: InterviewStoryDraft) => {
+    const existing = storyDraftStore?.drafts || [];
+    const nextDrafts = existing.some((draft) => draft.draftId === nextDraft.draftId)
+      ? existing.map((draft) => draft.draftId === nextDraft.draftId ? nextDraft : draft)
+      : [...existing, nextDraft];
+    const optimistic = {
+      ok: storyDraftStore?.ok ?? true,
+      path: storyDraftStore?.path || '',
+      drafts: nextDrafts,
+    };
+    setStoryDraftStore(optimistic);
+    const saved = await onSaveStoryDrafts(nextDrafts);
+    if (saved) setStoryDraftStore(saved);
+    return saved;
+  };
+
+  const openOrCreatePrepStoryDraft = async (row: PrepStoryRow) => {
+    if (row.status === 'promoted' || row.status === 'dismissed') return;
+    if (row.existingDraft) {
+      onOpenStoryDraft(row.existingDraft.draftId);
+      return;
+    }
+    const nextDraft = draftFromPrepStory(row, 'needs_confirmation');
+    if (!nextDraft) return;
+    const saved = await savePrepStoryDraft(nextDraft);
+    if (saved) onOpenStoryDraft(nextDraft.draftId);
+  };
+
+  const dismissPrepStoryDraft = async (row: PrepStoryRow) => {
+    if (row.status === 'promoted') return;
+    if (!window.confirm(t('interview.confirmDeleteStoryDraft'))) return;
+    const nextDraft = draftFromPrepStory(row, 'dismissed');
+    if (!nextDraft) return;
+    await savePrepStoryDraft(nextDraft);
   };
 
   return (
@@ -169,35 +293,70 @@ export function Interview({
                         <div className="mt-1 text-xs text-zinc-500">{t('interview.confirmedStories')}</div>
                       </div>
                       <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
-                        <div className="text-xl font-semibold text-cyan-300">{prepStoryDrafts.length}</div>
-                        <div className="mt-1 text-xs text-zinc-500">{t('interview.draftsInPrep')}</div>
+                        <div className="text-xl font-semibold text-cyan-300">{actionablePrepStoryCount}/{prepStoryRows.length}</div>
+                        <div className="mt-1 text-xs text-zinc-500">{t('interview.pendingStoriesInPrep')}</div>
+                        {promotedPrepStoryCount > 0 && (
+                          <div className="mt-1 text-[10px] text-emerald-300">{t('interview.promotedStoriesInPrep', { count: promotedPrepStoryCount })}</div>
+                        )}
                       </div>
                     </div>
-                    {prepStoryDrafts.length > 0 && (
+                    {prepStoryRows.length > 0 && (
                       <div className="rounded border border-zinc-800 bg-zinc-900/30 p-3">
                         <div className="mb-2 text-xs font-medium text-zinc-300">{t('interview.draftStories')}</div>
-                        <div className="flex flex-wrap gap-2">
-                          {prepStoryDrafts.map((draft) => {
-                            const isGap = draft.tags.includes('gap') || draft.theme === '缺失故事';
+                        <div className="space-y-2">
+                          {prepStoryRows.map((row) => {
+                            const isGap = row.draft.tags.includes('gap') || row.draft.theme === '缺失故事';
+                            const isMuted = row.status === 'promoted' || row.status === 'dismissed';
                             return (
-                              <button
-                                key={`${draft.theme}-${draft.title}`}
-                                onClick={() => onCreateStoryDraft(draft)}
-                                className={`group inline-flex max-w-full items-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-medium transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
-                                  isGap
-                                    ? 'border-amber-900/60 bg-amber-950/15 text-amber-200 hover:border-amber-600 hover:bg-amber-950/45 hover:text-amber-100 hover:shadow-amber-950/20'
-                                    : 'border-cyan-900/50 bg-cyan-950/10 text-cyan-100 hover:border-cyan-600 hover:bg-cyan-950/40 hover:text-white hover:shadow-cyan-950/20'
+                              <div
+                                key={row.draftId}
+                                className={`flex items-center justify-between gap-2 rounded border px-2.5 py-2 text-xs ${
+                                  isMuted
+                                    ? 'border-zinc-800 bg-zinc-950/60 text-zinc-500'
+                                    : isGap
+                                      ? 'border-amber-900/60 bg-amber-950/15 text-amber-100'
+                                      : 'border-cyan-900/50 bg-cyan-950/10 text-cyan-100'
                                 }`}
                               >
-                                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[11px] transition-colors ${
-                                  isGap
-                                    ? 'bg-amber-900/50 text-amber-100 group-hover:bg-amber-700'
-                                    : 'bg-cyan-900/50 text-cyan-100 group-hover:bg-cyan-700'
-                                }`}>
-                                  +
-                                </span>
-                                <span className="truncate">{draft.title}</span>
-                              </button>
+                                <div className="min-w-0">
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+                                      row.status === 'promoted'
+                                        ? 'bg-emerald-950/70 text-emerald-300'
+                                        : row.status === 'dismissed'
+                                          ? 'bg-zinc-900 text-zinc-500'
+                                          : row.status === 'draft'
+                                            ? 'bg-amber-950/70 text-amber-300'
+                                            : 'bg-cyan-950/70 text-cyan-300'
+                                    }`}>
+                                      {t(`interview.storyDraftStatuses.${row.status}`)}
+                                    </span>
+                                    <span className="truncate font-medium">{row.draft.title}</span>
+                                  </div>
+                                  <div className="mt-1 truncate text-[10px] text-zinc-500">{row.draft.theme || t('story.general')}</div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                  {(row.status === 'new' || row.status === 'draft') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { void openOrCreatePrepStoryDraft(row); }}
+                                      className="rounded border border-cyan-900/60 px-2 py-1 text-[11px] text-cyan-200 transition-colors hover:bg-cyan-950/50"
+                                    >
+                                      {row.status === 'draft' ? t('interview.openStoryDraft') : t('interview.addStoryDraft')}
+                                    </button>
+                                  )}
+                                  {row.status !== 'promoted' && row.status !== 'dismissed' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { void dismissPrepStoryDraft(row); }}
+                                      title={t('interview.deleteStoryDraft')}
+                                      className="rounded border border-red-950/70 p-1 text-red-300 transition-colors hover:bg-red-950/40"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             );
                           })}
                         </div>

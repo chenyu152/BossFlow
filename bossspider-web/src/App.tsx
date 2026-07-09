@@ -28,9 +28,8 @@ import { Resume } from './pages/Resume';
 import { Rules } from './pages/Rules';
 import { Scope } from './pages/Scope';
 import { Story } from './pages/Story';
-import type { InterviewStory, ResumeNavigationTarget, Tab } from './types';
+import type { ResumeNavigationTarget, Tab } from './types';
 
-const STORY_DRAFT_TRANSFER_KEY = 'bossspider:story-draft-transfer';
 type NavStage = 'discovery' | 'evaluation' | 'materials' | 'interview';
 
 function NavSection({
@@ -73,7 +72,6 @@ export default function App() {
   const { t, i18n } = useAppTranslation();
   const [activeTab, setActiveTab] = useState<Tab>('Dashboard');
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
-  const [storyDraftSeed, setStoryDraftSeed] = useState<InterviewStory | null>(null);
   const [selectedInterviewKey, setSelectedInterviewKey] = useState('');
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [selectedPipelineKey, setSelectedPipelineKey] = useState('');
@@ -373,10 +371,8 @@ export default function App() {
                 onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
                 onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
                 onPromoteStoryDraft={boss.promoteInterviewStoryDraft}
-                incomingDraft={storyDraftSeed}
                 selectedDraftId={selectedStoryDraftId}
                 targetRequestId={dashboardTargetRequestId}
-                onIncomingDraftConsumed={() => setStoryDraftSeed(null)}
               />
             )}
             {activeTab === 'Interview' && (
@@ -387,10 +383,12 @@ export default function App() {
                 onSelectedKeyChange={setSelectedInterviewKey}
                 onRefresh={() => { void boss.refreshInterviewItems(); }}
                 onLoadStoryBank={boss.loadInterviewStoryBank}
+                onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
+                onSaveStoryDrafts={boss.saveInterviewStoryDrafts}
                 onOpenStory={() => setActiveTabStable('Story')}
-                onCreateStoryDraft={(draft) => {
-                  window.sessionStorage.setItem(STORY_DRAFT_TRANSFER_KEY, JSON.stringify(draft));
-                  setStoryDraftSeed(draft);
+                onOpenStoryDraft={(draftId) => {
+                  setDashboardTargetRequestId((value) => value + 1);
+                  setSelectedStoryDraftId(draftId);
                   setActiveTabStable('Story');
                 }}
                 onLoadPrep={boss.loadInterviewPrep}
