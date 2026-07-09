@@ -136,12 +136,14 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 DEEPSEEK_MODEL=deepseek-chat
 ```
 
-### 3. 创建基础简历（可选但推荐）
+### 3. 创建基础简历（评分和材料生成推荐先完成）
 
 ```bash
 cp cv.example.md cv.md
 # 编辑 cv.md，填入你的真实经历
 ```
+
+`cv.md` 是粗评分、LLM 精评、定制简历和面试准备的基础事实源。Web 总览页会检查它是否存在，以及是否包含工作年限、学历、技能栈、项目经历等关键信息。
 
 ### 4. 安装依赖
 

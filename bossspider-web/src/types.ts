@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Story' | 'Interview' | 'Logs';
+export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Story' | 'Interview' | 'Logs';
 
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'failed';
 
@@ -12,6 +12,7 @@ export type ConfigPayload = {
   keywordsText: string;
   citiesText: string;
   catRulesText: string;
+  scoringRulesText: string;
   relevanceText: string;
   blacklistText: string;
   maxPages: number;
@@ -206,6 +207,14 @@ export type ScorePipelineResponse = {
   scored: number;
   errors: Array<{ sourceKey: string; error: string }>;
   pipeline: PipelineResponse;
+};
+
+export type ScoringKeywordSuggestionResponse = {
+  ok: boolean;
+  project: string;
+  sampleCount: number;
+  keywords: string[];
+  rationale: string;
 };
 
 export type ScoreJobsResponse = {
@@ -447,3 +456,23 @@ export type JobLiveStatusUpdateRequest = {
 };
 
 export type ConfigPatch = Partial<ConfigPayload>;
+
+export type CvStatusResponse = {
+  ok: boolean;
+  exists: boolean;
+  path: string;
+  examplePath: string;
+  isEmpty: boolean;
+  checks: {
+    hasContent: boolean;
+    hasYears: boolean;
+    hasEducation: boolean;
+    hasSkills: boolean;
+    hasProjects: boolean;
+    hasExperience: boolean;
+  };
+  missing: string[];
+  readyForScoring: boolean;
+  readyForMaterials: boolean;
+  canCreateFromTemplate: boolean;
+};

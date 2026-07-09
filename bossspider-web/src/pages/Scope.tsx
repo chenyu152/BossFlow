@@ -4,7 +4,7 @@ import { useAppTranslation } from '../i18n';
 import { hasCity, toggleCity } from '../utils';
 import type { ConfigPatch, ConfigPayload } from '../types';
 
-export function Scope({ config, updateConfig, onSave, onReload }: { config: ConfigPayload; updateConfig: (patch: ConfigPatch) => void; onSave: () => void; onReload: () => void }) {
+export function Scope({ config, updateConfig, onSave, onReload }: { config: ConfigPayload; updateConfig: (patch: ConfigPatch) => void; onSave: () => void | Promise<unknown>; onReload: () => void }) {
   const { t } = useAppTranslation();
   return (
     <div className="h-full flex flex-col">
@@ -12,7 +12,7 @@ export function Scope({ config, updateConfig, onSave, onReload }: { config: Conf
         <h1 className="text-lg font-semibold text-zinc-100">{t('scope.title')}</h1>
         <div className="flex gap-3">
           <button onClick={onReload} className="px-4 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 rounded transition-colors">{t('scope.reloadConfig')}</button>
-          <button onClick={onSave} className="px-4 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors">{t('scope.saveConfig')}</button>
+          <button onClick={() => void onSave()} className="px-4 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors">{t('scope.saveConfig')}</button>
         </div>
       </div>
 

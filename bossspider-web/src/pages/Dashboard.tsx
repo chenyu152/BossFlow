@@ -18,10 +18,12 @@ import {
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
 import { STRATEGIES } from '../constants';
+import { bossApi } from '../api';
 import { OptionToggle } from '../components/OptionToggle';
 import { StrategyCard } from '../components/StrategyCard';
 import type {
   ConfigPayload,
+  CvStatusResponse,
   InterviewStoryDraft,
   InterviewStoryDraftsResponse,
   Job,
@@ -48,6 +50,15 @@ type DashboardTask = {
   tab: Tab;
   action: string;
   target?: DashboardTaskTarget;
+};
+
+const cvMissingLabels: Record<string, string> = {
+  hasContent: 'cvGuide.missingContent',
+  hasYears: 'cvGuide.missingYears',
+  hasEducation: 'cvGuide.missingEducation',
+  hasSkills: 'cvGuide.missingSkills',
+  hasProjects: 'cvGuide.missingProjects',
+  hasExperience: 'cvGuide.missingExperience',
 };
 
 const toneClasses: Record<TaskTone, { border: string; icon: string; pill: string }> = {
@@ -202,6 +213,9 @@ export function Dashboard({
   const allPipelineItems = useMemo(() => [...pending, ...processed], [pending, processed]);
   const [storyDrafts, setStoryDrafts] = useState<InterviewStoryDraft[]>([]);
   const [storyDraftsLoading, setStoryDraftsLoading] = useState(false);
+  const [cvStatus, setCvStatus] = useState<CvStatusResponse | null>(null);
+  const [cvLoading, setCvLoading] = useState(false);
+  const [cvError, setCvError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +233,34 @@ export function Dashboard({
       cancelled = true;
     };
   }, [onLoadStoryDrafts]);
+
+  const loadCvStatus = async () => {
+    setCvLoading(true);
+    setCvError('');
+    try {
+      setCvStatus(await bossApi.getCvStatus());
+    } catch (error) {
+      setCvError((error as Error).message);
+    } finally {
+      setCvLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCvStatus();
+  }, []);
+
+  const createCvFromTemplate = async () => {
+    setCvLoading(true);
+    setCvError('');
+    try {
+      setCvStatus(await bossApi.createCvFromTemplate());
+    } catch (error) {
+      setCvError((error as Error).message);
+    } finally {
+      setCvLoading(false);
+    }
+  };
 
   const todayJobs = useMemo(
     () => jobs
@@ -484,6 +526,64 @@ export function Dashboard({
         </div>
 
         <aside className="space-y-5">
+          <section className={`rounded-md border bg-zinc-950 ${
+            cvStatus?.readyForScoring && cvStatus?.readyForMaterials
+              ? 'border-emerald-900/60'
+              : 'border-amber-900/60'
+          }`}>
+            <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
+                <FileText size={14} className={cvStatus?.readyForScoring ? 'text-emerald-400' : 'text-amber-400'} />
+                {t('cvGuide.title')}
+              </h3>
+              <button onClick={() => void loadCvStatus()} disabled={cvLoading} className="text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50">
+                {cvLoading ? t('cvGuide.checking') : t('cvGuide.refresh')}
+              </button>
+            </div>
+            <div className="space-y-3 p-4 text-sm">
+              {cvError && <div className="rounded border border-red-900/60 bg-red-950/20 p-2 text-xs text-red-300">{cvError}</div>}
+              {!cvStatus ? (
+                <div className="text-zinc-500">{cvLoading ? t('cvGuide.checking') : t('cvGuide.notLoaded')}</div>
+              ) : !cvStatus.exists ? (
+                <>
+                  <div className="font-medium text-amber-200">{t('cvGuide.missingTitle')}</div>
+                  <p className="text-xs leading-relaxed text-zinc-400">{t('cvGuide.missingBody')}</p>
+                  <button
+                    onClick={() => void createCvFromTemplate()}
+                    disabled={cvLoading || !cvStatus.canCreateFromTemplate}
+                    className="inline-flex items-center gap-2 rounded border border-amber-800 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <FileText size={13} />
+                    {t('cvGuide.createFromTemplate')}
+                  </button>
+                  <div className="break-all text-[10px] text-zinc-600">{cvStatus.path}</div>
+                </>
+              ) : cvStatus.readyForScoring && cvStatus.readyForMaterials ? (
+                <>
+                  <div className="flex items-center gap-2 font-medium text-emerald-300">
+                    <CheckCircle2 size={14} />
+                    {t('cvGuide.readyTitle')}
+                  </div>
+                  <p className="text-xs leading-relaxed text-zinc-400">{t('cvGuide.readyBody')}</p>
+                  <div className="break-all text-[10px] text-zinc-600">{cvStatus.path}</div>
+                </>
+              ) : (
+                <>
+                  <div className="font-medium text-amber-200">{t('cvGuide.incompleteTitle')}</div>
+                  <p className="text-xs leading-relaxed text-zinc-400">{t('cvGuide.incompleteBody')}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {cvStatus.missing.map((key) => (
+                      <span key={key} className="rounded border border-amber-900/60 bg-amber-950/20 px-2 py-0.5 text-[10px] text-amber-200">
+                        {t(cvMissingLabels[key] || key)}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="break-all text-[10px] text-zinc-600">{cvStatus.path}</div>
+                </>
+              )}
+            </div>
+          </section>
+
           <section className="rounded-md border border-zinc-800 bg-zinc-950">
             <div className="border-b border-zinc-800 px-4 py-3">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">

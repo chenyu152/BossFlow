@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode, useCallback, useState } from 'react';
+import { lazy, Suspense, type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAppTranslation } from './i18n';
 import {
   Briefcase,
@@ -7,13 +7,14 @@ import {
   ChevronRight,
   Crosshair,
   Database,
-  FileJson,
   FileText,
   Inbox,
   MessageSquareText,
   LayoutDashboard,
   Play,
+  SlidersHorizontal,
   Square,
+  Tags,
   Terminal,
 } from 'lucide-react';
 import { NavItem } from './components/NavItem';
@@ -99,11 +100,30 @@ export default function App() {
   const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
 
+  useEffect(() => {
+    if (!boss.isConfigDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [boss.isConfigDirty]);
+
+  const confirmUnsavedConfig = useCallback(() => (
+    !boss.isConfigDirty || window.confirm(t('notices.unsavedConfigLeaveConfirm'))
+  ), [boss.isConfigDirty, t]);
+
+  const navigateToTab = useCallback((tab: Tab) => {
+    if (tab === activeTab || confirmUnsavedConfig()) setActiveTab(tab);
+  }, [activeTab, confirmUnsavedConfig]);
+
   const setActiveTabStable = useCallback((tab: Tab) => {
-    setActiveTab(tab);
-  }, []);
+    navigateToTab(tab);
+  }, [navigateToTab]);
 
   const openDashboardTask = useCallback((tab: Tab, target?: DashboardTaskTarget) => {
+    if (tab !== activeTab && !confirmUnsavedConfig()) return;
     setDashboardTargetRequestId((value) => value + 1);
     setSelectedJobId(tab === 'Jobs' ? target?.jobId ?? null : null);
     setSelectedPipelineKey(tab === 'Pipeline' ? target?.sourceKey ?? '' : '');
@@ -112,25 +132,29 @@ export default function App() {
     setSelectedStoryDraftId(tab === 'Story' ? target?.draftId ?? '' : '');
     if (tab === 'Interview' && target?.sourceKey) setSelectedInterviewKey(target.sourceKey);
     setActiveTab(tab);
-  }, []);
+  }, [activeTab, confirmUnsavedConfig]);
 
   const toggleStage = (stage: NavStage) => {
     setExpandedStages((current) => ({ ...current, [stage]: !current[stage] }));
   };
 
   const startCrawl = async () => {
+    if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
     if (await boss.startCrawl()) setActiveTab('Logs');
   };
 
   const startLogin = async () => {
+    if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
     if (await boss.startLogin()) setActiveTab('Logs');
   };
 
   const processPartial = async () => {
+    if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
     if (await boss.processPartial()) setActiveTab('Logs');
   };
 
   const stopTask = async () => {
+    if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
     if (await boss.stopTask()) setActiveTab('Logs');
   };
 
@@ -148,20 +172,21 @@ export default function App() {
 
         <nav className="flex-1 space-y-2 overflow-y-auto p-3">
           <div className="space-y-1">
-            <NavItem icon={<LayoutDashboard size={16} />} label={t('nav.dashboard')} active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} />
+            <NavItem icon={<LayoutDashboard size={16} />} label={t('nav.dashboard')} active={activeTab === 'Dashboard'} onClick={() => navigateToTab('Dashboard')} />
           </div>
 
           <NavSection
             icon={<Crosshair size={16} />}
             label={t('nav.stages.discovery')}
-            active={activeTab === 'Scope' || activeTab === 'Rules' || activeTab === 'Jobs' || activeTab === 'Logs'}
+            active={activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'ScoringRules' || activeTab === 'Jobs' || activeTab === 'Logs'}
             expanded={expandedStages.discovery}
             onToggle={() => toggleStage('discovery')}
           >
-            <NavItem icon={<Crosshair size={16} />} label={t('nav.scope')} active={activeTab === 'Scope'} onClick={() => setActiveTab('Scope')} />
-            <NavItem icon={<FileJson size={16} />} label={t('nav.rules')} active={activeTab === 'Rules'} onClick={() => setActiveTab('Rules')} />
-            <NavItem icon={<Briefcase size={16} />} label={t('nav.jobs')} active={activeTab === 'Jobs'} onClick={() => setActiveTab('Jobs')} />
-            <NavItem icon={<Terminal size={16} />} label={t('nav.logs')} active={activeTab === 'Logs'} onClick={() => setActiveTab('Logs')} />
+            <NavItem icon={<Crosshair size={16} />} label={t('nav.scope')} active={activeTab === 'Scope'} onClick={() => navigateToTab('Scope')} />
+            <NavItem icon={<Tags size={16} />} label={t('nav.matchingRules')} active={activeTab === 'MatchingRules'} onClick={() => navigateToTab('MatchingRules')} />
+            <NavItem icon={<SlidersHorizontal size={16} />} label={t('nav.scoringRules')} active={activeTab === 'ScoringRules'} onClick={() => navigateToTab('ScoringRules')} />
+            <NavItem icon={<Briefcase size={16} />} label={t('nav.jobs')} active={activeTab === 'Jobs'} onClick={() => navigateToTab('Jobs')} />
+            <NavItem icon={<Terminal size={16} />} label={t('nav.logs')} active={activeTab === 'Logs'} onClick={() => navigateToTab('Logs')} />
           </NavSection>
 
           <NavSection
@@ -171,7 +196,7 @@ export default function App() {
             expanded={expandedStages.evaluation}
             onToggle={() => toggleStage('evaluation')}
           >
-            <NavItem icon={<Inbox size={16} />} label={t('nav.pipeline')} active={activeTab === 'Pipeline'} onClick={() => setActiveTab('Pipeline')} />
+            <NavItem icon={<Inbox size={16} />} label={t('nav.pipeline')} active={activeTab === 'Pipeline'} onClick={() => navigateToTab('Pipeline')} />
           </NavSection>
 
           <NavSection
@@ -181,7 +206,7 @@ export default function App() {
             expanded={expandedStages.materials}
             onToggle={() => toggleStage('materials')}
           >
-            <NavItem icon={<FileText size={16} />} label={t('nav.resume')} active={activeTab === 'Resume'} onClick={() => setActiveTab('Resume')} />
+            <NavItem icon={<FileText size={16} />} label={t('nav.resume')} active={activeTab === 'Resume'} onClick={() => navigateToTab('Resume')} />
           </NavSection>
 
           <NavSection
@@ -191,8 +216,8 @@ export default function App() {
             expanded={expandedStages.interview}
             onToggle={() => toggleStage('interview')}
           >
-            <NavItem icon={<MessageSquareText size={16} />} label={t('nav.interview')} active={activeTab === 'Interview'} onClick={() => setActiveTab('Interview')} />
-            <NavItem icon={<BookOpenText size={16} />} label={t('nav.story')} active={activeTab === 'Story'} onClick={() => setActiveTab('Story')} />
+            <NavItem icon={<MessageSquareText size={16} />} label={t('nav.interview')} active={activeTab === 'Interview'} onClick={() => navigateToTab('Interview')} />
+            <NavItem icon={<BookOpenText size={16} />} label={t('nav.story')} active={activeTab === 'Story'} onClick={() => navigateToTab('Story')} />
           </NavSection>
         </nav>
 
@@ -208,7 +233,9 @@ export default function App() {
               <span className="text-xs text-zinc-500 uppercase font-medium">{t('header.project')}</span>
               <select
                 value={boss.project}
-                onChange={(event) => boss.loadConfig(event.target.value)}
+                onChange={(event) => {
+                  if (confirmUnsavedConfig()) void boss.loadConfig(event.target.value);
+                }}
                 className="bg-zinc-900 border border-zinc-800 text-sm rounded px-2 py-1 outline-none focus:border-indigo-500"
               >
                 {boss.projects.map((name) => <option value={name} key={name}>{name}</option>)}
@@ -248,7 +275,7 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <button onClick={() => setActiveTab('Logs')} className="text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors">
+            <button onClick={() => navigateToTab('Logs')} className="text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors">
               {t('header.viewLogs')}
             </button>
             {!boss.isRunning ? (
@@ -287,7 +314,7 @@ export default function App() {
                   setHeadlessMode={boss.setHeadlessMode}
                   autoSqlite={boss.autoSqlite}
                   setAutoSqlite={boss.setAutoSqlite}
-                  setActiveTab={setActiveTab}
+                  setActiveTab={navigateToTab}
                   onOpenTask={openDashboardTask}
                   recentLogs={boss.recentLogs}
                   onLogin={startLogin}
@@ -300,11 +327,16 @@ export default function App() {
                   config={boss.config}
                   updateConfig={boss.updateConfig}
                   onSave={boss.saveConfig}
-                  onReload={() => boss.config && boss.loadConfig(boss.config.project)}
+                  onReload={() => {
+                    if (boss.config && confirmUnsavedConfig()) void boss.loadConfig(boss.config.project);
+                  }}
                 />
               )}
-              {activeTab === 'Rules' && boss.config && (
-                <Rules config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
+              {activeTab === 'MatchingRules' && boss.config && (
+                <Rules mode="matching" config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
+              )}
+              {activeTab === 'ScoringRules' && boss.config && (
+                <Rules mode="scoring" config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
               )}
               {activeTab === 'Jobs' && (
                 <Jobs
@@ -323,7 +355,7 @@ export default function App() {
                   selectedJobId={selectedJobId}
                   targetRequestId={dashboardTargetRequestId}
                   onAddToPipeline={async (jobs) => {
-                    if (await boss.addJobsToPipeline(jobs.map((job) => job.id))) setActiveTab('Pipeline');
+                    if (await boss.addJobsToPipeline(jobs.map((job) => job.id))) navigateToTab('Pipeline');
                   }}
                 />
               )}

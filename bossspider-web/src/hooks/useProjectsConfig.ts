@@ -15,6 +15,7 @@ export function useProjectsConfig({
   const [project, setProject] = useState('agent');
   const [config, setConfig] = useState<ConfigPayload | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isConfigDirty, setIsConfigDirty] = useState(false);
   const projectRef = useRef(project);
   const tRef = useRef(t);
 
@@ -31,6 +32,7 @@ export function useProjectsConfig({
     try {
       const data = await bossApi.getConfig(targetProject ?? projectRef.current);
       setConfig(data);
+      setIsConfigDirty(false);
       setProject(data.project);
       projectRef.current = data.project;
       await loadInitialResources(data.project);
@@ -53,31 +55,37 @@ export function useProjectsConfig({
 
   const updateConfig = useCallback((patch: ConfigPatch) => {
     setConfig((current) => current ? { ...current, ...patch } : current);
+    setIsConfigDirty(true);
   }, []);
 
-  const requestBody = useCallback(() => {
+  const requestBody = useCallback((patch?: ConfigPatch) => {
     if (!config) throw new Error(t('notices.configNotLoaded'));
+    const nextConfig = patch ? { ...config, ...patch } : config;
     return {
-      project: config.project,
-      keywordsText: config.keywordsText,
-      citiesText: config.citiesText,
-      maxPages: config.maxPages,
-      scrollTarget: config.scrollTarget,
-      scrollMax: config.scrollMax,
-      minSalary: config.minSalary,
-      catRulesText: config.catRulesText,
-      relevanceText: config.relevanceText,
-      blacklistText: config.blacklistText,
+      project: nextConfig.project,
+      keywordsText: nextConfig.keywordsText,
+      citiesText: nextConfig.citiesText,
+      maxPages: nextConfig.maxPages,
+      scrollTarget: nextConfig.scrollTarget,
+      scrollMax: nextConfig.scrollMax,
+      minSalary: nextConfig.minSalary,
+      catRulesText: nextConfig.catRulesText,
+      scoringRulesText: nextConfig.scoringRulesText,
+      relevanceText: nextConfig.relevanceText,
+      blacklistText: nextConfig.blacklistText,
     };
   }, [config, t]);
 
-  const saveConfig = useCallback(async () => {
+  const saveConfig = useCallback(async (patch?: ConfigPatch) => {
     try {
-      const saved = await bossApi.saveConfig(requestBody());
+      const saved = await bossApi.saveConfig(requestBody(patch));
       setConfig(saved);
+      setIsConfigDirty(false);
       showNotice(t('notices.configSaved'));
+      return saved;
     } catch (error) {
       showNotice(t('notices.saveFailed', { error: (error as Error).message }));
+      return null;
     }
   }, [requestBody, showNotice, t]);
 
@@ -86,6 +94,7 @@ export function useProjectsConfig({
     project,
     config,
     loading,
+    isConfigDirty,
     loadConfig,
     updateConfig,
     requestBody,

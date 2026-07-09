@@ -15,6 +15,7 @@ class ConfigUpdate(BaseModel):
     scrollMax: int = Field(default=60, ge=1, le=1000)
     minSalary: float = Field(default=MIN_AVG_SALARY_K, ge=0)
     catRulesText: str = "{}"
+    scoringRulesText: str = "{}"
     relevanceText: str = ""
     blacklistText: str = ""
 

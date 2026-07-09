@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from backend.schemas.config import ConfigUpdate
+from backend.services.scoring_config import DEFAULT_SCORING_CONFIG, normalize_scoring_config
 from backend.storage.paths import BASE_DIR, PROJECTS_DIR
 from crawler.boss import DEFAULT_PROFILE_DIR, load_config
 from crawler.config import DEFAULT_SCRAPE_LIMITS, save_config
@@ -130,6 +131,11 @@ def config_payload(project_dir: Path) -> Dict[str, Any]:
         "keywordsText": "\n".join(config.get("keywords") or []),
         "citiesText": cities_to_text(config.get("cities") or {}),
         "catRulesText": json.dumps(config.get("cat_rules") or {}, ensure_ascii=False, indent=2),
+        "scoringRulesText": json.dumps(
+            normalize_scoring_config(config.get("scoring") or DEFAULT_SCORING_CONFIG),
+            ensure_ascii=False,
+            indent=2,
+        ),
         "relevanceText": "\n".join(config.get("relevance_keywords") or []),
         "blacklistText": "\n".join(config.get("blacklist_keywords") or []),
         "maxPages": int(limits.get("max_pages", 3)),
@@ -162,6 +168,13 @@ def save_form_config(payload: ConfigUpdate) -> tuple[Path, Dict[str, Any], Dict[
     if not isinstance(cat_rules, dict):
         raise HTTPException(status_code=400, detail="分类规则必须是 JSON 对象")
 
+    try:
+        scoring_rules = json.loads(payload.scoringRulesText or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"评分规则 JSON 格式错误: {exc}") from exc
+    if not isinstance(scoring_rules, dict):
+        raise HTTPException(status_code=400, detail="评分规则必须是 JSON 对象")
+
     old_config = load_config(str(project_dir))
     old_limits = DEFAULT_SCRAPE_LIMITS.copy()
     old_limits.update(old_config.get("scrape_limits") or {})
@@ -178,6 +191,7 @@ def save_form_config(payload: ConfigUpdate) -> tuple[Path, Dict[str, Any], Dict[
     }
     config["min_salary"] = float(payload.minSalary or MIN_AVG_SALARY_K)
     config["cat_rules"] = cat_rules
+    config["scoring"] = normalize_scoring_config(scoring_rules)
     config["relevance_keywords"] = split_lines(payload.relevanceText)
     config["blacklist_keywords"] = split_lines(payload.blacklistText)
     save_config(config, str(project_dir))

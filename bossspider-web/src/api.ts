@@ -1,5 +1,6 @@
 import type {
   ConfigPayload,
+  CvStatusResponse,
   EvaluatePipelineResponse,
   GreetingDraftResponse,
   GreetingDraftStatus,
@@ -20,6 +21,7 @@ import type {
   ResumeDraftResponse,
   ResumeItemsResponse,
   ResumeSuggestionResponse,
+  ScoringKeywordSuggestionResponse,
   ScoreJobsResponse,
   ScorePipelineResponse,
   TaskStatusResponse,
@@ -61,6 +63,14 @@ export const bossApi = {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  },
+
+  getCvStatus() {
+    return request<CvStatusResponse>('/api/cv/status');
+  },
+
+  createCvFromTemplate() {
+    return request<CvStatusResponse>('/api/cv/from-template', { method: 'POST' });
   },
 
   getJobs(project: string, search = '', limit = 20000) {
@@ -105,6 +115,13 @@ export const bossApi = {
     return request<ScoreJobsResponse>('/api/jobs/score', {
       method: 'POST',
       body: JSON.stringify({ project, jobIds }),
+    });
+  },
+
+  generateScoringKeywordSuggestions(project: string, limit = 80) {
+    return request<ScoringKeywordSuggestionResponse>('/api/scoring/keyword-suggestions', {
+      method: 'POST',
+      body: JSON.stringify({ project, limit }),
     });
   },
 

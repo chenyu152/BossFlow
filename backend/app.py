@@ -12,7 +12,9 @@ from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest
 from backend.schemas.jobs import JobLiveStatusUpdateRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeSuggestionRequest
+from backend.schemas.scoring import ScoringKeywordSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
+from backend.services.cv_service import create_cv_from_template, cv_status
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
 from backend.services.greeting_service import read_greeting_draft, save_greeting_draft
 from backend.services.interview_service import (
@@ -38,6 +40,7 @@ from backend.services.project_service import (
     stats_for_project,
 )
 from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion
+from backend.services.scoring_suggestion_service import suggest_scoring_keywords
 from backend.services.task_service import TaskManager
 from crawler.boss import load_config
 
@@ -76,6 +79,16 @@ def get_stats(project: Optional[str] = None):
     return stats_for_project(project_dir, config)
 
 
+@app.get("/api/cv/status")
+def get_cv_status():
+    return cv_status()
+
+
+@app.post("/api/cv/from-template")
+def create_cv_template():
+    return create_cv_from_template()
+
+
 @app.get("/api/jobs")
 def get_jobs(
     project: Optional[str] = None,
@@ -100,6 +113,11 @@ def get_job_item(project: str, jobId: int):
 @app.post("/api/jobs/score")
 def score_job_rows(payload: ScoreJobsRequest):
     return score_jobs(payload.project, payload.jobIds)
+
+
+@app.post("/api/scoring/keyword-suggestions")
+def create_scoring_keyword_suggestions(payload: ScoringKeywordSuggestionRequest):
+    return suggest_scoring_keywords(payload.project, payload.limit)
 
 
 @app.post("/api/jobs/live-status/update")
