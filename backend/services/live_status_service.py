@@ -92,7 +92,7 @@ def _interactive_verify(
     stop_event: threading.Event,
     task_manager: TaskManager,
 ) -> CheckResult | None:
-    task_manager.append_log("检测到 BOSS 安全验证/登录跳转，已打开可见浏览器窗口。请手动完成验证，任务会自动重试当前岗位。")
+    task_manager.append_log("检测到 BOSS 安全验证/登录跳转，已打开可见浏览器窗口。请手动完成验证，任务会自动重试当前岗位核验。")
     browser: BrowserChecker | None = None
     deadline = time.time() + payload.verificationTimeoutSeconds
     try:
@@ -123,7 +123,7 @@ def _interactive_verify(
                 time.sleep(2)
                 continue
             if not needs_manual_verification(result):
-                task_manager.append_log("安全验证已通过，继续更新招聘状态")
+                task_manager.append_log("安全验证已通过，继续核验岗位")
                 return result
             remaining = int(deadline - time.time())
             task_manager.append_log(f"等待手动验证中，当前状态 {result.raw}，剩余约 {max(0, remaining)} 秒")
@@ -160,7 +160,7 @@ def start_live_status_update_task(
             rows = _load_target_jobs(conn, payload)
             effective_workers = 1 if payload.interactiveOnCaptcha else payload.workers
             task_manager.append_log(
-                f"招聘状态更新开始：目标 {len(rows)} 个，workers={effective_workers}，"
+                f"岗位核验开始：目标 {len(rows)} 个，workers={effective_workers}，"
                 f"skipClosed={payload.skipClosed}，mode={'普通Chrome最小化' if payload.headless else '普通Chrome可见'}"
             )
             if payload.interactiveOnCaptcha and payload.workers > 1:
@@ -223,7 +223,7 @@ def start_live_status_update_task(
                         submit_next()
 
             task_manager.append_log(
-                "招聘状态更新结束："
+                "岗位核验结束："
                 f"open={stats.get('open', 0)} closed={stats.get('closed', 0)} "
                 f"unknown={stats.get('unknown', 0)} captcha={stats.get('captcha', 0)}"
             )

@@ -233,8 +233,8 @@ python -m crawler.boss --config projects/agent --process-partial
 - [x] 简历修改建议 + 定制简历草稿
 - [x] 面试准备文档 + STAR+R 故事库
 - [x] 中英文切换
-- [ ] Pipeline `schemaVersion` + 文件锁 + 迁移入口
-- [ ] 拆分候选推进状态和岗位招聘核验状态
+- [x] Pipeline `schemaVersion` + 文件锁 + 迁移入口
+- [x] 拆分候选推进状态和岗位招聘核验状态
 - [ ] LLM 建议 evidence map：`claimId` / `risk` / `sources` / `userDecision`
 - [ ] 岗位档案 API 和右侧工作区聚合
 - [ ] 自由素材优先的故事库

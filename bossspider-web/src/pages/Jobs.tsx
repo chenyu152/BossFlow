@@ -5,6 +5,12 @@ import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
 import type { Job } from '../types';
 
+function parseTime(value?: string) {
+  if (!value) return 0;
+  const parsed = Date.parse(value.replace(' ', 'T'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function Jobs({
   jobs,
   total,
@@ -48,7 +54,7 @@ export function Jobs({
   const [scoreFilter, setScoreFilter] = useState('all');
   const [experienceFilter, setExperienceFilter] = useState('all');
   const [educationFilter, setEducationFilter] = useState('all');
-  const [liveStatusFilter, setLiveStatusFilter] = useState('all');
+  const [updateTimeSort, setUpdateTimeSort] = useState<'last_seen_desc' | 'last_seen_asc' | 'default'>('last_seen_desc');
   const [minAvgFilter, setMinAvgFilter] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const dragStateRef = useRef<{
@@ -82,7 +88,7 @@ export function Jobs({
     || scoreFilter !== 'all'
     || experienceFilter !== 'all'
     || educationFilter !== 'all'
-    || liveStatusFilter !== 'all'
+    || updateTimeSort !== 'last_seen_desc'
     || Boolean(minAvgFilter);
   const activeFilterCount = [
     cityFilter !== 'all',
@@ -90,9 +96,27 @@ export function Jobs({
     scoreFilter !== 'all',
     experienceFilter !== 'all',
     educationFilter !== 'all',
-    liveStatusFilter !== 'all',
+    updateTimeSort !== 'last_seen_desc',
     Boolean(minAvgFilter),
   ].filter(Boolean).length;
+
+  const observedStatusOf = (job: Job) => {
+    if (job.recruitmentObservationStatus) return job.recruitmentObservationStatus;
+    if (job.liveStatus === 'open') return 'open_observed';
+    if (job.liveStatus === 'closed') return 'closed_observed';
+    if (job.liveStatusRaw === 'login_required') return 'login_required';
+    if (job.liveStatusRaw === 'captcha_required') return 'verification_required';
+    if (job.liveStatusRaw === 'security_check') return 'security_check';
+    if (job.liveStatus === 'unknown' || job.liveCheckedAt) return 'unknown_observed';
+    return 'not_checked';
+  };
+
+  const shortTime = (value?: string) => {
+    if (!value) return '';
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    if (match) return `${match[2]}-${match[3]} ${match[4]}:${match[5]}`;
+    return value;
+  };
 
   const filteredJobs = useMemo(() => {
     const minAvg = Number(minAvgFilter);
@@ -102,8 +126,6 @@ export function Jobs({
       if (categoryFilter !== 'all' && !categories.includes(categoryFilter)) return false;
       if (experienceFilter !== 'all' && (job.experienceRisk || 'unknown') !== experienceFilter) return false;
       if (educationFilter !== 'all' && (job.educationRisk || 'unknown') !== educationFilter) return false;
-      const currentLiveStatus = job.liveStatus || (job.liveCheckedAt ? 'unknown' : 'unchecked');
-      if (liveStatusFilter !== 'all' && currentLiveStatus !== liveStatusFilter) return false;
       if (minAvgFilter && Number.isFinite(minAvg) && job.avg < minAvg) return false;
       if (scoreFilter === 'unscored' && job.score) return false;
       if (scoreFilter === 'high' && (job.score ?? 0) < 4.0) return false;
@@ -111,12 +133,14 @@ export function Jobs({
       if (scoreFilter === 'weak' && ((job.score ?? 0) >= 3.5 || !job.score)) return false;
       return true;
     });
-  }, [categoryFilter, cityFilter, educationFilter, experienceFilter, jobs, liveStatusFilter, minAvgFilter, scoreFilter]);
+  }, [categoryFilter, cityFilter, educationFilter, experienceFilter, jobs, minAvgFilter, scoreFilter]);
 
   const displayJobs = useMemo(() => {
-    if (!sortByScore) return filteredJobs;
-    return [...filteredJobs].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
-  }, [filteredJobs, sortByScore]);
+    if (sortByScore) return [...filteredJobs].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    if (updateTimeSort === 'last_seen_desc') return [...filteredJobs].sort((a, b) => parseTime(b.lastSeen) - parseTime(a.lastSeen));
+    if (updateTimeSort === 'last_seen_asc') return [...filteredJobs].sort((a, b) => parseTime(a.lastSeen) - parseTime(b.lastSeen));
+    return filteredJobs;
+  }, [filteredJobs, sortByScore, updateTimeSort]);
   const totalPages = Math.max(1, Math.ceil(displayJobs.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
@@ -143,7 +167,7 @@ export function Jobs({
     setScoreFilter('all');
     setExperienceFilter('all');
     setEducationFilter('all');
-    setLiveStatusFilter('all');
+    setUpdateTimeSort('last_seen_desc');
     setMinAvgFilter('');
     setSelectedJob(job);
   }, [jobs, selectedJobId, targetRequestId]);
@@ -169,7 +193,7 @@ export function Jobs({
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortByScore, pageSize, cityFilter, categoryFilter, scoreFilter, experienceFilter, educationFilter, liveStatusFilter, minAvgFilter]);
+  }, [search, sortByScore, pageSize, cityFilter, categoryFilter, scoreFilter, experienceFilter, educationFilter, updateTimeSort, minAvgFilter]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
@@ -217,7 +241,7 @@ export function Jobs({
     setScoreFilter('all');
     setExperienceFilter('all');
     setEducationFilter('all');
-    setLiveStatusFilter('all');
+    setUpdateTimeSort('last_seen_desc');
     setMinAvgFilter('');
   };
 
@@ -285,17 +309,27 @@ export function Jobs({
   };
 
   const liveStatusText = (job: Job) => {
-    if (job.liveStatus === 'open') return t('jobs.liveOpen');
-    if (job.liveStatus === 'closed') return t('jobs.liveClosed');
-    if (job.liveStatus === 'unknown' || job.liveCheckedAt) return t('jobs.liveUnknown');
-    return t('jobs.liveUnchecked');
+    const status = observedStatusOf(job);
+    if (status === 'closed_observed') return t('jobs.liveClosed');
+    const seenAt = shortTime(job.lastSeen);
+    return seenAt ? t('jobs.liveRecentlySeenWithTime', { time: seenAt }) : t('jobs.liveRecentlySeen');
   };
 
   const liveStatusClass = (job: Job) => {
-    if (job.liveStatus === 'open') return 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300';
-    if (job.liveStatus === 'closed') return 'border-red-900/70 bg-red-950/40 text-red-300';
-    if (job.liveStatus === 'unknown' || job.liveCheckedAt) return 'border-amber-900/70 bg-amber-950/40 text-amber-300';
+    const status = observedStatusOf(job);
+    if (status === 'closed_observed') return 'border-red-900/70 bg-red-950/40 text-red-300';
+    if (job.lastSeen) return 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300';
     return 'border-zinc-800 bg-zinc-900 text-zinc-500';
+  };
+
+  const liveStatusTitle = (job: Job) => {
+    const observedAt = job.recruitmentObservedAt || job.liveCheckedAt;
+    return [
+      job.lastSeen ? `${t('jobs.lastSeenAt')} ${job.lastSeen}` : '',
+      observedAt ? `${t('jobs.liveCheckedAt')} ${observedAt}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   };
 
   const updateAllLiveStatus = () => {
@@ -460,15 +494,13 @@ export function Jobs({
             <option value="unknown">{t('jobs.eduUnknown')}</option>
           </select>
           <select
-            value={liveStatusFilter}
-            onChange={(event) => setLiveStatusFilter(event.target.value)}
+            value={updateTimeSort}
+            onChange={(event) => setUpdateTimeSort(event.target.value as 'last_seen_desc' | 'last_seen_asc' | 'default')}
             className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
           >
-            <option value="all">{t('jobs.allLiveStatuses')}</option>
-            <option value="unchecked">{t('jobs.liveUnchecked')}</option>
-            <option value="open">{t('jobs.liveOpen')}</option>
-            <option value="closed">{t('jobs.liveClosed')}</option>
-            <option value="unknown">{t('jobs.liveUnknown')}</option>
+            <option value="last_seen_desc">{t('jobs.updateSortNewest')}</option>
+            <option value="last_seen_asc">{t('jobs.updateSortOldest')}</option>
+            <option value="default">{t('jobs.updateSortDefault')}</option>
           </select>
           <input
             type="number"
@@ -617,7 +649,7 @@ export function Jobs({
                   <td className="px-4 py-2 text-zinc-400 truncate">{job.avg.toFixed(1)}</td>
                   <td className="px-4 py-2 text-zinc-400 truncate" title={`${job.exp} / ${job.edu}`}>{job.exp} / {job.edu}</td>
                   <td className="px-4 py-2 truncate">
-                    <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${liveStatusClass(job)}`} title={job.liveCheckedAt || ''}>
+                    <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${liveStatusClass(job)}`} title={liveStatusTitle(job)}>
                       {liveStatusText(job)}
                     </span>
                   </td>
@@ -660,11 +692,11 @@ export function Jobs({
                   <span className="text-xs text-zinc-500">{t('jobs.liveStatus')}</span>
                   <span className={`inline-flex rounded border px-2 py-1 text-xs ${liveStatusClass(selectedJob)}`}>{liveStatusText(selectedJob)}</span>
                 </div>
-                {selectedJob.liveCheckedAt && (
-                  <div className="mt-2 text-xs text-zinc-500">{t('jobs.liveCheckedAt')} {selectedJob.liveCheckedAt}</div>
+                {selectedJob.lastSeen && (
+                  <div className="mt-2 text-xs text-zinc-500">{t('jobs.lastSeenAt')} {selectedJob.lastSeen}</div>
                 )}
-                {selectedJob.liveStatusRaw && (
-                  <div className="mt-1 text-xs text-zinc-500">{t('jobs.liveRaw')} {selectedJob.liveStatusRaw}</div>
+                {(selectedJob.recruitmentObservedAt || selectedJob.liveCheckedAt) && (
+                  <div className="mt-1 text-xs text-zinc-500">{t('jobs.liveCheckedAt')} {selectedJob.recruitmentObservedAt || selectedJob.liveCheckedAt}</div>
                 )}
               </div>
               {selectedJob.score ? (

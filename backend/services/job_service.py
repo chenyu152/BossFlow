@@ -10,6 +10,38 @@ from fastapi.responses import Response
 from backend.services.score_store import apply_scores_to_jobs
 
 
+def _recruitment_observation_status(live_status: str, raw: str, checked_at: str) -> str:
+    if not checked_at:
+        return "not_checked"
+    if live_status == "open":
+        return "open_observed"
+    if live_status == "closed":
+        return "closed_observed"
+    if raw == "login_required":
+        return "login_required"
+    if raw == "captcha_required":
+        return "verification_required"
+    if raw == "security_check":
+        return "security_check"
+    return "unknown_observed"
+
+
+def _live_observation_fields(row: sqlite3.Row) -> dict[str, str]:
+    live_status = row["live_status"] or ""
+    raw = row["live_status_raw"] or ""
+    checked_at = row["live_checked_at"] or ""
+    return {
+        "liveStatus": live_status,
+        "liveStatusRaw": raw,
+        "liveCheckedAt": checked_at,
+        "liveClosedAt": row["live_closed_at"] or "",
+        "liveCheckError": row["live_check_error"] or "",
+        "recruitmentObservationStatus": _recruitment_observation_status(live_status, raw, checked_at),
+        "recruitmentObservationRaw": raw,
+        "recruitmentObservedAt": checked_at,
+    }
+
+
 def query_jobs(project_dir: Path, search: str = "", limit: int = 500, offset: int = 0) -> Dict[str, Any]:
     db_path = project_dir / "jobs_data.db"
     if not db_path.exists() or db_path.stat().st_size == 0:
@@ -58,15 +90,7 @@ def query_jobs(project_dir: Path, search: str = "", limit: int = 500, offset: in
         }
         keys = set(row.keys())
         if "live_status" in keys:
-            item.update(
-                {
-                    "liveStatus": row["live_status"] or "",
-                    "liveStatusRaw": row["live_status_raw"] or "",
-                    "liveCheckedAt": row["live_checked_at"] or "",
-                    "liveClosedAt": row["live_closed_at"] or "",
-                    "liveCheckError": row["live_check_error"] or "",
-                }
-            )
+            item.update(_live_observation_fields(row))
         items.append(item)
     return {"items": apply_scores_to_jobs(project_dir.name, items), "total": int(total)}
 
@@ -113,15 +137,7 @@ def get_jobs_by_ids(project_dir: Path, job_ids: list[int]) -> list[dict[str, Any
         }
         keys = set(row.keys())
         if "live_status" in keys:
-            item.update(
-                {
-                    "liveStatus": row["live_status"] or "",
-                    "liveStatusRaw": row["live_status_raw"] or "",
-                    "liveCheckedAt": row["live_checked_at"] or "",
-                    "liveClosedAt": row["live_closed_at"] or "",
-                    "liveCheckError": row["live_check_error"] or "",
-                }
-            )
+            item.update(_live_observation_fields(row))
         items.append(item)
     return apply_scores_to_jobs(project_dir.name, items)
 

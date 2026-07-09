@@ -44,6 +44,17 @@ export type Job = {
   liveCheckedAt?: string;
   liveClosedAt?: string;
   liveCheckError?: string;
+  recruitmentObservationStatus?:
+    | 'not_checked'
+    | 'open_observed'
+    | 'closed_observed'
+    | 'unknown_observed'
+    | 'login_required'
+    | 'verification_required'
+    | 'security_check'
+    | '';
+  recruitmentObservationRaw?: string;
+  recruitmentObservedAt?: string;
   score?: number | null;
   fitLevel?: string;
   coverage?: number | null;
