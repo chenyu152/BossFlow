@@ -63,7 +63,14 @@ export type Job = {
   scoredAt?: string;
 };
 
-export type DecisionStatus = 'needs_llm' | 'needs_review' | 'ready_to_greet' | 'greeted' | 'skipped';
+export type DecisionStatus =
+  | 'needs_llm'
+  | 'needs_review'
+  | 'ready_to_greet'
+  | 'greeted'
+  | 'interviewing'
+  | 'skipped'
+  | 'archived';
 
 export type ParsedLog = {
   time: string;
@@ -136,6 +143,7 @@ export type PipelineItem = {
 
 export type PipelineResponse = {
   path: string;
+  schemaVersion: number;
   pending: PipelineItem[];
   processed: PipelineItem[];
   counts: {

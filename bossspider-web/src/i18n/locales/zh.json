@@ -237,7 +237,9 @@
       "needs_review": "待确认",
       "ready_to_greet": "可打招呼",
       "greeted": "已打招呼",
-      "skipped": "跳过"
+      "interviewing": "待面试",
+      "skipped": "跳过",
+      "archived": "已归档"
     },
     "jobDetails": "岗位详情",
     "deleteItem": "删除条目及报告",

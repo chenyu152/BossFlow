@@ -75,14 +75,23 @@ const STATUS_CLASSES: Record<DecisionStatus, { active: string; idle: string }> =
     active: 'border-blue-700 bg-blue-950/50 text-blue-200',
     idle: 'border-blue-950/70 text-blue-400 hover:bg-blue-950/30',
   },
+  interviewing: {
+    active: 'border-violet-700 bg-violet-950/50 text-violet-200',
+    idle: 'border-violet-950/70 text-violet-400 hover:bg-violet-950/30',
+  },
   skipped: {
     active: 'border-red-700 bg-red-950/50 text-red-200',
     idle: 'border-red-950/70 text-red-400 hover:bg-red-950/30',
+  },
+  archived: {
+    active: 'border-zinc-700 bg-zinc-900 text-zinc-200',
+    idle: 'border-zinc-800 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300',
   },
 };
 
 function statusButtonClass(status: DecisionStatus, active: boolean) {
   const classes = STATUS_CLASSES[status];
+  if (!classes) return active ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200';
   return active ? classes.active : classes.idle;
 }
 

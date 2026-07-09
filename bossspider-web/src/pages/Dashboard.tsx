@@ -237,7 +237,7 @@ export function Dashboard({
 
   const focusItems = useMemo(
     () => pending
-      .filter((item) => item.decisionStatus !== 'skipped' && itemScore(item) >= 4)
+      .filter((item) => item.decisionStatus !== 'skipped' && item.decisionStatus !== 'archived' && itemScore(item) >= 4)
       .sort((a, b) => itemScore(b) - itemScore(a))
       .slice(0, 5),
     [pending],
@@ -278,6 +278,7 @@ export function Dashboard({
   const materialTasks = useMemo(() => {
     const tasks: DashboardTask[] = [];
     for (const item of pending) {
+      if (item.decisionStatus === 'skipped' || item.decisionStatus === 'archived') continue;
       if (item.reportPath && !item.resumeSuggestionPath) {
         tasks.push({
           id: `report:${item.sourceKey}`,

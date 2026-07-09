@@ -7,25 +7,108 @@ from fastapi import HTTPException
 
 from backend.services.job_service import get_jobs_by_ids
 from backend.services.project_service import resolve_project
+from backend.storage.file_lock import exclusive_file_lock
 from backend.storage.paths import BASE_DIR
 
 DATA_DIR = BASE_DIR / "data"
 PIPELINE_PATH = DATA_DIR / "pipeline.md"
+PIPELINE_LOCK_PATH = DATA_DIR / ".pipeline.lock"
+PIPELINE_SCHEMA_VERSION = 1
+PIPELINE_META_MARKER = "<!-- bossspider-pipeline:"
 REPORTS_DIR = BASE_DIR / "reports" / "jobs"
 RESUMES_DIR = BASE_DIR / "output" / "resumes"
 INTERVIEW_OUTPUT_DIR = BASE_DIR / "output" / "interview-prep"
-DECISION_STATUSES = {"needs_llm", "needs_review", "ready_to_greet", "greeted", "skipped"}
+DECISION_STATUSES = {"needs_llm", "needs_review", "ready_to_greet", "greeted", "interviewing", "skipped", "archived"}
+
+
+def _pipeline_header() -> str:
+    return f'{PIPELINE_META_MARKER} {json.dumps({"schemaVersion": PIPELINE_SCHEMA_VERSION}, separators=(",", ":"))} -->'
+
+
+def _default_pipeline_text() -> str:
+    return (
+        "# Pipeline\n"
+        f"{_pipeline_header()}\n\n"
+        "## Pending\n\n"
+        "## Processed\n"
+    )
+
+
+def _ensure_pipeline_file_unlocked() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not PIPELINE_PATH.exists():
+        PIPELINE_PATH.write_text(_default_pipeline_text(), encoding="utf-8")
 
 
 def ensure_pipeline_file() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not PIPELINE_PATH.exists():
-        PIPELINE_PATH.write_text(
-            "# Pipeline\n\n"
-            "## Pending\n\n"
-            "## Processed\n",
-            encoding="utf-8",
-        )
+    with exclusive_file_lock(PIPELINE_LOCK_PATH):
+        _ensure_pipeline_file_unlocked()
+        _load_pipeline_text_unlocked()
+
+
+def _pipeline_metadata_from_text(text: str) -> dict[str, Any]:
+    for line in text.splitlines():
+        if PIPELINE_META_MARKER not in line:
+            continue
+        raw = line.split(PIPELINE_META_MARKER, 1)[1].split("-->", 1)[0].strip()
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _schema_version_from_text(text: str) -> int:
+    version = _pipeline_metadata_from_text(text).get("schemaVersion")
+    try:
+        return int(version)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _migrate_pipeline_text(text: str) -> tuple[str, bool]:
+    if not text.strip():
+        return _default_pipeline_text(), True
+
+    lines = text.splitlines()
+    changed = False
+
+    if not any(line.strip() == "# Pipeline" for line in lines):
+        lines.insert(0, "# Pipeline")
+        changed = True
+
+    meta_index = next((index for index, line in enumerate(lines) if PIPELINE_META_MARKER in line), None)
+    if meta_index is None:
+        title_index = next((index for index, line in enumerate(lines) if line.strip() == "# Pipeline"), 0)
+        lines.insert(title_index + 1, _pipeline_header())
+        changed = True
+    else:
+        meta = _pipeline_metadata_from_text("\n".join(lines))
+        if meta.get("schemaVersion") != PIPELINE_SCHEMA_VERSION:
+            meta["schemaVersion"] = PIPELINE_SCHEMA_VERSION
+            lines[meta_index] = f"{PIPELINE_META_MARKER} {json.dumps(meta, ensure_ascii=False, separators=(',', ':'))} -->"
+            changed = True
+
+    stripped = {line.strip() for line in lines}
+    if "## Pending" not in stripped:
+        lines.extend(["", "## Pending"])
+        changed = True
+    if "## Processed" not in stripped:
+        lines.extend(["", "## Processed"])
+        changed = True
+
+    migrated = "\n".join(lines).rstrip() + "\n"
+    return migrated, changed
+
+
+def _load_pipeline_text_unlocked() -> str:
+    _ensure_pipeline_file_unlocked()
+    text = PIPELINE_PATH.read_text(encoding="utf-8")
+    migrated, changed = _migrate_pipeline_text(text)
+    if changed:
+        PIPELINE_PATH.write_text(migrated, encoding="utf-8")
+    return migrated
 
 
 def _split_sections(text: str) -> tuple[list[str], list[str], list[str]]:
@@ -131,14 +214,13 @@ def _item_from_line(line: str, status: str) -> dict[str, Any] | None:
     }
 
 
-def read_pipeline() -> dict[str, Any]:
-    ensure_pipeline_file()
-    text = PIPELINE_PATH.read_text(encoding="utf-8")
+def _pipeline_response_from_text(text: str) -> dict[str, Any]:
     _, pending_lines, processed_lines = _split_sections(text)
     pending = [item for line in pending_lines if (item := _item_from_line(line, "pending"))]
     processed = [item for line in processed_lines if (item := _item_from_line(line, "processed"))]
     return {
         "path": str(PIPELINE_PATH),
+        "schemaVersion": _schema_version_from_text(text),
         "pending": pending,
         "processed": processed,
         "counts": {
@@ -146,6 +228,12 @@ def read_pipeline() -> dict[str, Any]:
             "processed": len(processed),
         },
     }
+
+
+def read_pipeline() -> dict[str, Any]:
+    with exclusive_file_lock(PIPELINE_LOCK_PATH):
+        text = _load_pipeline_text_unlocked()
+        return _pipeline_response_from_text(text)
 
 
 def _existing_keys(lines: list[str]) -> set[str]:
@@ -207,35 +295,35 @@ def _job_line(project: str, job: dict[str, Any]) -> str:
 def add_jobs_to_pipeline(project: str, job_ids: list[int]) -> dict[str, Any]:
     project_dir = resolve_project(project)
     jobs = get_jobs_by_ids(project_dir, job_ids)
-    ensure_pipeline_file()
-    text = PIPELINE_PATH.read_text(encoding="utf-8")
-    before, pending, processed = _split_sections(text)
-    keys = _existing_keys([*pending, *processed])
+    with exclusive_file_lock(PIPELINE_LOCK_PATH):
+        text = _load_pipeline_text_unlocked()
+        before, pending, processed = _split_sections(text)
+        keys = _existing_keys([*pending, *processed])
 
-    added_lines: list[str] = []
-    skipped = 0
-    for job in jobs:
-        source_key = f"{project_dir.name}:{job['id']}"
-        url_key = f"url:{job['url']}" if job.get("url") else ""
-        if source_key in keys or (url_key and url_key in keys):
-            skipped += 1
-            continue
-        line = _job_line(project_dir.name, job)
-        added_lines.append(line)
-        keys.add(source_key)
-        if url_key:
-            keys.add(url_key)
+        added_lines: list[str] = []
+        skipped = 0
+        for job in jobs:
+            source_key = f"{project_dir.name}:{job['id']}"
+            url_key = f"url:{job['url']}" if job.get("url") else ""
+            if source_key in keys or (url_key and url_key in keys):
+                skipped += 1
+                continue
+            line = _job_line(project_dir.name, job)
+            added_lines.append(line)
+            keys.add(source_key)
+            if url_key:
+                keys.add(url_key)
 
-    pending_clean = [line for line in pending if line.strip()]
-    if added_lines:
-        pending_clean.extend(added_lines)
+        pending_clean = [line for line in pending if line.strip()]
+        if added_lines:
+            pending_clean.extend(added_lines)
 
-    out_lines = [*before, ""]
-    out_lines.extend(pending_clean)
-    out_lines.extend(["", *processed])
-    PIPELINE_PATH.write_text("\n".join(out_lines).rstrip() + "\n", encoding="utf-8")
-
-    pipeline = read_pipeline()
+        out_lines = [*before, ""]
+        out_lines.extend(pending_clean)
+        out_lines.extend(["", *processed])
+        next_text = "\n".join(out_lines).rstrip() + "\n"
+        PIPELINE_PATH.write_text(next_text, encoding="utf-8")
+        pipeline = _pipeline_response_from_text(next_text)
     return {
         "ok": True,
         "added": len(added_lines),
@@ -246,7 +334,8 @@ def add_jobs_to_pipeline(project: str, job_ids: list[int]) -> dict[str, Any]:
 
 
 def find_pipeline_item(source_key: str) -> dict[str, Any] | None:
-    pipeline = read_pipeline()
+    with exclusive_file_lock(PIPELINE_LOCK_PATH):
+        pipeline = _pipeline_response_from_text(_load_pipeline_text_unlocked())
     for item in [*pipeline["pending"], *pipeline["processed"]]:
         if item.get("sourceKey") == source_key:
             return item
@@ -254,19 +343,19 @@ def find_pipeline_item(source_key: str) -> dict[str, Any] | None:
 
 
 def update_pipeline_item_metadata(source_key: str, patch: dict[str, Any]) -> None:
-    ensure_pipeline_file()
-    text = PIPELINE_PATH.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    updated: list[str] = []
-    for line in lines:
-        meta = _metadata_from_line(line)
-        if meta.get("sourceKey") != source_key:
-            updated.append(line)
-            continue
-        meta.update(patch)
-        visible = line.split("<!--", 1)[0].rstrip()
-        updated.append(f"{visible} <!-- bossspider: {json.dumps(meta, ensure_ascii=False, separators=(',', ':'))} -->")
-    PIPELINE_PATH.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")
+    with exclusive_file_lock(PIPELINE_LOCK_PATH):
+        text = _load_pipeline_text_unlocked()
+        lines = text.splitlines()
+        updated: list[str] = []
+        for line in lines:
+            meta = _metadata_from_line(line)
+            if meta.get("sourceKey") != source_key:
+                updated.append(line)
+                continue
+            meta.update(patch)
+            visible = line.split("<!--", 1)[0].rstrip()
+            updated.append(f"{visible} <!-- bossspider: {json.dumps(meta, ensure_ascii=False, separators=(',', ':'))} -->")
+        PIPELINE_PATH.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")
 
 
 def update_pipeline_item_status(source_key: str, decision_status: str) -> dict[str, Any]:
@@ -373,32 +462,40 @@ def read_pipeline_report(source_key: str) -> dict[str, Any]:
 
 
 def delete_pipeline_item(source_key: str) -> dict[str, Any]:
-    ensure_pipeline_file()
-    text = PIPELINE_PATH.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    updated: list[str] = []
-    removed = False
-    deleted_reports: list[str] = []
-    deleted_resume_artifacts: list[str] = []
-    deleted_interview_artifacts: list[str] = []
-    for line in lines:
-        meta = _metadata_from_line(line)
-        if meta.get("sourceKey") != source_key:
-            updated.append(line)
-            continue
-        removed = True
-        deleted_reports.extend(_safe_delete_report(str(meta.get("reportPath") or "")))
-        deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeSuggestionPath") or "")))
-        deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeDraftPath") or "")))
-        deleted_interview_artifacts.extend(_safe_delete_interview_artifact(str(meta.get("interviewPrepPath") or "")))
-    if not removed:
-        return {"ok": False, "deleted": False, "deletedReports": [], "deletedResumeArtifacts": [], "deletedInterviewArtifacts": [], **read_pipeline()}
-    PIPELINE_PATH.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")
+    with exclusive_file_lock(PIPELINE_LOCK_PATH):
+        text = _load_pipeline_text_unlocked()
+        lines = text.splitlines()
+        updated: list[str] = []
+        removed = False
+        deleted_reports: list[str] = []
+        deleted_resume_artifacts: list[str] = []
+        deleted_interview_artifacts: list[str] = []
+        for line in lines:
+            meta = _metadata_from_line(line)
+            if meta.get("sourceKey") != source_key:
+                updated.append(line)
+                continue
+            removed = True
+            deleted_reports.extend(_safe_delete_report(str(meta.get("reportPath") or "")))
+            deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeSuggestionPath") or "")))
+            deleted_resume_artifacts.extend(_safe_delete_resume_artifact(str(meta.get("resumeDraftPath") or "")))
+            deleted_interview_artifacts.extend(_safe_delete_interview_artifact(str(meta.get("interviewPrepPath") or "")))
+        if not removed:
+            return {
+                "ok": False,
+                "deleted": False,
+                "deletedReports": [],
+                "deletedResumeArtifacts": [],
+                "deletedInterviewArtifacts": [],
+                **_pipeline_response_from_text(text),
+            }
+        next_text = "\n".join(updated).rstrip() + "\n"
+        PIPELINE_PATH.write_text(next_text, encoding="utf-8")
     return {
         "ok": True,
         "deleted": True,
         "deletedReports": deleted_reports,
         "deletedResumeArtifacts": deleted_resume_artifacts,
         "deletedInterviewArtifacts": deleted_interview_artifacts,
-        **read_pipeline(),
+        **_pipeline_response_from_text(next_text),
     }

@@ -10,6 +10,7 @@ resume*.md
 *.docx
 *.pdf
 data/job_scores.json
+data/.pipeline.lock
 backend-server.*.log
 frontend-server.*.log
 *.log

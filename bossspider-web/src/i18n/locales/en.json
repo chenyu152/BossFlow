@@ -236,7 +236,9 @@
       "needs_review": "Needs Review",
       "ready_to_greet": "Ready to Greet",
       "greeted": "Greeted",
-      "skipped": "Skipped"
+      "interviewing": "Interviewing",
+      "skipped": "Skipped",
+      "archived": "Archived"
     },
     "jobDetails": "Job Details",
     "deleteItem": "Delete item and report",

@@ -24,7 +24,9 @@ function getDecisionLabel(status: DecisionStatus, t: (key: string) => string): s
     needs_review: 'pipeline.decisionStatus.needs_review',
     ready_to_greet: 'pipeline.decisionStatus.ready_to_greet',
     greeted: 'pipeline.decisionStatus.greeted',
+    interviewing: 'pipeline.decisionStatus.interviewing',
     skipped: 'pipeline.decisionStatus.skipped',
+    archived: 'pipeline.decisionStatus.archived',
   };
   return t(map[status] || status);
 }
@@ -50,10 +52,20 @@ const STATUS_CLASSES: Record<DecisionStatus, { badge: string; active: string; id
     active: 'border-blue-700 bg-blue-950/50 text-blue-200',
     idle: 'border-blue-950/70 text-blue-400 hover:bg-blue-950/30',
   },
+  interviewing: {
+    badge: 'border-violet-900/60 bg-violet-950/40 text-violet-300',
+    active: 'border-violet-700 bg-violet-950/50 text-violet-200',
+    idle: 'border-violet-950/70 text-violet-400 hover:bg-violet-950/30',
+  },
   skipped: {
     badge: 'border-red-900/60 bg-red-950/40 text-red-300',
     active: 'border-red-700 bg-red-950/50 text-red-200',
     idle: 'border-red-950/70 text-red-400 hover:bg-red-950/30',
+  },
+  archived: {
+    badge: 'border-zinc-800 bg-zinc-900 text-zinc-400',
+    active: 'border-zinc-700 bg-zinc-900 text-zinc-200',
+    idle: 'border-zinc-800 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300',
   },
 };
 
@@ -133,7 +145,9 @@ export function Pipeline({
       { value: 'needs_review', label: getDecisionLabel('needs_review', t) },
       { value: 'ready_to_greet', label: getDecisionLabel('ready_to_greet', t) },
       { value: 'greeted', label: getDecisionLabel('greeted', t) },
+      { value: 'interviewing', label: getDecisionLabel('interviewing', t) },
       { value: 'skipped', label: getDecisionLabel('skipped', t) },
+      { value: 'archived', label: getDecisionLabel('archived', t) },
     ],
     [t],
   );
