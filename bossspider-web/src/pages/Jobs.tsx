@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, RefreshCw, RotateCcw, Search, Square, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, RefreshCw, RotateCcw, Search, ShieldCheck, Square, Wand2, X } from 'lucide-react';
 import { useAppTranslation } from '../i18n';
 import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
@@ -15,7 +15,9 @@ export function Jobs({
   onRefresh,
   onExport,
   onScoreJobs,
+  onUpdateLiveStatus,
   scoringJobIds,
+  taskRunning,
   selectedJobId,
   targetRequestId,
   onAddToPipeline,
@@ -29,7 +31,9 @@ export function Jobs({
   onRefresh: () => void;
   onExport: () => void;
   onScoreJobs: (jobIds: number[]) => void;
+  onUpdateLiveStatus: (jobIds?: number[], limit?: number) => void;
   scoringJobIds: number[];
+  taskRunning: boolean;
   selectedJobId?: number | null;
   targetRequestId?: number;
   onAddToPipeline: (jobs: Job[]) => void;
@@ -44,6 +48,7 @@ export function Jobs({
   const [scoreFilter, setScoreFilter] = useState('all');
   const [experienceFilter, setExperienceFilter] = useState('all');
   const [educationFilter, setEducationFilter] = useState('all');
+  const [liveStatusFilter, setLiveStatusFilter] = useState('all');
   const [minAvgFilter, setMinAvgFilter] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const dragStateRef = useRef<{
@@ -77,6 +82,7 @@ export function Jobs({
     || scoreFilter !== 'all'
     || experienceFilter !== 'all'
     || educationFilter !== 'all'
+    || liveStatusFilter !== 'all'
     || Boolean(minAvgFilter);
   const activeFilterCount = [
     cityFilter !== 'all',
@@ -84,6 +90,7 @@ export function Jobs({
     scoreFilter !== 'all',
     experienceFilter !== 'all',
     educationFilter !== 'all',
+    liveStatusFilter !== 'all',
     Boolean(minAvgFilter),
   ].filter(Boolean).length;
 
@@ -95,6 +102,8 @@ export function Jobs({
       if (categoryFilter !== 'all' && !categories.includes(categoryFilter)) return false;
       if (experienceFilter !== 'all' && (job.experienceRisk || 'unknown') !== experienceFilter) return false;
       if (educationFilter !== 'all' && (job.educationRisk || 'unknown') !== educationFilter) return false;
+      const currentLiveStatus = job.liveStatus || (job.liveCheckedAt ? 'unknown' : 'unchecked');
+      if (liveStatusFilter !== 'all' && currentLiveStatus !== liveStatusFilter) return false;
       if (minAvgFilter && Number.isFinite(minAvg) && job.avg < minAvg) return false;
       if (scoreFilter === 'unscored' && job.score) return false;
       if (scoreFilter === 'high' && (job.score ?? 0) < 4.0) return false;
@@ -102,7 +111,7 @@ export function Jobs({
       if (scoreFilter === 'weak' && ((job.score ?? 0) >= 3.5 || !job.score)) return false;
       return true;
     });
-  }, [categoryFilter, cityFilter, educationFilter, experienceFilter, jobs, minAvgFilter, scoreFilter]);
+  }, [categoryFilter, cityFilter, educationFilter, experienceFilter, jobs, liveStatusFilter, minAvgFilter, scoreFilter]);
 
   const displayJobs = useMemo(() => {
     if (!sortByScore) return filteredJobs;
@@ -134,6 +143,7 @@ export function Jobs({
     setScoreFilter('all');
     setExperienceFilter('all');
     setEducationFilter('all');
+    setLiveStatusFilter('all');
     setMinAvgFilter('');
     setSelectedJob(job);
   }, [jobs, selectedJobId, targetRequestId]);
@@ -159,7 +169,7 @@ export function Jobs({
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortByScore, pageSize, cityFilter, categoryFilter, scoreFilter, experienceFilter, educationFilter, minAvgFilter]);
+  }, [search, sortByScore, pageSize, cityFilter, categoryFilter, scoreFilter, experienceFilter, educationFilter, liveStatusFilter, minAvgFilter]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
@@ -207,6 +217,7 @@ export function Jobs({
     setScoreFilter('all');
     setExperienceFilter('all');
     setEducationFilter('all');
+    setLiveStatusFilter('all');
     setMinAvgFilter('');
   };
 
@@ -273,6 +284,25 @@ export function Jobs({
     setSelectedJob(job);
   };
 
+  const liveStatusText = (job: Job) => {
+    if (job.liveStatus === 'open') return t('jobs.liveOpen');
+    if (job.liveStatus === 'closed') return t('jobs.liveClosed');
+    if (job.liveStatus === 'unknown' || job.liveCheckedAt) return t('jobs.liveUnknown');
+    return t('jobs.liveUnchecked');
+  };
+
+  const liveStatusClass = (job: Job) => {
+    if (job.liveStatus === 'open') return 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300';
+    if (job.liveStatus === 'closed') return 'border-red-900/70 bg-red-950/40 text-red-300';
+    if (job.liveStatus === 'unknown' || job.liveCheckedAt) return 'border-amber-900/70 bg-amber-950/40 text-amber-300';
+    return 'border-zinc-800 bg-zinc-900 text-zinc-500';
+  };
+
+  const updateAllLiveStatus = () => {
+    if (!window.confirm(t('jobs.confirmUpdateAllLiveStatus'))) return;
+    onUpdateLiveStatus(undefined);
+  };
+
   const riskText = (risk?: string) => {
     if (risk === 'matched') return t('status.ok');
     if (risk === 'near') return t('status.near');
@@ -332,6 +362,23 @@ export function Jobs({
           >
             {scoringSelected ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
             {t('jobs.scoreSelected')}
+          </button>
+          <button
+            onClick={() => onUpdateLiveStatus(selectedJobs.map((job) => job.id))}
+            disabled={!selectedJobs.length || taskRunning}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-cyan-900/70 text-cyan-200 hover:bg-cyan-950/40 disabled:opacity-40 rounded transition-colors"
+          >
+            <ShieldCheck size={14} />
+            {t('jobs.updateSelectedLiveStatus')}
+            {selectedJobs.length > 0 && <span className="text-cyan-100">({selectedJobs.length})</span>}
+          </button>
+          <button
+            onClick={updateAllLiveStatus}
+            disabled={taskRunning}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
+          >
+            <ShieldCheck size={14} />
+            {t('jobs.updateAllLiveStatus')}
           </button>
           <button
             onClick={() => setSortByScore((value) => !value)}
@@ -412,6 +459,17 @@ export function Jobs({
             <option value="risk">{t('jobs.eduRisk')}</option>
             <option value="unknown">{t('jobs.eduUnknown')}</option>
           </select>
+          <select
+            value={liveStatusFilter}
+            onChange={(event) => setLiveStatusFilter(event.target.value)}
+            className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300 outline-none focus:border-indigo-600"
+          >
+            <option value="all">{t('jobs.allLiveStatuses')}</option>
+            <option value="unchecked">{t('jobs.liveUnchecked')}</option>
+            <option value="open">{t('jobs.liveOpen')}</option>
+            <option value="closed">{t('jobs.liveClosed')}</option>
+            <option value="unknown">{t('jobs.liveUnknown')}</option>
+          </select>
           <input
             type="number"
             min="0"
@@ -473,13 +531,14 @@ export function Jobs({
             <colgroup>
               <col className="w-[4%]" />
               <col className="w-[4%]" />
-              <col className="w-[22%]" />
-              <col className="w-[22%]" />
-              <col className="w-[7%]" />
-              <col className="w-[10%]" />
+              <col className="w-[20%]" />
+              <col className="w-[19%]" />
+              <col className="w-[6%]" />
+              <col className="w-[9%]" />
               <col className="w-[12%]" />
               <col className="w-[6%]" />
               <col className="w-[8%]" />
+              <col className="w-[7%]" />
               <col className="w-[5%]" />
             </colgroup>
             <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800 shadow-sm z-10">
@@ -501,6 +560,7 @@ export function Jobs({
                 <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.score')}</th>
                 <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.avgK')}</th>
                 <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.expEdu')}</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.liveStatus')}</th>
                 <th className="px-4 py-2.5 font-medium text-zinc-400">{t('jobs.tableHeaders.category')}</th>
               </tr>
             </thead>
@@ -557,6 +617,11 @@ export function Jobs({
                   <td className="px-4 py-2 text-zinc-400 truncate">{job.avg.toFixed(1)}</td>
                   <td className="px-4 py-2 text-zinc-400 truncate" title={`${job.exp} / ${job.edu}`}>{job.exp} / {job.edu}</td>
                   <td className="px-4 py-2 truncate">
+                    <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${liveStatusClass(job)}`} title={job.liveCheckedAt || ''}>
+                      {liveStatusText(job)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 truncate">
                     <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] uppercase tracking-wider" title={job.cats[0] || job.tier || '-'}>{job.cats[0] || job.tier || '-'}</span>
                   </td>
                 </tr>
@@ -582,6 +647,26 @@ export function Jobs({
                 <ListPlus size={15} />
                 {t('jobs.addToPipeline')}
               </button>
+              <button
+                onClick={() => onUpdateLiveStatus([selectedJob.id])}
+                disabled={taskRunning}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium border border-cyan-900/70 text-cyan-200 hover:bg-cyan-950/40 disabled:opacity-40 rounded transition-colors"
+              >
+                <ShieldCheck size={15} />
+                {t('jobs.updateLiveStatus')}
+              </button>
+              <div className="rounded border border-zinc-800 bg-zinc-900/50 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">{t('jobs.liveStatus')}</span>
+                  <span className={`inline-flex rounded border px-2 py-1 text-xs ${liveStatusClass(selectedJob)}`}>{liveStatusText(selectedJob)}</span>
+                </div>
+                {selectedJob.liveCheckedAt && (
+                  <div className="mt-2 text-xs text-zinc-500">{t('jobs.liveCheckedAt')} {selectedJob.liveCheckedAt}</div>
+                )}
+                {selectedJob.liveStatusRaw && (
+                  <div className="mt-1 text-xs text-zinc-500">{t('jobs.liveRaw')} {selectedJob.liveStatusRaw}</div>
+                )}
+              </div>
               {selectedJob.score ? (
                 <div className="rounded border border-zinc-800 bg-zinc-900/50 p-3">
                   <div className="flex items-center justify-between">

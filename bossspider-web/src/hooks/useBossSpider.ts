@@ -111,6 +111,7 @@ export function useBossSpider() {
     startCrawl,
     startLogin,
     processPartial,
+    startLiveStatusUpdate,
     stopTask,
   } = useTasks({
     autoSqlite,
@@ -135,6 +136,31 @@ export function useBossSpider() {
   const scoreJobs = useCallback(async (jobIds: number[]) => (
     scoreJobsForProject(config?.project, jobIds)
   ), [config?.project, scoreJobsForProject]);
+
+  const updateJobLiveStatus = useCallback(async (options: {
+    jobIds?: number[];
+    limit?: number;
+    workers?: number;
+  } = {}) => {
+    if (!config?.project) {
+      showNotice(t('notices.configNotLoaded'));
+      return false;
+    }
+    const ok = await startLiveStatusUpdate({
+      project: config.project,
+      jobIds: options.jobIds || [],
+      limit: options.limit,
+      skipClosed: true,
+      workers: options.workers ?? 1,
+      sleepSeconds: 5,
+      browserWaitSeconds: 6,
+      headless: true,
+      interactiveOnCaptcha: true,
+      verificationTimeoutSeconds: 240,
+    });
+    if (ok) showNotice(t('notices.liveStatusStarted'));
+    return ok;
+  }, [config?.project, showNotice, startLiveStatusUpdate, t]);
 
   const invalidate = useCallback(async (resources: ResourceKey[]) => {
     const unique = new Set(resources);
@@ -223,6 +249,7 @@ export function useBossSpider() {
     exportJobs,
     addJobsToPipeline,
     scoreJobs,
+    updateJobLiveStatus,
     evaluatePipelineItem,
     scoreAllPipeline,
     llmEvaluatePipelineItem,

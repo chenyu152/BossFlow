@@ -41,23 +41,33 @@ def query_jobs(project_dir: Path, search: str = "", limit: int = 500, offset: in
             cats = json.loads(row["cats_json"] or "[]")
         except Exception:
             cats = []
-        items.append(
-            {
-                "id": row["id"],
-                "title": row["title"] or "",
-                "company": row["company"] or "",
-                "city": row["city"] or "",
-                "salary": row["salary"] or "",
-                "avg": float(row["avg"] or 0),
-                "tier": row["tier"] or "",
-                "exp": row["exp"] or "",
-                "edu": row["edu"] or "",
-                "cats": cats,
-                "desc": row["desc"] or "",
-                "url": row["url"] or "",
-                "lastSeen": row["last_seen"] or "",
-            }
-        )
+        item = {
+            "id": row["id"],
+            "title": row["title"] or "",
+            "company": row["company"] or "",
+            "city": row["city"] or "",
+            "salary": row["salary"] or "",
+            "avg": float(row["avg"] or 0),
+            "tier": row["tier"] or "",
+            "exp": row["exp"] or "",
+            "edu": row["edu"] or "",
+            "cats": cats,
+            "desc": row["desc"] or "",
+            "url": row["url"] or "",
+            "lastSeen": row["last_seen"] or "",
+        }
+        keys = set(row.keys())
+        if "live_status" in keys:
+            item.update(
+                {
+                    "liveStatus": row["live_status"] or "",
+                    "liveStatusRaw": row["live_status_raw"] or "",
+                    "liveCheckedAt": row["live_checked_at"] or "",
+                    "liveClosedAt": row["live_closed_at"] or "",
+                    "liveCheckError": row["live_check_error"] or "",
+                }
+            )
+        items.append(item)
     return {"items": apply_scores_to_jobs(project_dir.name, items), "total": int(total)}
 
 
@@ -86,23 +96,33 @@ def get_jobs_by_ids(project_dir: Path, job_ids: list[int]) -> list[dict[str, Any
             cats = json.loads(row["cats_json"] or "[]")
         except Exception:
             cats = []
-        items.append(
-            {
-                "id": row["id"],
-                "title": row["title"] or "",
-                "company": row["company"] or "",
-                "city": row["city"] or "",
-                "salary": row["salary"] or "",
-                "avg": float(row["avg"] or 0),
-                "tier": row["tier"] or "",
-                "exp": row["exp"] or "",
-                "edu": row["edu"] or "",
-                "cats": cats,
-                "desc": row["desc"] or "",
-                "url": row["url"] or "",
-                "lastSeen": row["last_seen"] or "",
-            }
-        )
+        item = {
+            "id": row["id"],
+            "title": row["title"] or "",
+            "company": row["company"] or "",
+            "city": row["city"] or "",
+            "salary": row["salary"] or "",
+            "avg": float(row["avg"] or 0),
+            "tier": row["tier"] or "",
+            "exp": row["exp"] or "",
+            "edu": row["edu"] or "",
+            "cats": cats,
+            "desc": row["desc"] or "",
+            "url": row["url"] or "",
+            "lastSeen": row["last_seen"] or "",
+        }
+        keys = set(row.keys())
+        if "live_status" in keys:
+            item.update(
+                {
+                    "liveStatus": row["live_status"] or "",
+                    "liveStatusRaw": row["live_status_raw"] or "",
+                    "liveCheckedAt": row["live_checked_at"] or "",
+                    "liveClosedAt": row["live_closed_at"] or "",
+                    "liveCheckError": row["live_check_error"] or "",
+                }
+            )
+        items.append(item)
     return apply_scores_to_jobs(project_dir.name, items)
 
 

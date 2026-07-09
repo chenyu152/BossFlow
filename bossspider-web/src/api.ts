@@ -10,6 +10,7 @@ import type {
   InterviewStoryDraftPromoteResponse,
   InterviewStoryDraftsResponse,
   Job,
+  JobLiveStatusUpdateRequest,
   JobsResponse,
   LlmEvaluatePipelineResponse,
   PipelineDeleteResponse,
@@ -104,6 +105,13 @@ export const bossApi = {
     return request<ScoreJobsResponse>('/api/jobs/score', {
       method: 'POST',
       body: JSON.stringify({ project, jobIds }),
+    });
+  },
+
+  updateJobLiveStatus(body: JobLiveStatusUpdateRequest) {
+    return request<{ ok: boolean; status: string }>('/api/jobs/live-status/update', {
+      method: 'POST',
+      body: JSON.stringify(body),
     });
   },
 

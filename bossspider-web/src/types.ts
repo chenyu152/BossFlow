@@ -1,6 +1,6 @@
 export type Tab = 'Dashboard' | 'Scope' | 'Rules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Story' | 'Interview' | 'Logs';
 
-export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'stopping' | 'failed';
+export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'failed';
 
 export type ConfigPayload = {
   ok: boolean;
@@ -39,6 +39,11 @@ export type Job = {
   desc: string;
   url: string;
   lastSeen: string;
+  liveStatus?: 'open' | 'closed' | 'unknown' | '';
+  liveStatusRaw?: string;
+  liveCheckedAt?: string;
+  liveClosedAt?: string;
+  liveCheckError?: string;
   score?: number | null;
   fitLevel?: string;
   coverage?: number | null;
@@ -379,6 +384,19 @@ export type TaskStatusResponse = {
   running: boolean;
   status: Status;
   logs: string[];
+};
+
+export type JobLiveStatusUpdateRequest = {
+  project: string;
+  jobIds?: number[];
+  limit?: number;
+  skipClosed?: boolean;
+  workers?: number;
+  sleepSeconds?: number;
+  browserWaitSeconds?: number;
+  headless?: boolean;
+  interactiveOnCaptcha?: boolean;
+  verificationTimeoutSeconds?: number;
 };
 
 export type ConfigPatch = Partial<ConfigPayload>;

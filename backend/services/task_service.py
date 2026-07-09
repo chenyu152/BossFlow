@@ -4,7 +4,7 @@ import io
 import logging
 import threading
 import traceback
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from fastapi import HTTPException
 
@@ -48,6 +48,7 @@ class TaskManager:
         self.lock = threading.Lock()
         self.worker: Optional[threading.Thread] = None
         self.current_crawler: Optional[Any] = None
+        self.current_stop: Optional[Callable[[], None]] = None
         self.status = "ready"
         self.running = False
         self.logs: List[str] = []
@@ -67,12 +68,13 @@ class TaskManager:
                 "logs": list(self.logs),
             }
 
-    def start(self, label: str, target):
+    def start(self, label: str, target, stop_handler: Optional[Callable[[], None]] = None):
         with self.lock:
             if self.worker and self.worker.is_alive():
                 raise HTTPException(status_code=409, detail="已有任务正在运行")
             self.status = label
             self.running = True
+            self.current_stop = stop_handler
             self.logs.clear()
         self.append_log("任务已启动")
 
@@ -84,17 +86,30 @@ class TaskManager:
                     self.status = "ready"
                     self.running = False
                     self.current_crawler = None
+                    self.current_stop = None
             except Exception:
                 self.append_log(traceback.format_exc())
                 with self.lock:
                     self.status = "failed"
                     self.running = False
                     self.current_crawler = None
+                    self.current_stop = None
 
         self.worker = threading.Thread(target=runner, daemon=True)
         self.worker.start()
 
     def stop(self):
+        stop_handler = self.current_stop
+        if stop_handler:
+            self.append_log("收到终止请求，正在停止当前任务")
+            with self.lock:
+                self.status = "stopping"
+            try:
+                stop_handler()
+            except Exception:
+                self.append_log(traceback.format_exc())
+            return
+
         crawler = self.current_crawler
         if not crawler:
             self.append_log("当前没有可终止的爬虫实例")

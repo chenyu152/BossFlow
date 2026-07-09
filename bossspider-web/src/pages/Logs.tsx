@@ -27,6 +27,7 @@ export function Logs({ status, logs }: { status: Status; logs: ParsedLog[] }) {
       crawling: t('status.crawling'),
       login: t('status.login'),
       'processing-partial': t('status.processingPartial'),
+      'live-status': t('status.liveStatus'),
       stopping: t('status.stopping'),
       failed: t('status.failed'),
     };

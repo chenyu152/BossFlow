@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.schemas.greeting import GreetingDraftSaveRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
+from backend.schemas.jobs import JobLiveStatusUpdateRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
@@ -25,6 +26,7 @@ from backend.services.interview_service import (
     save_story_drafts,
 )
 from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
+from backend.services.live_status_service import start_live_status_update_task
 from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
 from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
 from backend.services.project_service import (
@@ -98,6 +100,11 @@ def get_job_item(project: str, jobId: int):
 @app.post("/api/jobs/score")
 def score_job_rows(payload: ScoreJobsRequest):
     return score_jobs(payload.project, payload.jobIds)
+
+
+@app.post("/api/jobs/live-status/update")
+def update_job_live_status(payload: JobLiveStatusUpdateRequest):
+    return start_live_status_update_task(resolve_project(payload.project), payload, task_manager)
 
 
 @app.get("/api/pipeline")

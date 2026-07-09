@@ -306,7 +306,9 @@ export default function App() {
                 onRefresh={() => boss.refreshJobs()}
                 onExport={boss.exportJobs}
                 onScoreJobs={boss.scoreJobs}
+                onUpdateLiveStatus={(jobIds, limit) => boss.updateJobLiveStatus({ jobIds, limit })}
                 scoringJobIds={boss.jobScoringIds}
+                taskRunning={boss.isRunning}
                 selectedJobId={selectedJobId}
                 targetRequestId={dashboardTargetRequestId}
                 onAddToPipeline={async (jobs) => {

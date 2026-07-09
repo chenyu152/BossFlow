@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
-import type { Status } from '../types';
+import type { JobLiveStatusUpdateRequest, Status } from '../types';
 import { parseLog } from '../utils';
 
 type TaskRequestBody = Record<string, unknown>;
@@ -89,6 +89,18 @@ export function useTasks({
     }
   }, [autoSqlite, requestBody, showNotice, t]);
 
+  const startLiveStatusUpdate = useCallback(async (body: JobLiveStatusUpdateRequest) => {
+    try {
+      await bossApi.updateJobLiveStatus(body);
+      wasRunningRef.current = true;
+      setStatus('live-status');
+      return true;
+    } catch (error) {
+      showNotice(t('notices.liveStatusStartFailed', { error: (error as Error).message }));
+      return false;
+    }
+  }, [showNotice, t]);
+
   const stopTask = useCallback(async () => {
     try {
       await bossApi.stopTask();
@@ -109,6 +121,7 @@ export function useTasks({
     startCrawl,
     startLogin,
     processPartial,
+    startLiveStatusUpdate,
     stopTask,
   };
 }
