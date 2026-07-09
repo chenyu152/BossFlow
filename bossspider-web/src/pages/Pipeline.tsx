@@ -14,6 +14,7 @@ import type {
   Job,
   PipelineReportResponse,
   PipelineResponse,
+  ResumeNavigationTarget,
   ResumeSuggestionResponse,
 } from '../types';
 import { useAppTranslation } from '../i18n';
@@ -113,6 +114,7 @@ export function Pipeline({
   onLoadInterviewPrep,
   onUpdateStatus,
   onDeleteItem,
+  onOpenResumeMaterials,
   targetSourceKey,
   targetRequestId,
 }: {
@@ -134,6 +136,7 @@ export function Pipeline({
   onLoadInterviewPrep: (sourceKey: string) => Promise<InterviewPrepResponse | null>;
   onUpdateStatus: (sourceKey: string, decisionStatus: string) => Promise<boolean>;
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
+  onOpenResumeMaterials: (target: ResumeNavigationTarget) => void;
   targetSourceKey?: string;
   targetRequestId?: number;
 }) {
@@ -451,6 +454,13 @@ export function Pipeline({
             onViewInterviewPrep={viewInterviewPrep}
             isInterviewPreparing={isSelectedInterviewPreparing}
             interviewLoading={interviewLoading}
+            onOpenResumeMaterials={() => onOpenResumeMaterials({
+              sourceKey: selectedItem.sourceKey,
+              jobId: selectedItem.jobId,
+              company: selectedItem.company,
+              title: selectedItem.title,
+              city: selectedItem.city,
+            })}
           />
         )}
       </div>

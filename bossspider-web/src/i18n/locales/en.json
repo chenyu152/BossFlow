@@ -269,13 +269,13 @@
     "material": {
       "llm": "LLM report",
       "resumeSuggestion": "Resume suggestions",
-      "resumeDraft": "Resume draft",
+      "resumeDraft": "Tailored resume",
       "interviewPrep": "Interview prep"
     },
     "materialShort": {
       "llm": "LLM",
       "resumeSuggestion": "Tips",
-      "resumeDraft": "Draft",
+      "resumeDraft": "Tailored",
       "interviewPrep": "Prep"
     },
     "confirmDelete": "Delete this pipeline item and its generated LLM report?",
@@ -301,9 +301,33 @@
       "records": "Records"
     },
     "nextAction": "Next action",
+    "nextActionCurrent": "Current gap",
+    "nextActionWhy": "Why",
+    "nextActionLabels": {
+      "llm": "Missing LLM evaluation",
+      "resume": "Missing resume suggestions",
+      "draft": "Missing tailored resume",
+      "interview": "Missing interview prep",
+      "confirm": "Waiting for a decision",
+      "review": "Core materials are ready"
+    },
+    "nextActionReasons": {
+      "llm": "First decide whether this role is worth spending more time on.",
+      "resume": "The evaluation is ready, so the JD requirements can be turned into concrete resume edits.",
+      "draft": "Resume suggestions exist. Open Resume Materials, review them, and generate the tailored resume next.",
+      "interview": "Resume materials are ready, so interview questions and story material can be prepared next.",
+      "confirm": "Materials are far enough along to decide whether to greet, interview, or skip.",
+      "review": "There is no blocking material gap. Review the report or update the job status."
+    },
+    "nextActionButtons": {
+      "draft": "View resume suggestions",
+      "confirm": "Update status"
+    },
+    "openResumeMaterials": "Open Resume Materials",
     "nextActions": {
       "llm": "Generate an LLM evaluation first to decide whether this role is worth pursuing.",
       "resume": "The evaluation is ready. Generate JD-specific resume suggestions next.",
+      "draft": "Resume suggestions are ready. Confirm them and generate a tailored resume next.",
       "interview": "Resume materials are ready. Generate interview prep next.",
       "confirm": "Materials are ready for your decision. Confirm whether to greet or skip.",
       "review": "Core materials are ready. Review the report or update the job status."
@@ -339,13 +363,13 @@
     "jobsWithMaterials": "jobs with resume materials",
     "refresh": "Refresh",
     "suggestions": "Suggestions",
-    "draft": "Draft",
+    "draft": "Tailored resume",
     "noResumeSuggestions": "No resume suggestions yet. Generate suggestions from Pipeline first.",
     "targetJob": "Target job",
     "clearAll": "Clear all",
     "selectAll": "Select all",
     "loadingMaterials": "Loading materials",
-    "noStructuredItems": "No structured S-items detected. Draft generation can still use the full suggestions.",
+    "noStructuredItems": "No structured S-items detected. Tailored resume generation can still use the full suggestions.",
     "evidenceSources": "{{count}} source(s)",
     "riskLabel": "Risk: {{risk}}",
     "riskSafe": "Safe",
@@ -361,9 +385,9 @@
     "userNotesPlaceholder": "Add facts you confirmed, projects to emphasize, or content to avoid...",
     "generateResume": "Generate tailored resume",
     "selectJob": "Select a job to start.",
-    "tailoredDraft": "Tailored Draft",
-    "loadingDraft": "Loading existing draft...",
-    "noDraftYet": "No tailored resume yet. Select suggestions and generate a Markdown draft."
+    "tailoredDraft": "Tailored resume",
+    "loadingDraft": "Loading existing tailored resume...",
+    "noDraftYet": "No tailored resume yet. Select suggestions and generate a tailored resume Markdown."
   },
   "scope": {
     "title": "Crawl Scope Configuration",
@@ -481,7 +505,7 @@
     "loadingPrep": "Loading prep",
     "loadingExistingPrep": "Loading existing prep...",
     "noPrepYetTitle": "No interview prep yet",
-    "noPrepYetBody": "Generate a Markdown prep doc from the JD, LLM report, resume draft, cv.md, and story bank. Company web research and mock interview mode are reserved for the next phases."
+    "noPrepYetBody": "Generate a Markdown prep doc from the JD, LLM report, tailored resume, cv.md, and story bank. Company web research and mock interview mode are reserved for the next phases."
   },
   "notices": {
     "loadFailed": "Load failed: {{error}}",

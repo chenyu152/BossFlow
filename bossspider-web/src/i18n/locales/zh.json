@@ -270,13 +270,13 @@
     "material": {
       "llm": "LLM 报告",
       "resumeSuggestion": "简历建议",
-      "resumeDraft": "简历草稿",
+      "resumeDraft": "定制简历",
       "interviewPrep": "面试准备"
     },
     "materialShort": {
       "llm": "LLM",
       "resumeSuggestion": "建议",
-      "resumeDraft": "草稿",
+      "resumeDraft": "定制",
       "interviewPrep": "面试"
     },
     "confirmDelete": "删除此候选岗位及其生成的 LLM 报告？",
@@ -302,9 +302,33 @@
       "records": "记录"
     },
     "nextAction": "下一步",
+    "nextActionCurrent": "当前缺口",
+    "nextActionWhy": "原因",
+    "nextActionLabels": {
+      "llm": "缺少 LLM 精评",
+      "resume": "缺少简历建议",
+      "draft": "缺少定制简历",
+      "interview": "缺少面试准备",
+      "confirm": "等待推进决策",
+      "review": "核心材料已具备"
+    },
+    "nextActionReasons": {
+      "llm": "需要先判断这个岗位是否值得继续投入时间。",
+      "resume": "精评已完成，可以开始把 JD 要求转成可执行的简历修改点。",
+      "draft": "已有简历建议，下一步需要去简历材料页确认建议并生成定制简历。",
+      "interview": "简历材料已经具备，可以继续准备岗位面试问题和故事素材。",
+      "confirm": "材料已推进到可决策阶段，请确认是打招呼、进入面试还是跳过。",
+      "review": "当前没有阻塞材料项，可以回看报告或更新岗位状态。"
+    },
+    "nextActionButtons": {
+      "draft": "查看简历建议",
+      "confirm": "更新状态"
+    },
+    "openResumeMaterials": "去简历材料页生成",
     "nextActions": {
       "llm": "先生成 LLM 精评，判断这个岗位是否值得继续推进。",
       "resume": "精评已完成，下一步生成针对 JD 的简历修改建议。",
+      "draft": "简历建议已生成，下一步确认建议并生成定制简历。",
       "interview": "简历材料已具备，可以继续生成面试准备文档。",
       "confirm": "材料已经推进到待确认阶段，请判断是否进入打招呼或跳过。",
       "review": "这个岗位的核心材料已经具备，可以回看报告或更新状态。"
@@ -340,13 +364,13 @@
     "jobsWithMaterials": "个岗位有简历材料",
     "refresh": "刷新",
     "suggestions": "建议",
-    "draft": "草稿",
+    "draft": "定制简历",
     "noResumeSuggestions": "暂无简历建议。请先从候选岗位生成建议。",
     "targetJob": "目标岗位",
     "clearAll": "清除全部",
     "selectAll": "全选",
     "loadingMaterials": "加载材料中",
-    "noStructuredItems": "未检测到结构化建议条目。仍可使用完整建议生成草稿。",
+    "noStructuredItems": "未检测到结构化建议条目。仍可使用完整建议生成定制简历。",
     "evidenceSources": "{{count}} 个来源",
     "riskLabel": "风险：{{risk}}",
     "riskSafe": "安全",
@@ -363,8 +387,8 @@
     "generateResume": "生成定制简历",
     "selectJob": "选择一个岗位开始。",
     "tailoredDraft": "定制简历",
-    "loadingDraft": "加载已有草稿...",
-    "noDraftYet": "暂无定制简历。选择建议并生成 Markdown 草稿。"
+    "loadingDraft": "加载已有定制简历...",
+    "noDraftYet": "暂无定制简历。选择建议并生成定制简历 Markdown。"
   },
   "scope": {
     "title": "采集范围配置",
@@ -482,7 +506,7 @@
     "loadingPrep": "加载中",
     "loadingExistingPrep": "加载已有准备文档...",
     "noPrepYetTitle": "暂无面试准备文档",
-    "noPrepYetBody": "根据 JD、LLM 报告、简历草稿、cv.md 和故事库生成 Markdown 准备文档。公司调研和模拟面试功能将在后续阶段加入。"
+    "noPrepYetBody": "根据 JD、LLM 报告、定制简历、cv.md 和故事库生成 Markdown 准备文档。公司调研和模拟面试功能将在后续阶段加入。"
   },
   "notices": {
     "loadFailed": "加载失败：{{error}}",

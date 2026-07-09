@@ -2,7 +2,7 @@ import { BookOpenText, CheckSquare, FileText, Loader2, RefreshCw, Square, Wand2 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ResumeDraftResponse, ResumeItem, ResumeSuggestionResponse } from '../types';
+import type { ResumeDraftResponse, ResumeItem, ResumeNavigationTarget, ResumeSuggestionResponse } from '../types';
 import { useAppTranslation } from '../i18n';
 
 type ParsedSuggestion = {
@@ -58,6 +58,24 @@ function riskLabel(risk: string, t: (key: string) => string) {
   return risk || t('resume.riskSafe');
 }
 
+function normalizeTargetText(value?: string) {
+  return (value || '').trim().toLowerCase();
+}
+
+function matchesResumeTarget(item: ResumeItem, target: ResumeNavigationTarget) {
+  if (target.sourceKey && item.sourceKey === target.sourceKey) return true;
+  if (target.jobId != null && item.jobId === target.jobId) return true;
+  const targetCompany = normalizeTargetText(target.company);
+  const targetTitle = normalizeTargetText(target.title);
+  const targetCity = normalizeTargetText(target.city);
+  if (!targetCompany || !targetTitle) return false;
+  return (
+    normalizeTargetText(item.company) === targetCompany
+    && normalizeTargetText(item.title) === targetTitle
+    && (!targetCity || normalizeTargetText(item.city) === targetCity)
+  );
+}
+
 export function Resume({
   items,
   draftingKeys,
@@ -66,7 +84,9 @@ export function Resume({
   onLoadDraft,
   onGenerateDraft,
   selectedSourceKey,
+  selectedTarget,
   targetRequestId,
+  onTargetApplied,
 }: {
   items: ResumeItem[];
   draftingKeys: string[];
@@ -75,7 +95,9 @@ export function Resume({
   onLoadDraft: (sourceKey: string) => Promise<ResumeDraftResponse | null>;
   onGenerateDraft: (sourceKey: string, approvedSuggestionIds: string[], userNotes: string) => Promise<ResumeDraftResponse | null>;
   selectedSourceKey?: string;
+  selectedTarget?: ResumeNavigationTarget | null;
   targetRequestId?: number;
+  onTargetApplied?: () => void;
 }) {
   const { t } = useAppTranslation();
   const [selectedKey, setSelectedKey] = useState('');
@@ -98,18 +120,27 @@ export function Resume({
   );
   const allSelected = parsedSuggestions.length > 0 && parsedSuggestions.every((item) => selectedSuggestionIds.has(item.id));
   const isDrafting = selectedItem ? draftingSet.has(selectedItem.sourceKey) : false;
+  const hasNavigationTarget = Boolean(
+    targetRequestId
+    && (selectedTarget?.sourceKey || selectedTarget?.jobId || selectedTarget?.company || selectedTarget?.title || selectedSourceKey)
+  );
 
   useEffect(() => {
+    if (hasNavigationTarget) return;
     if (!selectedKey && items[0]) setSelectedKey(items[0].sourceKey);
-  }, [items, selectedKey]);
+  }, [hasNavigationTarget, items, selectedKey]);
 
   useEffect(() => {
-    if (!selectedSourceKey || !targetRequestId) return;
-    const targetKey = `${targetRequestId}:${selectedSourceKey}`;
+    const target = selectedTarget || { sourceKey: selectedSourceKey };
+    if ((!target.sourceKey && !target.jobId && !target.company && !target.title) || !targetRequestId) return;
+    const targetKey = `${targetRequestId}:${target.sourceKey || target.jobId || `${target.company}:${target.title}:${target.city}`}`;
     if (appliedTargetRef.current === targetKey) return;
-    if (items.some((item) => item.sourceKey === selectedSourceKey)) setSelectedKey(selectedSourceKey);
+    const matchedItem = items.find((item) => matchesResumeTarget(item, target));
+    if (!matchedItem) return;
+    setSelectedKey(matchedItem.sourceKey);
     appliedTargetRef.current = targetKey;
-  }, [items, selectedSourceKey, targetRequestId]);
+    onTargetApplied?.();
+  }, [items, onTargetApplied, selectedSourceKey, selectedTarget, targetRequestId]);
 
   useEffect(() => {
     let cancelled = false;

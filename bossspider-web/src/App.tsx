@@ -28,7 +28,7 @@ import { Resume } from './pages/Resume';
 import { Rules } from './pages/Rules';
 import { Scope } from './pages/Scope';
 import { Story } from './pages/Story';
-import type { InterviewStory, Tab } from './types';
+import type { InterviewStory, ResumeNavigationTarget, Tab } from './types';
 
 const STORY_DRAFT_TRANSFER_KEY = 'bossspider:story-draft-transfer';
 type NavStage = 'discovery' | 'evaluation' | 'materials' | 'interview';
@@ -78,6 +78,7 @@ export default function App() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [selectedPipelineKey, setSelectedPipelineKey] = useState('');
   const [selectedResumeKey, setSelectedResumeKey] = useState('');
+  const [selectedResumeTarget, setSelectedResumeTarget] = useState<ResumeNavigationTarget | null>(null);
   const [selectedStoryDraftId, setSelectedStoryDraftId] = useState('');
   const [dashboardTargetRequestId, setDashboardTargetRequestId] = useState(0);
   const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
@@ -99,6 +100,7 @@ export default function App() {
     setSelectedJobId(tab === 'Jobs' ? target?.jobId ?? null : null);
     setSelectedPipelineKey(tab === 'Pipeline' ? target?.sourceKey ?? '' : '');
     setSelectedResumeKey(tab === 'Resume' ? target?.sourceKey ?? '' : '');
+    setSelectedResumeTarget(tab === 'Resume' ? { sourceKey: target?.sourceKey ?? '' } : null);
     setSelectedStoryDraftId(tab === 'Story' ? target?.draftId ?? '' : '');
     if (tab === 'Interview' && target?.sourceKey) setSelectedInterviewKey(target.sourceKey);
     setActiveTab(tab);
@@ -336,6 +338,13 @@ export default function App() {
                 onLoadInterviewPrep={boss.loadInterviewPrep}
                 onUpdateStatus={boss.updatePipelineStatus}
                 onDeleteItem={boss.deletePipelineItem}
+                onOpenResumeMaterials={(target) => {
+                  setDashboardTargetRequestId((value) => value + 1);
+                  setSelectedResumeKey(target.sourceKey || '');
+                  setSelectedResumeTarget(target);
+                  void boss.refreshResumeItems();
+                  setActiveTabStable('Resume');
+                }}
                 targetSourceKey={selectedPipelineKey}
                 targetRequestId={dashboardTargetRequestId}
               />
@@ -349,7 +358,12 @@ export default function App() {
                 onLoadDraft={boss.loadResumeDraft}
                 onGenerateDraft={boss.generateResumeDraft}
                 selectedSourceKey={selectedResumeKey}
+                selectedTarget={selectedResumeTarget}
                 targetRequestId={dashboardTargetRequestId}
+                onTargetApplied={() => {
+                  setSelectedResumeKey('');
+                  setSelectedResumeTarget(null);
+                }}
               />
             )}
             {activeTab === 'Story' && (

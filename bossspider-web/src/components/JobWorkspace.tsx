@@ -19,6 +19,8 @@ import { JobDescription } from './JobDescription';
 import type { DecisionStatus, GreetingDraft, GreetingDraftStatus, Job, PipelineItem } from '../types';
 
 type WorkspaceTab = 'overview' | 'info' | 'evaluation' | 'materials' | 'interview' | 'records';
+type NextAction = 'llm' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
+type MaterialStepKey = 'llm' | 'resumeSuggestion' | 'resumeDraft' | 'interviewPrep';
 
 type StatusOption = {
   value: DecisionStatus;
@@ -49,6 +51,7 @@ type JobWorkspaceProps = {
   onViewInterviewPrep: () => void;
   isInterviewPreparing: boolean;
   interviewLoading: boolean;
+  onOpenResumeMaterials: () => void;
 };
 
 const MATERIAL_TONES = {
@@ -99,15 +102,38 @@ function MaterialPill({
   label,
   ready,
   tone,
+  current,
+  onClick,
 }: {
   label: string;
   ready: boolean;
   tone: 'llm' | 'resume' | 'interview';
+  current?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <span className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${ready ? MATERIAL_TONES[tone] : MATERIAL_TONES.missing}`}>
+  const className = `inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${
+    ready ? MATERIAL_TONES[tone] : MATERIAL_TONES.missing
+  } ${
+    current ? 'ring-1 ring-indigo-500/70 ring-offset-1 ring-offset-zinc-950' : ''
+  } ${
+    onClick ? 'cursor-pointer transition-colors hover:border-indigo-700 hover:bg-indigo-950/30 hover:text-indigo-200' : ''
+  }`;
+  const content = (
+    <>
       {ready ? <CheckCircle2 size={11} /> : <Circle size={11} />}
       {label}
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+  return (
+    <span className={className}>
+      {content}
     </span>
   );
 }
@@ -180,6 +206,7 @@ export function JobWorkspace({
   onViewInterviewPrep,
   isInterviewPreparing,
   interviewLoading,
+  onOpenResumeMaterials,
 }: JobWorkspaceProps) {
   const { t } = useAppTranslation();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
@@ -197,13 +224,28 @@ export function JobWorkspace({
     setGreetingText(greetingSourceText);
   }, [greetingDraft?.sourceKey, greetingDraft?.updatedAt, greetingSourceText]);
 
-  const nextAction = useMemo(() => {
+  const nextAction = useMemo<NextAction>(() => {
     if (!item.reportPath) return 'llm';
     if (!item.resumeSuggestionPath) return 'resume';
+    if (!item.resumeDraftPath) return 'draft';
     if (!item.interviewPrepPath) return 'interview';
     if (item.decisionStatus === 'needs_review') return 'confirm';
     return 'review';
-  }, [item.decisionStatus, item.interviewPrepPath, item.reportPath, item.resumeSuggestionPath]);
+  }, [item.decisionStatus, item.interviewPrepPath, item.reportPath, item.resumeDraftPath, item.resumeSuggestionPath]);
+
+  const materialSteps: Array<{
+    key: MaterialStepKey;
+    label: string;
+    ready: boolean;
+    tone: 'llm' | 'resume' | 'interview';
+    tab: WorkspaceTab;
+    current: boolean;
+  }> = [
+    { key: 'llm', label: t('pipeline.material.llm'), ready: Boolean(item.reportPath), tone: 'llm', tab: 'evaluation', current: nextAction === 'llm' },
+    { key: 'resumeSuggestion', label: t('pipeline.material.resumeSuggestion'), ready: Boolean(item.resumeSuggestionPath), tone: 'resume', tab: 'materials', current: nextAction === 'resume' },
+    { key: 'resumeDraft', label: t('pipeline.material.resumeDraft'), ready: Boolean(item.resumeDraftPath), tone: 'resume', tab: 'materials', current: nextAction === 'draft' },
+    { key: 'interviewPrep', label: t('pipeline.material.interviewPrep'), ready: Boolean(item.interviewPrepPath), tone: 'interview', tab: 'interview', current: nextAction === 'interview' },
+  ];
 
   const tabs: Array<{ value: WorkspaceTab; label: string }> = [
     { value: 'overview', label: t('jobWorkspace.tabs.overview') },
@@ -294,12 +336,15 @@ export function JobWorkspace({
           <div className="space-y-4">
             <Section title={t('jobWorkspace.nextAction')}>
               <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
-                <div className="text-sm font-medium text-zinc-100">
-                  {nextAction === 'llm' && t('jobWorkspace.nextActions.llm')}
-                  {nextAction === 'resume' && t('jobWorkspace.nextActions.resume')}
-                  {nextAction === 'interview' && t('jobWorkspace.nextActions.interview')}
-                  {nextAction === 'confirm' && t('jobWorkspace.nextActions.confirm')}
-                  {nextAction === 'review' && t('jobWorkspace.nextActions.review')}
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{t('jobWorkspace.nextActionCurrent')}</div>
+                    <div className="mt-1 text-sm font-semibold text-zinc-100">{t(`jobWorkspace.nextActionLabels.${nextAction}`)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{t('jobWorkspace.nextActionWhy')}</div>
+                    <div className="mt-1 text-xs leading-relaxed text-zinc-400">{t(`jobWorkspace.nextActionReasons.${nextAction}`)}</div>
+                  </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {nextAction === 'llm' && (
@@ -314,10 +359,25 @@ export function JobWorkspace({
                       {t('pipeline.generateSuggestions')}
                     </ActionButton>
                   )}
+                  {nextAction === 'draft' && (
+                    <ActionButton
+                      onClick={onOpenResumeMaterials}
+                      tone="indigo"
+                    >
+                      <FileText size={13} />
+                      {t('jobWorkspace.openResumeMaterials')}
+                    </ActionButton>
+                  )}
                   {nextAction === 'interview' && (
                     <ActionButton onClick={onGenerateInterviewPrep} disabled={isInterviewPreparing || interviewLoading} tone="cyan">
                       {isInterviewPreparing || interviewLoading ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
                       {t('pipeline.generateInterviewPrep')}
+                    </ActionButton>
+                  )}
+                  {nextAction === 'confirm' && (
+                    <ActionButton onClick={() => setActiveTab('records')} tone="zinc">
+                      <CheckCircle2 size={13} />
+                      {t('jobWorkspace.nextActionButtons.confirm')}
                     </ActionButton>
                   )}
                   {item.reportPath && (
@@ -345,10 +405,16 @@ export function JobWorkspace({
 
             <Section title={t('pipeline.materials')}>
               <div className="grid grid-cols-2 gap-2">
-                <MaterialPill label={t('pipeline.material.llm')} ready={Boolean(item.reportPath)} tone="llm" />
-                <MaterialPill label={t('pipeline.material.resumeSuggestion')} ready={Boolean(item.resumeSuggestionPath)} tone="resume" />
-                <MaterialPill label={t('pipeline.material.resumeDraft')} ready={Boolean(item.resumeDraftPath)} tone="resume" />
-                <MaterialPill label={t('pipeline.material.interviewPrep')} ready={Boolean(item.interviewPrepPath)} tone="interview" />
+                {materialSteps.map((step) => (
+                  <MaterialPill
+                    key={step.key}
+                    label={step.label}
+                    ready={step.ready}
+                    tone={step.tone}
+                    current={step.current}
+                    onClick={() => setActiveTab(step.tab)}
+                  />
+                ))}
               </div>
             </Section>
           </div>
@@ -454,6 +520,12 @@ export function JobWorkspace({
               </div>
               {item.resumeDraftedAt && <div className="text-[10px] text-zinc-500">{t('pipeline.generatedAt', { date: item.resumeDraftedAt })}</div>}
               {item.resumeDraftPath && <div className="break-all text-[10px] text-zinc-500">{item.resumeDraftPath}</div>}
+              {!item.resumeDraftPath && (
+                <ActionButton onClick={onOpenResumeMaterials} tone="indigo">
+                  <FileText size={13} />
+                  {t('jobWorkspace.openResumeMaterials')}
+                </ActionButton>
+              )}
             </Section>
             <Section title={t('jobWorkspace.greeting')}>
               {greetingLoading ? (

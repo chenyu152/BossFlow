@@ -152,6 +152,14 @@ export type PipelineItem = {
   raw: string;
 };
 
+export type ResumeNavigationTarget = {
+  sourceKey?: string;
+  jobId?: number | null;
+  company?: string;
+  title?: string;
+  city?: string;
+};
+
 export type PipelineResponse = {
   path: string;
   schemaVersion: number;
