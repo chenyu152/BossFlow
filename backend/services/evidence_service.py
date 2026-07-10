@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import uuid
@@ -24,6 +25,11 @@ def _now() -> str:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def _stable_requirement_id(source_key: str, canonical_key: str) -> str:
+    digest = hashlib.sha1(f"{source_key}|{canonical_key}".encode("utf-8")).hexdigest()[:12]
+    return f"req-{digest}"
 
 
 def _empty_store() -> dict[str, Any]:
@@ -100,19 +106,30 @@ def ensure_evidence_store() -> None:
 
 
 def _overview(store: dict[str, Any]) -> dict[str, Any]:
+    active_requirement_ids = {
+        item.get("requirementId")
+        for item in store["requirements"]
+        if item.get("active") is not False
+    }
     confirmed = sum(1 for item in store["evidenceItems"] if item.get("status") == "confirmed")
     unresolved = sum(
         1
         for coverage in store["coverages"]
+        if coverage.get("requirementId") in active_requirement_ids
         if coverage.get("coverageStatus") in {"not_found", "unknown", "partial"}
     )
-    pending_tasks = sum(1 for task in store["tasks"] if task.get("status") in {"pending", "in_progress"})
+    pending_tasks = sum(
+        1
+        for task in store["tasks"]
+        if task.get("requirementId") in active_requirement_ids
+        and task.get("status") in {"pending", "in_progress"}
+    )
     return {
         "ok": True,
         "path": str(EVIDENCE_STORE_PATH),
         **store,
         "counts": {
-            "requirements": len(store["requirements"]),
+            "requirements": sum(1 for item in store["requirements"] if item.get("active") is not False),
             "evidenceItems": len(store["evidenceItems"]),
             "confirmedEvidenceItems": confirmed,
             "unresolvedCoverages": unresolved,
@@ -129,7 +146,7 @@ def read_evidence_overview() -> dict[str, Any]:
 def list_requirements(source_key: str = "") -> dict[str, Any]:
     with exclusive_file_lock(EVIDENCE_LOCK_PATH):
         store = _read_store_unlocked()
-        requirements = store["requirements"]
+        requirements = [item for item in store["requirements"] if item.get("active") is not False]
         if source_key:
             requirements = [item for item in requirements if item.get("sourceKey") == source_key]
         return {
@@ -147,6 +164,7 @@ def upsert_requirements(requirements: list[dict[str, Any]]) -> dict[str, Any]:
         by_id = {str(item.get("requirementId") or ""): item for item in store["requirements"] if item.get("requirementId")}
         for raw in requirements:
             item = dict(raw)
+            item["active"] = True
             requirement_id = str(item.get("requirementId") or "").strip() or _new_id("req")
             item["requirementId"] = requirement_id
             if requirement_id in by_id:
@@ -156,6 +174,133 @@ def upsert_requirements(requirements: list[dict[str, Any]]) -> dict[str, Any]:
                 by_id[requirement_id] = item
         _write_store_unlocked(store)
         return _overview(store)
+
+
+def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any]]) -> dict[str, Any]:
+    """Sync machine-extracted requirements without overwriting user decisions."""
+    assessed_at = _now()
+    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
+        store = _read_store_unlocked()
+        existing_requirements = {
+            (str(item.get("sourceKey") or ""), str(item.get("canonicalKey") or "")): item
+            for item in store["requirements"]
+        }
+        coverages_by_requirement = {
+            str(item.get("requirementId") or ""): item
+            for item in store["coverages"]
+            if item.get("requirementId")
+        }
+        synced_requirements: list[dict[str, Any]] = []
+        synced_coverages: list[dict[str, Any]] = []
+
+        for requirement in store["requirements"]:
+            if requirement.get("sourceKey") == source_key:
+                requirement["active"] = False
+
+        for assessment in assessments:
+            canonical_key = str(assessment.get("canonicalKey") or "").strip()
+            if not canonical_key:
+                continue
+            key = (source_key, canonical_key)
+            requirement = existing_requirements.get(key)
+            if requirement is None:
+                requirement = {"requirementId": _stable_requirement_id(source_key, canonical_key)}
+                store["requirements"].append(requirement)
+                existing_requirements[key] = requirement
+            requirement.update(
+                {
+                    "canonicalKey": canonical_key,
+                    "label": str(assessment.get("label") or canonical_key).strip(),
+                    "category": str(assessment.get("category") or "other"),
+                    "importance": str(assessment.get("importance") or "context"),
+                    "sourceKey": source_key,
+                    "jdQuote": str(assessment.get("jdQuote") or "").strip(),
+                    "extractionConfidence": assessment.get("confidence", 0),
+                    "assessedAt": assessed_at,
+                    "active": True,
+                }
+            )
+            synced_requirements.append(requirement)
+
+            requirement_id = requirement["requirementId"]
+            coverage = coverages_by_requirement.get(requirement_id)
+            if coverage is None:
+                coverage = {"requirementId": requirement_id, "evidenceIds": []}
+                store["coverages"].append(coverage)
+                coverages_by_requirement[requirement_id] = coverage
+
+            assessment_status = str(assessment.get("coverageStatus") or "unknown")
+            assessment_patch = {
+                "assessmentStatus": assessment_status,
+                "assessmentRationale": str(assessment.get("rationale") or "").strip(),
+                "assessmentConfidence": assessment.get("confidence", 0),
+                "candidateEvidenceRefs": assessment.get("candidateEvidenceRefs") or [],
+                "assessedAt": assessed_at,
+            }
+            coverage.update(assessment_patch)
+
+            if not coverage.get("userDecisionAt"):
+                safe_initial_status = "partial" if assessment_status == "supported" else assessment_status
+                if safe_initial_status not in {"partial", "not_found", "unknown"}:
+                    safe_initial_status = "unknown"
+                coverage.update(
+                    {
+                        "coverageStatus": safe_initial_status,
+                        "rationale": assessment_patch["assessmentRationale"],
+                        "confidence": assessment_patch["assessmentConfidence"],
+                        "userClassification": "",
+                        "userDecisionAt": "",
+                    }
+                )
+            synced_coverages.append(coverage)
+
+        synced_requirement_ids = {item["requirementId"] for item in synced_requirements}
+        required_ids = {
+            item["requirementId"]
+            for item in synced_requirements
+            if item.get("importance") == "required"
+        }
+        supported_count = sum(
+            1
+            for coverage in synced_coverages
+            if coverage.get("coverageStatus") == "supported"
+        )
+        potential_count = sum(
+            1
+            for coverage in synced_coverages
+            if not coverage.get("userDecisionAt")
+            and coverage.get("assessmentStatus") in {"supported", "partial"}
+        )
+        unresolved_count = sum(
+            1
+            for coverage in synced_coverages
+            if coverage.get("coverageStatus") != "supported"
+        )
+        blocking_count = sum(
+            1
+            for coverage in synced_coverages
+            if coverage.get("requirementId") in required_ids
+            and coverage.get("coverageStatus") in {"not_found", "user_confirmed_absent"}
+        )
+        _write_store_unlocked(store)
+        return {
+            "ok": True,
+            "sourceKey": source_key,
+            "requirements": synced_requirements,
+            "coverages": [
+                item for item in store["coverages"]
+                if item.get("requirementId") in synced_requirement_ids
+            ],
+            "summary": {
+                "requirementCount": len(synced_requirements),
+                "supportedRequirementCount": supported_count,
+                "potentialEvidenceRequirementCount": potential_count,
+                "unresolvedRequirementCount": unresolved_count,
+                "blockingGapCount": blocking_count,
+                "requirementAssessedAt": assessed_at,
+            },
+            "overview": _overview(store),
+        }
 
 
 def _requirement(store: dict[str, Any], requirement_id: str) -> dict[str, Any]:

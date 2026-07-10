@@ -209,6 +209,12 @@ def _item_from_line(line: str, status: str) -> dict[str, Any] | None:
         "interviewPrepPath": meta.get("interviewPrepPath", ""),
         "interviewPrepJsonPath": meta.get("interviewPrepJsonPath", ""),
         "interviewPreparedAt": meta.get("interviewPreparedAt", ""),
+        "requirementCount": meta.get("requirementCount", 0),
+        "supportedRequirementCount": meta.get("supportedRequirementCount", 0),
+        "potentialEvidenceRequirementCount": meta.get("potentialEvidenceRequirementCount", 0),
+        "unresolvedRequirementCount": meta.get("unresolvedRequirementCount", 0),
+        "blockingGapCount": meta.get("blockingGapCount", 0),
+        "requirementAssessedAt": meta.get("requirementAssessedAt", ""),
         "decisionStatus": meta.get("decisionStatus") or ("needs_review" if meta.get("reportPath") else "needs_llm"),
         "raw": line,
     }

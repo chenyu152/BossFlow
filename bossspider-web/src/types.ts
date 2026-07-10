@@ -152,6 +152,12 @@ export type PipelineItem = {
   interviewPrepPath: string;
   interviewPrepJsonPath: string;
   interviewPreparedAt: string;
+  requirementCount: number;
+  supportedRequirementCount: number;
+  potentialEvidenceRequirementCount: number;
+  unresolvedRequirementCount: number;
+  blockingGapCount: number;
+  requirementAssessedAt: string;
   decisionStatus: DecisionStatus;
   raw: string;
 };
@@ -261,6 +267,25 @@ export type LlmEvaluatePipelineResponse = {
     fitLevel: string;
     recommendation: string;
     greetingReady: string;
+  };
+  requirementAssessment: Array<{
+    canonicalKey: string;
+    label: string;
+    category: EvidenceRequirementCategory;
+    importance: EvidenceRequirementImportance;
+    jdQuote: string;
+    candidateEvidenceRefs: Array<{ sourceType: string; quote: string; locator: string }>;
+    coverageStatus: 'supported' | 'partial' | 'not_found' | 'unknown';
+    rationale: string;
+    confidence: number;
+  }>;
+  evidenceSummary: {
+    requirementCount: number;
+    supportedRequirementCount: number;
+    potentialEvidenceRequirementCount: number;
+    unresolvedRequirementCount: number;
+    blockingGapCount: number;
+    requirementAssessedAt: string;
   };
   pipeline: PipelineResponse;
 };
@@ -432,6 +457,8 @@ export type EvidenceRequirement = {
   sourceKey: string;
   jdQuote: string;
   extractionConfidence: number;
+  active?: boolean;
+  assessedAt?: string;
 };
 
 export type EvidenceSourceRef = {
@@ -465,6 +492,15 @@ export type EvidenceCoverage = {
   confidence: number;
   userClassification: EvidenceClassification;
   userDecisionAt: string;
+  assessmentStatus?: 'supported' | 'partial' | 'not_found' | 'unknown';
+  assessmentRationale?: string;
+  assessmentConfidence?: number;
+  candidateEvidenceRefs?: Array<{
+    sourceType: string;
+    quote: string;
+    locator: string;
+  }>;
+  assessedAt?: string;
 };
 
 export type EvidenceTask = {

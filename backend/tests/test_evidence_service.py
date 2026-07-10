@@ -114,6 +114,72 @@ class EvidenceServiceTest(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 400)
 
+    def test_assessment_sync_uses_stable_ids_and_preserves_user_decisions(self):
+        assessment = [
+            {
+                "canonicalKey": "go-concurrency",
+                "label": "Go 并发开发",
+                "category": "skill",
+                "importance": "required",
+                "jdQuote": "熟悉 Go 并发开发",
+                "candidateEvidenceRefs": [{"sourceType": "cv", "quote": "并发任务项目", "locator": "项目经历"}],
+                "coverageStatus": "supported",
+                "rationale": "当前简历中找到候选证据。",
+                "confidence": 0.9,
+            },
+            {
+                "canonicalKey": "kubernetes-production",
+                "label": "Kubernetes 生产经验",
+                "category": "experience",
+                "importance": "required",
+                "jdQuote": "具备 Kubernetes 生产经验",
+                "candidateEvidenceRefs": [],
+                "coverageStatus": "not_found",
+                "rationale": "当前材料中未找到相关证据。",
+                "confidence": 0.95,
+            },
+        ]
+
+        first = evidence_service.sync_requirement_assessment("agent:7", assessment)
+        requirement_id = first["requirements"][0]["requirementId"]
+        self.assertEqual(first["coverages"][0]["coverageStatus"], "partial")
+        self.assertEqual(first["summary"]["potentialEvidenceRequirementCount"], 1)
+        self.assertEqual(first["summary"]["blockingGapCount"], 1)
+
+        created = evidence_service.create_evidence_item({
+            "title": "并发任务项目",
+            "evidenceType": "project",
+            "summary": "",
+            "userRole": "开发",
+            "actions": ["实现并发调度"],
+            "results": [],
+            "sourceRefs": [],
+            "tags": ["go"],
+            "status": "draft",
+        })
+        evidence_id = created["item"]["evidenceId"]
+        evidence_service.classify_coverage({
+            "requirementId": requirement_id,
+            "userClassification": "done",
+            "evidenceIds": [evidence_id],
+            "rationale": "用户确认做过。",
+            "confidence": 1,
+        })
+        evidence_service.confirm_evidence_item(evidence_id)
+
+        changed_assessment = [{**assessment[0], "coverageStatus": "not_found", "candidateEvidenceRefs": []}]
+        second = evidence_service.sync_requirement_assessment("agent:7", changed_assessment)
+        coverage = second["coverages"][0]
+        self.assertEqual(second["requirements"][0]["requirementId"], requirement_id)
+        self.assertEqual(coverage["assessmentStatus"], "not_found")
+        self.assertEqual(coverage["coverageStatus"], "supported")
+        self.assertEqual(coverage["userClassification"], "done")
+        self.assertEqual(coverage["rationale"], "用户确认做过。")
+        listed = evidence_service.list_requirements("agent:7")
+        self.assertEqual(len(listed["requirements"]), 1)
+        self.assertEqual(second["summary"]["potentialEvidenceRequirementCount"], 0)
+        self.assertEqual(second["overview"]["counts"]["unresolvedCoverages"], 0)
+
     def test_migrates_missing_collections_without_losing_requirements(self):
         evidence_service.EVIDENCE_STORE_PATH.write_text(
             json.dumps({
