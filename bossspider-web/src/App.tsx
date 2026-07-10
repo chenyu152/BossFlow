@@ -359,6 +359,8 @@ export default function App() {
               {activeTab === 'Pipeline' && (
                 <Pipeline
                   pipeline={boss.pipeline}
+                  evidenceOverview={boss.evidenceOverview}
+                  evidenceLoading={boss.evidenceLoading}
                   onRefresh={() => { void boss.refreshPipeline(); }}
                   onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
                   llmEvaluatingKeys={boss.llmEvaluatingKeys}

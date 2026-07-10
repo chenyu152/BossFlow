@@ -420,6 +420,47 @@
     "basicInfo": "Basic info",
     "coarseEvaluation": "Coarse evaluation",
     "llmEvaluation": "LLM evaluation",
+    "evidence": {
+      "requirementsTitle": "Core requirements and evidence coverage",
+      "loading": "Loading evidence assessment...",
+      "requirementsSummary": "This role has {{count}} core requirements, including {{required}} required items. AI only evaluates evidence found in current materials; you make the final decision.",
+      "confirmedCoverage": "Confirmed evidence",
+      "candidateHint": "{{count}} additional material clue(s) need confirmation",
+      "pendingDecision": "Awaiting your decision",
+      "confirmedGaps": "Confirmed gaps",
+      "candidateSources": "Current material clues",
+      "confirmedEvidenceCount": "Linked to {{count}} confirmed evidence item(s)",
+      "notFoundStatement": "No relevant evidence was found in current materials. This does not mean you lack this capability.",
+      "confidence": "AI assessment confidence {{value}}%",
+      "legacyReportHint": "This evaluation predates structured evidence. Re-run it to extract core requirements here.",
+      "regenerateAssessment": "Re-run evaluation and extract requirements",
+      "noAssessment": "After an LLM evaluation, core requirements, current material clues, and confirmation items will appear here.",
+      "importance": {
+        "required": "Required",
+        "preferred": "Preferred",
+        "context": "Context"
+      },
+      "categories": {
+        "skill": "Skill",
+        "experience": "Experience",
+        "behavior": "Behavior",
+        "education": "Education",
+        "location": "Location",
+        "preference": "Preference",
+        "other": "Other"
+      },
+      "statuses": {
+        "supported": "Confirmed evidence",
+        "doneNeedsFacts": "Done, facts needed",
+        "adjacent": "Adjacent experience",
+        "confirmedAbsent": "Confirmed not done",
+        "unsure": "Still unsure",
+        "candidate": "Candidate evidence found",
+        "partial": "Partial evidence, confirm",
+        "notFound": "No evidence in current materials",
+        "unknown": "Not assessed"
+      }
+    },
     "greeting": "Greeting prep",
     "greetingPlaceholder": "Greeting drafts and sent status will be added in a later phase.",
     "loadingGreeting": "Loading greeting draft...",

@@ -8,6 +8,7 @@ import { useJobWorkspaceArtifacts } from '../hooks/useJobWorkspaceArtifacts';
 import { useSelectedPipelineItem } from '../hooks/useSelectedPipelineItem';
 import type {
   DecisionStatus,
+  EvidenceOverviewResponse,
   GreetingDraftResponse,
   GreetingDraftStatus,
   InterviewPrepResponse,
@@ -97,6 +98,8 @@ function MaterialBadge({ label, ready, tone = 'zinc' }: { label: string; ready: 
 
 export function Pipeline({
   pipeline,
+  evidenceOverview,
+  evidenceLoading,
   onRefresh,
   onLlmEvaluate,
   llmEvaluatingKeys,
@@ -119,6 +122,8 @@ export function Pipeline({
   targetRequestId,
 }: {
   pipeline: PipelineResponse | null;
+  evidenceOverview: EvidenceOverviewResponse | null;
+  evidenceLoading: boolean;
   onRefresh: () => void;
   onLlmEvaluate: (sourceKey: string) => void;
   llmEvaluatingKeys: string[];
@@ -432,6 +437,8 @@ export function Pipeline({
         {selectedItem && (
           <JobWorkspace
             item={selectedItem}
+            evidenceOverview={evidenceOverview}
+            evidenceLoading={evidenceLoading}
             job={selectedJob}
             detailLoading={detailLoading}
             statusOptions={STATUS_OPTIONS}

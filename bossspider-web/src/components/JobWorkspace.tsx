@@ -17,6 +17,7 @@ import { useAppTranslation } from '../i18n';
 import { DetailItem } from './DetailItem';
 import { JobDescription } from './JobDescription';
 import type { DecisionStatus, GreetingDraft, GreetingDraftStatus, Job, PipelineItem } from '../types';
+import type { EvidenceCoverage, EvidenceOverviewResponse, EvidenceRequirement } from '../types';
 
 type WorkspaceTab = 'overview' | 'info' | 'evaluation' | 'materials' | 'interview' | 'records';
 type NextAction = 'llm' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
@@ -29,6 +30,8 @@ type StatusOption = {
 
 type JobWorkspaceProps = {
   item: PipelineItem;
+  evidenceOverview: EvidenceOverviewResponse | null;
+  evidenceLoading: boolean;
   job: Job | null;
   detailLoading: boolean;
   statusOptions: StatusOption[];
@@ -184,6 +187,8 @@ function ActionButton({
 
 export function JobWorkspace({
   item,
+  evidenceOverview,
+  evidenceLoading,
   job,
   detailLoading,
   statusOptions,
@@ -217,6 +222,37 @@ export function JobWorkspace({
     item.resumeDraftPath,
     item.interviewPrepPath,
   ].filter(Boolean).length;
+  const requirements = useMemo(
+    () => (evidenceOverview?.requirements || [])
+      .filter((requirement) => requirement.sourceKey === item.sourceKey && requirement.active !== false)
+      .sort((left, right) => {
+        const importanceOrder = { required: 0, preferred: 1, context: 2 };
+        const importanceDiff = importanceOrder[left.importance] - importanceOrder[right.importance];
+        if (importanceDiff) return importanceDiff;
+        return left.label.localeCompare(right.label);
+      }),
+    [evidenceOverview?.requirements, item.sourceKey],
+  );
+  const coverageByRequirement = useMemo(
+    () => new Map((evidenceOverview?.coverages || []).map((coverage) => [coverage.requirementId, coverage])),
+    [evidenceOverview?.coverages],
+  );
+  const requirementCount = requirements.length || item.requirementCount || 0;
+  const confirmedCoverageCount = requirements.length
+    ? requirements.filter((requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'supported').length
+    : item.supportedRequirementCount || 0;
+  const pendingDecisionCount = requirements.length
+    ? requirements.filter((requirement) => !coverageByRequirement.get(requirement.requirementId)?.userDecisionAt).length
+    : item.unresolvedRequirementCount || 0;
+  const confirmedGapCount = requirements.filter(
+    (requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'user_confirmed_absent',
+  ).length;
+  const potentialEvidenceCount = requirements.length
+    ? requirements.filter((requirement) => {
+      const coverage = coverageByRequirement.get(requirement.requirementId);
+      return !coverage?.userDecisionAt && (coverage?.assessmentStatus === 'supported' || coverage?.assessmentStatus === 'partial');
+    }).length
+    : item.potentialEvidenceRequirementCount || 0;
   const averageSalary = (job?.avg ?? item.avg ?? 0).toFixed(1);
   const greetingSourceText = greetingDraft?.editedText || greetingDraft?.draftText || '';
 
@@ -277,6 +313,28 @@ export function JobWorkspace({
     ? t(`jobWorkspace.greetingStatuses.${greetingDraft.status}`)
     : t('jobWorkspace.greetingStatuses.draft');
 
+  const evidenceStatus = (coverage?: EvidenceCoverage) => {
+    if (coverage?.userDecisionAt) {
+      if (coverage.coverageStatus === 'supported') return { label: t('jobWorkspace.evidence.statuses.supported'), classes: 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300' };
+      if (coverage.userClassification === 'done') return { label: t('jobWorkspace.evidence.statuses.doneNeedsFacts'), classes: 'border-indigo-900/70 bg-indigo-950/40 text-indigo-300' };
+      if (coverage.userClassification === 'adjacent') return { label: t('jobWorkspace.evidence.statuses.adjacent'), classes: 'border-cyan-900/70 bg-cyan-950/40 text-cyan-300' };
+      if (coverage.userClassification === 'not_done') return { label: t('jobWorkspace.evidence.statuses.confirmedAbsent'), classes: 'border-red-900/70 bg-red-950/40 text-red-300' };
+      return { label: t('jobWorkspace.evidence.statuses.unsure'), classes: 'border-zinc-700 bg-zinc-900 text-zinc-300' };
+    }
+    if (coverage?.assessmentStatus === 'supported') return { label: t('jobWorkspace.evidence.statuses.candidate'), classes: 'border-amber-900/70 bg-amber-950/40 text-amber-300' };
+    if (coverage?.assessmentStatus === 'partial') return { label: t('jobWorkspace.evidence.statuses.partial'), classes: 'border-amber-900/70 bg-amber-950/40 text-amber-300' };
+    if (coverage?.assessmentStatus === 'not_found' || coverage?.coverageStatus === 'not_found') return { label: t('jobWorkspace.evidence.statuses.notFound'), classes: 'border-zinc-700 bg-zinc-900 text-zinc-300' };
+    return { label: t('jobWorkspace.evidence.statuses.unknown'), classes: 'border-zinc-800 bg-zinc-900/60 text-zinc-500' };
+  };
+
+  const importanceClasses = (requirement: EvidenceRequirement) => (
+    requirement.importance === 'required'
+      ? 'border-red-900/60 bg-red-950/30 text-red-300'
+      : requirement.importance === 'preferred'
+        ? 'border-indigo-900/60 bg-indigo-950/30 text-indigo-300'
+        : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+  );
+
   return (
     <div className="w-[42rem] shrink-0 border-l border-zinc-800 bg-zinc-950 flex flex-col">
       <div className="border-b border-zinc-800 p-4">
@@ -289,6 +347,9 @@ export function JobWorkspace({
               <span>{item.salary || '-'}</span>
               <span>{t('pipeline.score')} {item.score ? item.score.toFixed(1) : '-'}</span>
               <span>{t('pipeline.llm')} {item.llmScore ? item.llmScore.toFixed(1) : '-'}</span>
+              <span className="rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                {statusOptions.find((option) => option.value === item.decisionStatus)?.label || item.decisionStatus}
+              </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -396,10 +457,17 @@ export function JobWorkspace({
                 <div className="mt-2 text-2xl font-semibold text-zinc-100">{materialReadyCount}/4</div>
               </div>
               <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
-                <div className="text-xs text-zinc-500">{t('jobWorkspace.currentStatus')}</div>
-                <div className="mt-2 text-sm font-medium text-zinc-100">
-                  {statusOptions.find((option) => option.value === item.decisionStatus)?.label || item.decisionStatus}
-                </div>
+                <div className="text-xs text-zinc-500">{t('jobWorkspace.evidence.confirmedCoverage')}</div>
+                <div className="mt-2 text-2xl font-semibold text-emerald-200">{requirementCount ? `${confirmedCoverageCount}/${requirementCount}` : '-'}</div>
+                {potentialEvidenceCount > 0 && <div className="mt-1 text-[10px] text-amber-400">{t('jobWorkspace.evidence.candidateHint', { count: potentialEvidenceCount })}</div>}
+              </div>
+              <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
+                <div className="text-xs text-zinc-500">{t('jobWorkspace.evidence.pendingDecision')}</div>
+                <div className="mt-2 text-2xl font-semibold text-amber-200">{requirementCount ? pendingDecisionCount : '-'}</div>
+              </div>
+              <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
+                <div className="text-xs text-zinc-500">{t('jobWorkspace.evidence.confirmedGaps')}</div>
+                <div className="mt-2 text-2xl font-semibold text-red-200">{requirementCount ? confirmedGapCount : '-'}</div>
               </div>
             </div>
 
@@ -489,6 +557,94 @@ export function JobWorkspace({
                   {isLlmEvaluating && <Loader2 size={13} className="animate-spin" />}
                   {isLlmEvaluating ? t('pipeline.generating') : t('pipeline.llmEval')}
                 </ActionButton>
+              )}
+            </Section>
+            <Section title={t('jobWorkspace.evidence.requirementsTitle')}>
+              {evidenceLoading ? (
+                <div className="flex items-center gap-2 text-sm text-zinc-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  {t('jobWorkspace.evidence.loading')}
+                </div>
+              ) : requirements.length ? (
+                <div className="space-y-2.5">
+                  <div className="text-xs leading-relaxed text-zinc-500">
+                    {t('jobWorkspace.evidence.requirementsSummary', {
+                      count: requirements.length,
+                      required: requirements.filter((requirement) => requirement.importance === 'required').length,
+                    })}
+                  </div>
+                  {requirements.map((requirement) => {
+                    const coverage = coverageByRequirement.get(requirement.requirementId);
+                    const status = evidenceStatus(coverage);
+                    const confidence = coverage?.assessmentConfidence ?? coverage?.confidence ?? requirement.extractionConfidence;
+                    const rationale = coverage?.assessmentRationale || coverage?.rationale;
+                    const candidateRefs = coverage?.candidateEvidenceRefs || [];
+                    return (
+                      <div key={requirement.requirementId} className="rounded border border-zinc-800 bg-zinc-900/35 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-zinc-100">{requirement.label}</div>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${importanceClasses(requirement)}`}>
+                                {t(`jobWorkspace.evidence.importance.${requirement.importance}`)}
+                              </span>
+                              <span className="rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                                {t(`jobWorkspace.evidence.categories.${requirement.category}`)}
+                              </span>
+                            </div>
+                          </div>
+                          <span className={`shrink-0 rounded border px-2 py-1 text-[10px] font-medium ${status.classes}`}>
+                            {status.label}
+                          </span>
+                        </div>
+
+                        {requirement.jdQuote && (
+                          <div className="mt-3 border-l-2 border-zinc-700 pl-3 text-xs leading-relaxed text-zinc-400">
+                            <span className="mr-1 text-zinc-600">JD</span>
+                            {requirement.jdQuote}
+                          </div>
+                        )}
+
+                        <div className="mt-3 rounded border border-zinc-800/80 bg-zinc-950/70 p-2.5">
+                          {coverage?.coverageStatus === 'supported' ? (
+                            <div className="text-xs text-emerald-300">
+                              {t('jobWorkspace.evidence.confirmedEvidenceCount', { count: coverage.evidenceIds.length })}
+                            </div>
+                          ) : candidateRefs.length ? (
+                            <div className="space-y-1.5">
+                              <div className="text-[10px] font-medium uppercase tracking-wide text-amber-500">{t('jobWorkspace.evidence.candidateSources')}</div>
+                              {candidateRefs.slice(0, 2).map((source, index) => (
+                                <div key={`${requirement.requirementId}:${index}`} className="text-xs leading-relaxed text-zinc-300">
+                                  {source.locator && <span className="mr-1 text-zinc-500">{source.locator}：</span>}
+                                  {source.quote}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs leading-relaxed text-zinc-400">{t('jobWorkspace.evidence.notFoundStatement')}</div>
+                          )}
+                        </div>
+
+                        {(rationale || confidence > 0) && (
+                          <div className="mt-2 flex flex-wrap items-start justify-between gap-2 text-[10px] leading-relaxed text-zinc-500">
+                            <span className="min-w-0 flex-1">{rationale}</span>
+                            {confidence > 0 && <span className="shrink-0">{t('jobWorkspace.evidence.confidence', { value: Math.round(confidence * 100) })}</span>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : item.reportPath ? (
+                <div className="space-y-3 rounded border border-dashed border-zinc-800 bg-zinc-900/30 p-3">
+                  <div className="text-xs leading-relaxed text-zinc-500">{t('jobWorkspace.evidence.legacyReportHint')}</div>
+                  <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="emerald">
+                    {isLlmEvaluating && <Loader2 size={13} className="animate-spin" />}
+                    {t('jobWorkspace.evidence.regenerateAssessment')}
+                  </ActionButton>
+                </div>
+              ) : (
+                <div className="text-xs leading-relaxed text-zinc-500">{t('jobWorkspace.evidence.noAssessment')}</div>
               )}
             </Section>
           </div>

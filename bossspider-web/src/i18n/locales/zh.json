@@ -421,6 +421,47 @@
     "basicInfo": "基础信息",
     "coarseEvaluation": "粗筛评估",
     "llmEvaluation": "LLM 精评",
+    "evidence": {
+      "requirementsTitle": "核心要求与证据覆盖",
+      "loading": "正在加载证据判断...",
+      "requirementsSummary": "本岗位提取了 {{count}} 条核心要求，其中 {{required}} 条为硬性要求。AI 仅判断当前材料中的证据线索，最终结论由你确认。",
+      "confirmedCoverage": "已确认证据",
+      "candidateHint": "另有 {{count}} 条材料线索待确认",
+      "pendingDecision": "待用户判断",
+      "confirmedGaps": "已确认缺口",
+      "candidateSources": "当前材料线索",
+      "confirmedEvidenceCount": "已关联 {{count}} 份已确认证据",
+      "notFoundStatement": "当前材料中未找到相关证据。这不代表你不具备该能力。",
+      "confidence": "AI 判断置信度 {{value}}%",
+      "legacyReportHint": "这份精评生成于结构化证据功能接入前。重新精评后，核心要求会显示在这里。",
+      "regenerateAssessment": "重新精评并提取要求",
+      "noAssessment": "完成 LLM 精评后，这里会展示核心要求、当前材料线索与待确认项。",
+      "importance": {
+        "required": "硬性要求",
+        "preferred": "优先条件",
+        "context": "背景信息"
+      },
+      "categories": {
+        "skill": "技能",
+        "experience": "经验",
+        "behavior": "行为能力",
+        "education": "学历",
+        "location": "地点",
+        "preference": "偏好",
+        "other": "其他"
+      },
+      "statuses": {
+        "supported": "已确认证据",
+        "doneNeedsFacts": "做过，待补充事实",
+        "adjacent": "有相近经验",
+        "confirmedAbsent": "已确认未做过",
+        "unsure": "仍不确定",
+        "candidate": "找到候选证据，待确认",
+        "partial": "相近证据，待确认",
+        "notFound": "当前材料未找到证据",
+        "unknown": "尚未判断"
+      }
+    },
     "greeting": "沟通准备",
     "greetingPlaceholder": "打招呼草稿和发送状态将在后续阶段接入。",
     "loadingGreeting": "正在加载打招呼草稿...",

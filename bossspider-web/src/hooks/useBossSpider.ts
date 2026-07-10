@@ -39,7 +39,7 @@ export function useBossSpider() {
     addJobsToPipeline: addJobsToPipelineForProject,
     evaluatePipelineItem,
     scoreAllPipeline,
-    llmEvaluatePipelineItem,
+    llmEvaluatePipelineItem: llmEvaluatePipelineItemBase,
     loadJobDetail,
     loadPipelineReport,
     loadGreetingDraft,
@@ -175,6 +175,12 @@ export function useBossSpider() {
     if (data) await invalidate(['pipeline', 'resume', 'interview']);
     return data;
   }, [generateResumeSuggestionsBase, invalidate]);
+
+  const llmEvaluatePipelineItem = useCallback(async (sourceKey: string) => {
+    const ok = await llmEvaluatePipelineItemBase(sourceKey);
+    if (ok) await invalidate(['evidence']);
+    return ok;
+  }, [invalidate, llmEvaluatePipelineItemBase]);
 
   const generateResumeDraft = useCallback(async (
     sourceKey: string,
