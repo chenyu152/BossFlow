@@ -415,6 +415,122 @@ export type InterviewPrepResponse = {
   pipeline?: PipelineResponse;
 };
 
+export type EvidenceRequirementCategory = 'skill' | 'experience' | 'behavior' | 'education' | 'location' | 'preference' | 'other';
+export type EvidenceRequirementImportance = 'required' | 'preferred' | 'context';
+export type EvidenceCoverageStatus = 'supported' | 'partial' | 'not_found' | 'user_confirmed_absent' | 'unknown';
+export type EvidenceClassification = 'done' | 'adjacent' | 'not_done' | 'unsure';
+export type EvidenceItemStatus = 'draft' | 'confirmed' | 'rejected' | 'archived';
+export type EvidenceTaskType = 'extract' | 'strengthen' | 'translate' | 'learn' | 'project' | 'accept_risk' | 'ignore';
+export type EvidenceTaskStatus = 'pending' | 'in_progress' | 'completed' | 'dismissed';
+
+export type EvidenceRequirement = {
+  requirementId: string;
+  canonicalKey: string;
+  label: string;
+  category: EvidenceRequirementCategory;
+  importance: EvidenceRequirementImportance;
+  sourceKey: string;
+  jdQuote: string;
+  extractionConfidence: number;
+};
+
+export type EvidenceSourceRef = {
+  type: string;
+  ref: string;
+  quote: string;
+};
+
+export type EvidenceItem = {
+  evidenceId: string;
+  title: string;
+  evidenceType: 'fact' | 'project' | 'metric' | 'artifact' | 'story';
+  summary: string;
+  userRole: string;
+  actions: string[];
+  results: string[];
+  sourceRefs: EvidenceSourceRef[];
+  tags: string[];
+  status: EvidenceItemStatus;
+  createdAt: string;
+  updatedAt: string;
+  confirmedAt: string;
+  lastValidatedAt: string;
+};
+
+export type EvidenceCoverage = {
+  requirementId: string;
+  evidenceIds: string[];
+  coverageStatus: EvidenceCoverageStatus;
+  rationale: string;
+  confidence: number;
+  userClassification: EvidenceClassification;
+  userDecisionAt: string;
+};
+
+export type EvidenceTask = {
+  taskId: string;
+  requirementId: string;
+  taskType: EvidenceTaskType;
+  affectedSourceKeys: string[];
+  recommendedAction: string;
+  estimatedEffortBand: string;
+  timeBudget: string;
+  userWillingness: string;
+  priorityBand: 'high' | 'medium' | 'low';
+  status: EvidenceTaskStatus;
+  completionEvidenceIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+};
+
+export type EvidenceOverviewResponse = {
+  ok: boolean;
+  path: string;
+  schemaVersion: number;
+  requirements: EvidenceRequirement[];
+  evidenceItems: EvidenceItem[];
+  coverages: EvidenceCoverage[];
+  tasks: EvidenceTask[];
+  updatedAt: string;
+  counts: {
+    requirements: number;
+    evidenceItems: number;
+    confirmedEvidenceItems: number;
+    unresolvedCoverages: number;
+    pendingTasks: number;
+  };
+};
+
+export type EvidenceRequirementsResponse = {
+  ok: boolean;
+  path: string;
+  schemaVersion: number;
+  sourceKey: string;
+  requirements: EvidenceRequirement[];
+};
+
+export type EvidenceTasksResponse = {
+  ok: boolean;
+  path: string;
+  schemaVersion: number;
+  tasks: EvidenceTask[];
+};
+
+export type EvidenceMutationResponse = {
+  ok: boolean;
+  overview: EvidenceOverviewResponse;
+  affectedSourceKeys: string[];
+  item?: EvidenceItem;
+  coverage?: EvidenceCoverage;
+  task?: EvidenceTask;
+};
+
+export type EvidenceItemInput = Omit<EvidenceItem, 'evidenceId' | 'status' | 'createdAt' | 'updatedAt' | 'confirmedAt' | 'lastValidatedAt'> & {
+  status?: 'draft';
+};
+export type EvidenceTaskInput = Omit<EvidenceTask, 'taskId' | 'createdAt' | 'updatedAt' | 'completedAt'>;
+
 export type GreetingDraftStatus = 'draft' | 'edited' | 'copied' | 'sent' | 'dismissed';
 
 export type GreetingDraft = {

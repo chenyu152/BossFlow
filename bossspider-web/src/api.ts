@@ -2,6 +2,15 @@ import type {
   ConfigPayload,
   CvDocumentResponse,
   CvStatusResponse,
+  EvidenceClassification,
+  EvidenceItem,
+  EvidenceItemInput,
+  EvidenceMutationResponse,
+  EvidenceOverviewResponse,
+  EvidenceRequirement,
+  EvidenceRequirementsResponse,
+  EvidenceTaskInput,
+  EvidenceTasksResponse,
   EvaluatePipelineResponse,
   GreetingDraftResponse,
   GreetingDraftStatus,
@@ -209,6 +218,78 @@ export const bossApi = {
     return request<ResumeDraftResponse>('/api/resume/draft', {
       method: 'PUT',
       body: JSON.stringify({ sourceKey, content }),
+    });
+  },
+
+  getEvidenceOverview() {
+    return request<EvidenceOverviewResponse>('/api/evidence/overview');
+  },
+
+  getEvidenceRequirements(sourceKey = '') {
+    const query = sourceKey ? `?sourceKey=${encodeURIComponent(sourceKey)}` : '';
+    return request<EvidenceRequirementsResponse>(`/api/evidence/requirements${query}`);
+  },
+
+  upsertEvidenceRequirements(requirements: EvidenceRequirement[]) {
+    return request<EvidenceOverviewResponse>('/api/evidence/requirements', {
+      method: 'PUT',
+      body: JSON.stringify({ requirements }),
+    });
+  },
+
+  getEvidenceTasks(status = '', sourceKey = '') {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (sourceKey) params.set('sourceKey', sourceKey);
+    const query = params.size ? `?${params.toString()}` : '';
+    return request<EvidenceTasksResponse>(`/api/evidence/tasks${query}`);
+  },
+
+  classifyEvidenceCoverage(
+    requirementId: string,
+    userClassification: EvidenceClassification,
+    evidenceIds: string[] = [],
+    rationale = '',
+    confidence = 0,
+  ) {
+    return request<EvidenceMutationResponse>('/api/evidence/coverage/classify', {
+      method: 'POST',
+      body: JSON.stringify({ requirementId, userClassification, evidenceIds, rationale, confidence }),
+    });
+  },
+
+  createEvidenceItem(item: EvidenceItemInput) {
+    return request<EvidenceMutationResponse>('/api/evidence/items', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    });
+  },
+
+  updateEvidenceItem(item: EvidenceItem) {
+    return request<EvidenceMutationResponse>('/api/evidence/items', {
+      method: 'PUT',
+      body: JSON.stringify(item),
+    });
+  },
+
+  confirmEvidenceItem(evidenceId: string) {
+    return request<EvidenceMutationResponse>('/api/evidence/items/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ evidenceId }),
+    });
+  },
+
+  createEvidenceTask(task: EvidenceTaskInput) {
+    return request<EvidenceMutationResponse>('/api/evidence/tasks', {
+      method: 'POST',
+      body: JSON.stringify(task),
+    });
+  },
+
+  updateEvidenceTask(taskId: string, status: EvidenceTaskInput['status'], completionEvidenceIds: string[] = []) {
+    return request<EvidenceMutationResponse>('/api/evidence/tasks', {
+      method: 'PUT',
+      body: JSON.stringify({ taskId, status, completionEvidenceIds }),
     });
   },
 

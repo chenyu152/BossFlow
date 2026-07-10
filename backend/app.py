@@ -8,6 +8,15 @@ from fastapi.responses import StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.schemas.cv import CvSaveRequest
+from backend.schemas.evidence import (
+    EvidenceCoverageClassifyRequest,
+    EvidenceItemConfirmRequest,
+    EvidenceItemCreateRequest,
+    EvidenceItemUpdateRequest,
+    EvidenceTaskCreateRequest,
+    EvidenceTaskUpdateRequest,
+    RequirementsUpsertRequest,
+)
 from backend.schemas.greeting import GreetingDraftSaveRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
 from backend.schemas.jobs import JobLiveStatusUpdateRequest
@@ -16,6 +25,18 @@ from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, R
 from backend.schemas.scoring import ScoringKeywordSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.cv_service import create_cv_from_template, cv_status, read_cv_document, save_cv_document
+from backend.services.evidence_service import (
+    classify_coverage,
+    confirm_evidence_item,
+    create_evidence_item,
+    create_evidence_task,
+    list_evidence_tasks,
+    list_requirements,
+    read_evidence_overview,
+    update_evidence_item,
+    update_evidence_task,
+    upsert_requirements,
+)
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
 from backend.services.greeting_service import read_greeting_draft, save_greeting_draft
 from backend.services.interview_service import (
@@ -190,6 +211,56 @@ def llm_evaluate_pipeline(payload: LlmEvaluatePipelineItemRequest):
 @app.post("/api/resume/suggestions")
 def create_resume_suggestions(payload: ResumeSuggestionRequest):
     return generate_resume_suggestions(payload.sourceKey)
+
+
+@app.get("/api/evidence/overview")
+def get_evidence_overview():
+    return read_evidence_overview()
+
+
+@app.get("/api/evidence/requirements")
+def get_evidence_requirements(sourceKey: str = ""):
+    return list_requirements(sourceKey)
+
+
+@app.put("/api/evidence/requirements")
+def save_evidence_requirements(payload: RequirementsUpsertRequest):
+    return upsert_requirements([item.model_dump() for item in payload.requirements])
+
+
+@app.get("/api/evidence/tasks")
+def get_evidence_tasks(status: str = "", sourceKey: str = ""):
+    return list_evidence_tasks(status, sourceKey)
+
+
+@app.post("/api/evidence/coverage/classify")
+def classify_evidence_coverage(payload: EvidenceCoverageClassifyRequest):
+    return classify_coverage(payload.model_dump())
+
+
+@app.post("/api/evidence/items")
+def add_evidence_item(payload: EvidenceItemCreateRequest):
+    return create_evidence_item(payload.model_dump())
+
+
+@app.put("/api/evidence/items")
+def save_evidence_item(payload: EvidenceItemUpdateRequest):
+    return update_evidence_item(payload.model_dump())
+
+
+@app.post("/api/evidence/items/confirm")
+def confirm_evidence(payload: EvidenceItemConfirmRequest):
+    return confirm_evidence_item(payload.evidenceId)
+
+
+@app.post("/api/evidence/tasks")
+def add_evidence_task(payload: EvidenceTaskCreateRequest):
+    return create_evidence_task(payload.model_dump())
+
+
+@app.put("/api/evidence/tasks")
+def save_evidence_task(payload: EvidenceTaskUpdateRequest):
+    return update_evidence_task(payload.model_dump())
 
 
 @app.get("/api/resume/items")

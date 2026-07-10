@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInterview } from './useInterview';
+import { useEvidence } from './useEvidence';
 import { useJobs } from './useJobs';
 import { useNotice } from './useNotice';
 import { usePipeline } from './usePipeline';
@@ -8,11 +9,12 @@ import { useProjectsConfig } from './useProjectsConfig';
 import { useResume } from './useResume';
 import { useTasks } from './useTasks';
 
-type ResourceKey = 'jobs' | 'pipeline' | 'resume' | 'interview';
+type ResourceKey = 'jobs' | 'pipeline' | 'resume' | 'interview' | 'evidence';
 
 export function useBossSpider() {
   const { t } = useTranslation('common');
   const { notice, showNotice } = useNotice();
+  const evidence = useEvidence();
 
   const {
     jobs,
@@ -77,8 +79,9 @@ export function useBossSpider() {
       refreshPipeline(),
       refreshResumeItems(),
       refreshInterviewItems(),
+      evidence.refreshEvidenceOverview(),
     ]);
-  }, [loadJobs, refreshInterviewItems, refreshPipeline, refreshResumeItems]);
+  }, [evidence.refreshEvidenceOverview, loadJobs, refreshInterviewItems, refreshPipeline, refreshResumeItems]);
 
   const {
     projects,
@@ -163,8 +166,9 @@ export function useBossSpider() {
     if (unique.has('pipeline')) tasks.push(refreshPipeline());
     if (unique.has('resume')) tasks.push(refreshResumeItems());
     if (unique.has('interview')) tasks.push(refreshInterviewItems());
+    if (unique.has('evidence')) tasks.push(evidence.refreshEvidenceOverview());
     await Promise.all(tasks);
-  }, [config?.project, jobSearch, refreshInterviewItems, refreshJobsForProject, refreshPipeline, refreshResumeItems]);
+  }, [config?.project, evidence.refreshEvidenceOverview, jobSearch, refreshInterviewItems, refreshJobsForProject, refreshPipeline, refreshResumeItems]);
 
   const generateResumeSuggestions = useCallback(async (sourceKey: string) => {
     const data = await generateResumeSuggestionsBase(sourceKey);
@@ -258,5 +262,6 @@ export function useBossSpider() {
     loadInterviewPrep,
     updatePipelineStatus,
     deletePipelineItem,
+    ...evidence,
   };
 }
