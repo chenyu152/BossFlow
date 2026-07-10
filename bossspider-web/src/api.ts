@@ -1,5 +1,6 @@
 import type {
   ConfigPayload,
+  CvDocumentResponse,
   CvStatusResponse,
   EvaluatePipelineResponse,
   GreetingDraftResponse,
@@ -71,6 +72,17 @@ export const bossApi = {
 
   createCvFromTemplate() {
     return request<CvStatusResponse>('/api/cv/from-template', { method: 'POST' });
+  },
+
+  getCvDocument() {
+    return request<CvDocumentResponse>('/api/cv');
+  },
+
+  saveCvDocument(content: string) {
+    return request<CvDocumentResponse>('/api/cv', {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
   },
 
   getJobs(project: string, search = '', limit = 20000) {
@@ -191,6 +203,13 @@ export const bossApi = {
 
   getResumeDraft(sourceKey: string) {
     return request<ResumeDraftResponse>(`/api/resume/draft?sourceKey=${encodeURIComponent(sourceKey)}`);
+  },
+
+  saveResumeDraft(sourceKey: string, content: string) {
+    return request<ResumeDraftResponse>('/api/resume/draft', {
+      method: 'PUT',
+      body: JSON.stringify({ sourceKey, content }),
+    });
   },
 
   getInterviewItems() {

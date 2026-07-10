@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'Resume' | 'Story' | 'Interview' | 'Logs';
+export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs';
 
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'failed';
 
@@ -327,6 +327,7 @@ export type ResumeDraftResponse = {
   content: string;
   evidenceMap?: ResumeEvidenceClaim[];
   pipeline?: PipelineResponse;
+  editedAt?: string;
 };
 
 export type InterviewItem = {
@@ -478,4 +479,8 @@ export type CvStatusResponse = {
   readyForScoring: boolean;
   readyForMaterials: boolean;
   canCreateFromTemplate: boolean;
+};
+
+export type CvDocumentResponse = CvStatusResponse & {
+  content: string;
 };

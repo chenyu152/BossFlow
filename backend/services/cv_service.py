@@ -16,6 +16,12 @@ def _read_cv() -> str:
     return CV_PATH.read_text(encoding="utf-8").strip()
 
 
+def _read_cv_source() -> str:
+    if not CV_PATH.exists() or not CV_PATH.is_file():
+        return ""
+    return CV_PATH.read_text(encoding="utf-8")
+
+
 def _has_years(text: str) -> bool:
     text = re.sub(r"[*_`#>\-]", "", text)
     patterns = [
@@ -50,7 +56,7 @@ def cv_status() -> dict[str, Any]:
         "hasEducation": _has_education(text),
         "hasSkills": _has_heading(text, ["技能", "Skills"]),
         "hasProjects": _has_heading(text, ["项目", "Projects"]),
-        "hasExperience": _has_heading(text, ["工作", "经历", "Experience"]),
+        "hasExperience": _has_heading(text, ["工作经历", "工作经验", "职业经历", "Work Experience", "Employment"]),
     }
     missing = [key for key, ok in checks.items() if not ok]
     return {
@@ -65,6 +71,21 @@ def cv_status() -> dict[str, Any]:
         "readyForMaterials": exists and checks["hasContent"] and checks["hasSkills"] and checks["hasProjects"],
         "canCreateFromTemplate": not exists and CV_EXAMPLE_PATH.exists(),
     }
+
+
+def read_cv_document() -> dict[str, Any]:
+    return {
+        **cv_status(),
+        "content": _read_cv_source(),
+    }
+
+
+def save_cv_document(content: str) -> dict[str, Any]:
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    if normalized and not normalized.endswith("\n"):
+        normalized += "\n"
+    CV_PATH.write_text(normalized, encoding="utf-8")
+    return read_cv_document()
 
 
 def create_cv_from_template() -> dict[str, Any]:

@@ -561,3 +561,31 @@ def read_resume_draft(source_key: str) -> dict[str, Any]:
         "content": path.read_text(encoding="utf-8"),
         "evidenceMap": meta.get("evidenceMap") if isinstance(meta.get("evidenceMap"), list) else [],
     }
+
+
+def save_resume_draft(source_key: str, content: str) -> dict[str, Any]:
+    item = find_pipeline_item(source_key)
+    if not item:
+        raise HTTPException(status_code=404, detail=f"Pipeline item not found: {source_key}")
+    if not content.strip():
+        raise HTTPException(status_code=422, detail="Tailored resume content cannot be empty")
+
+    path = _safe_resume_draft_path(str(item.get("resumeDraftPath") or ""))
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n").rstrip() + "\n"
+    path.write_text(normalized, encoding="utf-8")
+
+    edited_at = dt.datetime.now()
+    meta = _load_resume_json(path)
+    meta["manuallyEditedAt"] = edited_at.isoformat()
+    path.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "ok": True,
+        "sourceKey": source_key,
+        "resumeDraftId": item.get("resumeDraftId", ""),
+        "draftPath": str(path),
+        "jsonPath": str(path.with_suffix(".json")),
+        "content": normalized,
+        "evidenceMap": meta.get("evidenceMap") if isinstance(meta.get("evidenceMap"), list) else [],
+        "editedAt": edited_at.strftime("%Y-%m-%d %H:%M:%S"),
+    }

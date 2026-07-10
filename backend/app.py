@@ -7,14 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
+from backend.schemas.cv import CvSaveRequest
 from backend.schemas.greeting import GreetingDraftSaveRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
 from backend.schemas.jobs import JobLiveStatusUpdateRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
-from backend.schemas.resume import ResumeDraftRequest, ResumeSuggestionRequest
+from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, ResumeSuggestionRequest
 from backend.schemas.scoring import ScoringKeywordSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
-from backend.services.cv_service import create_cv_from_template, cv_status
+from backend.services.cv_service import create_cv_from_template, cv_status, read_cv_document, save_cv_document
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
 from backend.services.greeting_service import read_greeting_draft, save_greeting_draft
 from backend.services.interview_service import (
@@ -39,7 +40,7 @@ from backend.services.project_service import (
     save_form_config,
     stats_for_project,
 )
-from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion
+from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion, save_resume_draft
 from backend.services.scoring_suggestion_service import suggest_scoring_keywords
 from backend.services.task_service import TaskManager
 from crawler.boss import load_config
@@ -82,6 +83,16 @@ def get_stats(project: Optional[str] = None):
 @app.get("/api/cv/status")
 def get_cv_status():
     return cv_status()
+
+
+@app.get("/api/cv")
+def get_cv_document():
+    return read_cv_document()
+
+
+@app.put("/api/cv")
+def update_cv_document(payload: CvSaveRequest):
+    return save_cv_document(payload.content)
 
 
 @app.post("/api/cv/from-template")
@@ -199,6 +210,11 @@ def create_resume_draft(payload: ResumeDraftRequest):
 @app.get("/api/resume/draft")
 def get_resume_draft(sourceKey: str):
     return read_resume_draft(sourceKey)
+
+
+@app.put("/api/resume/draft")
+def update_resume_draft(payload: ResumeDraftSaveRequest):
+    return save_resume_draft(payload.sourceKey, payload.content)
 
 
 @app.get("/api/interview/items")

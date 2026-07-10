@@ -21,6 +21,14 @@ i18n.use(LanguageDetector).init({
   },
 });
 
+if (import.meta.hot) {
+  import.meta.hot.accept(['./locales/en.json', './locales/zh.json'], ([nextEn, nextZh]) => {
+    if (nextEn) i18n.addResourceBundle('en', 'common', nextEn.default, true, true);
+    if (nextZh) i18n.addResourceBundle('zh', 'common', nextZh.default, true, true);
+    void i18n.changeLanguage(i18n.resolvedLanguage || i18n.language);
+  });
+}
+
 export default i18n;
 
 export function useAppTranslation() {

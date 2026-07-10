@@ -224,18 +224,6 @@ export function Dashboard({
     void loadCvStatus();
   }, []);
 
-  const createCvFromTemplate = async () => {
-    setCvLoading(true);
-    setCvError('');
-    try {
-      setCvStatus(await bossApi.createCvFromTemplate());
-    } catch (error) {
-      setCvError((error as Error).message);
-    } finally {
-      setCvLoading(false);
-    }
-  };
-
   const todayJobs = useMemo(
     () => jobs
       .filter((job) => isToday(job.lastSeen))
@@ -522,14 +510,6 @@ export function Dashboard({
                 <>
                   <div className="font-medium text-amber-200">{t('cvGuide.missingTitle')}</div>
                   <p className="text-xs leading-relaxed text-zinc-400">{t('cvGuide.missingBody')}</p>
-                  <button
-                    onClick={() => void createCvFromTemplate()}
-                    disabled={cvLoading || !cvStatus.canCreateFromTemplate}
-                    className="inline-flex items-center gap-2 rounded border border-amber-800 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <FileText size={13} />
-                    {t('cvGuide.createFromTemplate')}
-                  </button>
                   <div className="break-all text-[10px] text-zinc-600">{cvStatus.path}</div>
                 </>
               ) : cvStatus.readyForScoring && cvStatus.readyForMaterials ? (
@@ -554,6 +534,17 @@ export function Dashboard({
                   </div>
                   <div className="break-all text-[10px] text-zinc-600">{cvStatus.path}</div>
                 </>
+              )}
+              {cvStatus && (
+                <button
+                  onClick={() => setActiveTab('PersonalResume')}
+                  className="inline-flex items-center gap-2 rounded border border-indigo-800 bg-indigo-950/30 px-3 py-1.5 text-xs font-medium text-indigo-200 hover:bg-indigo-900/30"
+                >
+                  {cvStatus.readyForScoring && cvStatus.readyForMaterials
+                    ? t('cvGuide.openPersonalResume')
+                    : t('cvGuide.completePersonalResume')}
+                  <ArrowRight size={13} />
+                </button>
               )}
             </div>
           </section>

@@ -16,6 +16,7 @@ import {
   Square,
   Tags,
   Terminal,
+  UserRound,
 } from 'lucide-react';
 import { NavItem } from './components/NavItem';
 import { StatusBadge } from './components/StatusBadge';
@@ -30,6 +31,7 @@ const Interview = lazy(() => import('./pages/Interview').then((module) => ({ def
 const Jobs = lazy(() => import('./pages/Jobs').then((module) => ({ default: module.Jobs })));
 const Logs = lazy(() => import('./pages/Logs').then((module) => ({ default: module.Logs })));
 const Pipeline = lazy(() => import('./pages/Pipeline').then((module) => ({ default: module.Pipeline })));
+const PersonalResume = lazy(() => import('./pages/PersonalResume').then((module) => ({ default: module.PersonalResume })));
 const Resume = lazy(() => import('./pages/Resume').then((module) => ({ default: module.Resume })));
 const Rules = lazy(() => import('./pages/Rules').then((module) => ({ default: module.Rules })));
 const Scope = lazy(() => import('./pages/Scope').then((module) => ({ default: module.Scope })));
@@ -90,6 +92,7 @@ export default function App() {
   const [selectedResumeTarget, setSelectedResumeTarget] = useState<ResumeNavigationTarget | null>(null);
   const [selectedStoryDraftId, setSelectedStoryDraftId] = useState('');
   const [dashboardTargetRequestId, setDashboardTargetRequestId] = useState(0);
+  const [personalResumeDirty, setPersonalResumeDirty] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
     discovery: true,
     evaluation: true,
@@ -97,22 +100,23 @@ export default function App() {
     interview: true,
   });
   const boss = useBossSpider();
-  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
+  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
+  const hasUnsavedChanges = boss.isConfigDirty || personalResumeDirty;
 
   useEffect(() => {
-    if (!boss.isConfigDirty) return;
+    if (!hasUnsavedChanges) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [boss.isConfigDirty]);
+  }, [hasUnsavedChanges]);
 
   const confirmUnsavedConfig = useCallback(() => (
-    !boss.isConfigDirty || window.confirm(t('notices.unsavedConfigLeaveConfirm'))
-  ), [boss.isConfigDirty, t]);
+    !hasUnsavedChanges || window.confirm(t('notices.unsavedChangesLeaveConfirm'))
+  ), [hasUnsavedChanges, t]);
 
   const navigateToTab = useCallback((tab: Tab) => {
     if (tab === activeTab || confirmUnsavedConfig()) setActiveTab(tab);
@@ -202,10 +206,11 @@ export default function App() {
           <NavSection
             icon={<FileText size={16} />}
             label={t('nav.stages.materials')}
-            active={activeTab === 'Resume'}
+            active={activeTab === 'PersonalResume' || activeTab === 'Resume'}
             expanded={expandedStages.materials}
             onToggle={() => toggleStage('materials')}
           >
+            <NavItem icon={<UserRound size={16} />} label={t('nav.personalResume')} active={activeTab === 'PersonalResume'} onClick={() => navigateToTab('PersonalResume')} />
             <NavItem icon={<FileText size={16} />} label={t('nav.resume')} active={activeTab === 'Resume'} onClick={() => navigateToTab('Resume')} />
           </NavSection>
 
@@ -397,6 +402,15 @@ export default function App() {
                     setSelectedResumeKey('');
                     setSelectedResumeTarget(null);
                   }}
+                />
+              )}
+              {activeTab === 'PersonalResume' && (
+                <PersonalResume
+                  items={boss.resumeItems}
+                  onRefreshItems={() => { void boss.refreshResumeItems(); }}
+                  onLoadDraft={boss.loadResumeDraft}
+                  onSaveDraft={boss.saveResumeDraft}
+                  onDirtyChange={setPersonalResumeDirty}
                 />
               )}
               {activeTab === 'Story' && (

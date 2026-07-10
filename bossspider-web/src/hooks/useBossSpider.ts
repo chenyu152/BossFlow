@@ -68,6 +68,7 @@ export function useBossSpider() {
     loadResumeSuggestion,
     generateResumeDraft: generateResumeDraftBase,
     loadResumeDraft,
+    saveResumeDraft,
   } = useResume({ showNotice, t });
 
   const loadInitialResources = useCallback(async (projectName: string) => {
@@ -247,6 +248,7 @@ export function useBossSpider() {
     loadResumeSuggestion,
     generateResumeDraft,
     loadResumeDraft,
+    saveResumeDraft,
     loadInterviewStoryBank,
     saveInterviewStoryBank,
     loadInterviewStoryDrafts,

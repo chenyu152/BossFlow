@@ -1,0 +1,373 @@
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  FileInput,
+  FileText,
+  Loader2,
+  RefreshCw,
+  Save,
+} from 'lucide-react';
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { bossApi } from '../api';
+import { MarkdownEditor } from '../components/MarkdownEditor';
+import { useAppTranslation } from '../i18n';
+import type { CvDocumentResponse, ResumeDraftResponse, ResumeItem } from '../types';
+
+const checkKeys = [
+  'hasContent',
+  'hasYears',
+  'hasEducation',
+  'hasSkills',
+  'hasProjects',
+  'hasExperience',
+] as const;
+
+type EditorTarget = { kind: 'base' } | { kind: 'tailored'; item: ResumeItem };
+
+export function PersonalResume({
+  items,
+  onRefreshItems,
+  onLoadDraft,
+  onSaveDraft,
+  onDirtyChange,
+}: {
+  items: ResumeItem[];
+  onRefreshItems: () => void;
+  onLoadDraft: (sourceKey: string) => Promise<ResumeDraftResponse | null>;
+  onSaveDraft: (sourceKey: string, content: string) => Promise<ResumeDraftResponse | null>;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const { t } = useAppTranslation();
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [cvDocument, setCvDocument] = useState<CvDocumentResponse | null>(null);
+  const [target, setTarget] = useState<EditorTarget>({ kind: 'base' });
+  const [content, setContent] = useState('');
+  const [savedContent, setSavedContent] = useState('');
+  const [activePath, setActivePath] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const tailoredItems = useMemo(
+    () => items.filter((item) => Boolean(item.resumeDraftPath)),
+    [items],
+  );
+  const dirty = content !== savedContent;
+  const completedChecks = cvDocument
+    ? checkKeys.filter((key) => cvDocument.checks[key]).length
+    : 0;
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  const loadBaseResume = async () => {
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      const data = await bossApi.getCvDocument();
+      setCvDocument(data);
+      setTarget({ kind: 'base' });
+      setContent(data.content || '');
+      setSavedContent(data.content || '');
+      setActivePath(data.path);
+    } catch (loadError) {
+      setError(t('personalResume.loadFailed', { error: (loadError as Error).message }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadBaseResume();
+    onRefreshItems();
+  }, []);
+
+  const confirmDiscard = () => !dirty || window.confirm(t('personalResume.unsavedSwitchConfirm'));
+
+  const selectBaseResume = () => {
+    if (target.kind === 'base' || !confirmDiscard()) return;
+    void loadBaseResume();
+  };
+
+  const loadTailoredResume = async (item: ResumeItem) => {
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      const data = await onLoadDraft(item.sourceKey);
+      if (!data) return;
+      setTarget({ kind: 'tailored', item });
+      setContent(data.content || '');
+      setSavedContent(data.content || '');
+      setActivePath(data.draftPath);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectTailoredResume = (item: ResumeItem) => {
+    if (target.kind === 'tailored' && target.item.sourceKey === item.sourceKey) return;
+    if (!confirmDiscard()) return;
+    void loadTailoredResume(item);
+  };
+
+  const refreshCurrent = () => {
+    if (!confirmDiscard()) return;
+    if (target.kind === 'base') void loadBaseResume();
+    else void loadTailoredResume(target.item);
+  };
+
+  const saveCurrent = async () => {
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      if (target.kind === 'base') {
+        const data = await bossApi.saveCvDocument(content);
+        setCvDocument(data);
+        setContent(data.content || '');
+        setSavedContent(data.content || '');
+        setActivePath(data.path);
+        setMessage(t('personalResume.baseSaved'));
+      } else {
+        const data = await onSaveDraft(target.item.sourceKey, content);
+        if (!data) return;
+        setContent(data.content || '');
+        setSavedContent(data.content || '');
+        setActivePath(data.draftPath);
+        setMessage(t('personalResume.tailoredSaved'));
+      }
+    } catch (saveError) {
+      setError(t('personalResume.saveFailed', { error: (saveError as Error).message }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createFromTemplate = async () => {
+    if (!confirmDiscard()) return;
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      await bossApi.createCvFromTemplate();
+      await loadBaseResume();
+      setMessage(t('personalResume.templateCreated'));
+    } catch (createError) {
+      setError(t('personalResume.templateFailed', { error: (createError as Error).message }));
+      setLoading(false);
+    }
+  };
+
+  const importTextFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!confirmDiscard()) return;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension !== 'md' && extension !== 'txt') {
+      setError(t('personalResume.importUnsupported'));
+      return;
+    }
+    try {
+      const imported = await file.text();
+      setContent(imported);
+      setError('');
+      setMessage(t('personalResume.importReady', { name: file.name }));
+    } catch (importError) {
+      setError(t('personalResume.importFailed', { error: (importError as Error).message }));
+    }
+  };
+
+  const title = target.kind === 'base'
+    ? t('personalResume.baseTitle')
+    : `${target.item.company} · ${target.item.title}`;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex shrink-0 items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-100">{t('personalResume.title')}</h1>
+          <p className="mt-1 text-sm text-zinc-500">{t('personalResume.subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {dirty && <span className="text-xs text-amber-300">{t('personalResume.unsaved')}</span>}
+          <button
+            onClick={refreshCurrent}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
+          >
+            <RefreshCw size={14} />
+            {t('personalResume.refresh')}
+          </button>
+          <button
+            onClick={() => void saveCurrent()}
+            disabled={!dirty || loading || saving}
+            className="inline-flex items-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? t('personalResume.saving') : t('personalResume.save')}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
+          <section className="rounded-md border border-zinc-800 bg-zinc-950">
+            <button
+              onClick={selectBaseResume}
+              className={`w-full p-4 text-left transition-colors ${target.kind === 'base' ? 'bg-indigo-950/30' : 'hover:bg-zinc-900/60'}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 font-medium text-zinc-100">
+                  <FileText size={15} className="text-indigo-400" />
+                  {t('personalResume.baseTitle')}
+                </span>
+                <span className="text-xs text-zinc-500">{completedChecks}/{checkKeys.length}</span>
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">cv.md</p>
+            </button>
+
+            <div className="border-t border-zinc-800 p-4">
+              {!cvDocument ? (
+                <div className="text-xs text-zinc-500">{t('personalResume.checking')}</div>
+              ) : (
+                <div className="space-y-2">
+                  {checkKeys.map((key) => {
+                    const passed = cvDocument.checks[key];
+                    return (
+                      <div key={key} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="text-zinc-400">{t(`personalResume.checks.${key}`)}</span>
+                        {passed
+                          ? <CheckCircle2 size={14} className="text-emerald-400" />
+                          : <span className="text-amber-300">{t('personalResume.missing')}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-md border border-zinc-800 bg-zinc-950">
+            <div className="border-b border-zinc-800 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-zinc-100">{t('personalResume.tailoredTitle')}</h2>
+                <span className="text-xs text-zinc-500">{tailoredItems.length}</span>
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">{t('personalResume.tailoredSubtitle')}</p>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-2">
+              {tailoredItems.length ? tailoredItems.map((item) => {
+                const active = target.kind === 'tailored' && target.item.sourceKey === item.sourceKey;
+                return (
+                  <button
+                    key={item.sourceKey}
+                    onClick={() => selectTailoredResume(item)}
+                    className={`mb-1 w-full rounded border px-3 py-2.5 text-left transition-colors ${
+                      active
+                        ? 'border-indigo-800 bg-indigo-950/30'
+                        : 'border-transparent hover:border-zinc-800 hover:bg-zinc-900/60'
+                    }`}
+                  >
+                    <div className="truncate text-sm font-medium text-zinc-200">{item.title}</div>
+                    <div className="mt-1 truncate text-xs text-zinc-500">{item.company} · {item.city}</div>
+                  </button>
+                );
+              }) : (
+                <div className="p-3 text-xs leading-relaxed text-zinc-500">{t('personalResume.noTailored')}</div>
+              )}
+            </div>
+          </section>
+        </aside>
+
+        <section className="flex min-h-0 flex-col rounded-md border border-zinc-800 bg-zinc-950">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-800 px-4 py-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className={`rounded px-2 py-0.5 text-[10px] ${target.kind === 'base' ? 'bg-indigo-950 text-indigo-300' : 'bg-emerald-950 text-emerald-300'}`}>
+                  {target.kind === 'base' ? t('personalResume.baseBadge') : t('personalResume.tailoredBadge')}
+                </span>
+                <h2 className="truncate text-sm font-semibold text-zinc-100">{title}</h2>
+              </div>
+              <div className="mt-1 truncate text-[11px] text-zinc-600" title={activePath}>{activePath || '-'}</div>
+            </div>
+
+            {target.kind === 'base' && (
+              <div className="flex shrink-0 items-center gap-2">
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".md,.txt,text/markdown,text/plain"
+                  onChange={(event) => void importTextFile(event)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
+                >
+                  <FileInput size={13} />
+                  {t('personalResume.import')}
+                </button>
+                {!cvDocument?.exists && cvDocument?.canCreateFromTemplate && (
+                  <button
+                    onClick={() => void createFromTemplate()}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 rounded border border-amber-800 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-950/40 disabled:opacity-50"
+                  >
+                    <FileText size={13} />
+                    {t('personalResume.createTemplate')}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {target.kind === 'base' && (
+            <div className="flex shrink-0 items-start gap-2 border-b border-zinc-800 bg-zinc-900/30 px-4 py-2 text-xs text-zinc-500">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-400" />
+              <span>{t('personalResume.importHint')}</span>
+            </div>
+          )}
+
+          {(error || message) && (
+            <div className={`mx-4 mt-3 flex shrink-0 items-center gap-2 rounded border px-3 py-2 text-xs ${
+              error
+                ? 'border-red-900/60 bg-red-950/20 text-red-300'
+                : 'border-emerald-900/60 bg-emerald-950/20 text-emerald-300'
+            }`}>
+              {error ? <AlertTriangle size={14} /> : <Check size={14} />}
+              {error || message}
+            </div>
+          )}
+
+          <div className="min-h-0 flex-1 p-4">
+            {loading ? (
+              <div className="flex h-full items-center justify-center gap-2 text-sm text-zinc-500">
+                <Loader2 size={16} className="animate-spin" />
+                {t('personalResume.loading')}
+              </div>
+            ) : (
+              <MarkdownEditor
+                value={content}
+                onChange={(nextContent) => {
+                  setContent(nextContent);
+                  setMessage('');
+                }}
+                onSave={dirty ? () => { void saveCurrent(); } : undefined}
+                placeholder={t('personalResume.editorPlaceholder')}
+              />
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

@@ -71,6 +71,17 @@ export function useResume({
     }
   }, [showNotice, t]);
 
+  const saveResumeDraft = useCallback(async (sourceKey: string, content: string): Promise<ResumeDraftResponse | null> => {
+    try {
+      const data = await bossApi.saveResumeDraft(sourceKey, content);
+      showNotice(t('notices.resumeDraftSaved'));
+      return data;
+    } catch (error) {
+      showNotice(t('notices.resumeDraftSaveFailed', { error: (error as Error).message }));
+      return null;
+    }
+  }, [showNotice, t]);
+
   return {
     resumeItems,
     resumeSuggestingKeys,
@@ -80,5 +91,6 @@ export function useResume({
     loadResumeSuggestion,
     generateResumeDraft,
     loadResumeDraft,
+    saveResumeDraft,
   };
 }
