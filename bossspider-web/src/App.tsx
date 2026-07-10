@@ -361,6 +361,12 @@ export default function App() {
                   pipeline={boss.pipeline}
                   evidenceOverview={boss.evidenceOverview}
                   evidenceLoading={boss.evidenceLoading}
+                  evidenceError={boss.evidenceError}
+                  onClassifyEvidenceCoverage={boss.classifyEvidenceCoverage}
+                  onCreateEvidenceItem={boss.createEvidenceItem}
+                  onUpdateEvidenceItem={boss.updateEvidenceItem}
+                  onConfirmEvidenceItem={boss.confirmEvidenceItem}
+                  onCreateEvidenceTask={boss.createEvidenceTask}
                   onRefresh={() => { void boss.refreshPipeline(); }}
                   onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
                   llmEvaluatingKeys={boss.llmEvaluatingKeys}

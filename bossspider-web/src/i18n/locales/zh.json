@@ -452,7 +452,7 @@
       },
       "statuses": {
         "supported": "已确认证据",
-        "doneNeedsFacts": "做过，待补充事实",
+        "doneNeedsFacts": "做过，待确认事实",
         "adjacent": "有相近经验",
         "confirmedAbsent": "已确认未做过",
         "unsure": "仍不确定",
@@ -460,6 +460,96 @@
         "partial": "相近证据，待确认",
         "notFound": "当前材料未找到证据",
         "unknown": "尚未判断"
+      },
+      "classifications": {
+        "done": "我做过",
+        "adjacent": "有相近经验",
+        "not_done": "没做过",
+        "unsure": "不确定"
+      },
+      "userEvidence": "用户补充的事实",
+      "evidenceConfirmed": "已确认",
+      "evidenceDraft": "证据草稿",
+      "confirmFact": "确认这是真实事实",
+      "confirmedAbsentStatement": "你已确认目前没有做过这项要求对应的经历。系统不会把它包装成已有能力。",
+      "unsureStatement": "你已将这项要求标记为不确定，可以根据投入时间选择复习、建设证据或带风险推进。",
+      "myDecision": "我的判断",
+      "currentAction": "当前行动：",
+      "decisionRationale": {
+        "done": "用户确认做过，并补充了可核对的事实草稿。",
+        "adjacent": "用户确认有相近经验，完整覆盖仍需迁移论证。",
+        "not_done": "用户明确确认目前没有做过。",
+        "unsure": "用户目前无法确认是否具备相关经历。"
+      },
+      "taskRecommendations": {
+        "extract": "从已有经历中提取可核对事实",
+        "strengthen": "确认并补强这份经历的角色、行动、结果与来源",
+        "translate": "整理相近经验的可迁移部分和能力边界",
+        "learn": "按选择的时间预算完成短期学习或复习",
+        "project": "设计项目或实践，建设新的职业证据",
+        "accept_risk": "保留缺口并带风险推进当前岗位",
+        "ignore": "暂时忽略这项要求或放弃推进该岗位"
+      },
+      "errors": {
+        "saveItem": "证据草稿保存失败，请重试。",
+        "classify": "证据判断保存失败，请重试。",
+        "action": "请选择后续行动。",
+        "saveTask": "行动任务保存失败，请重试。",
+        "confirm": "事实确认失败，请重试。",
+        "unknown": "保存失败，请重试。"
+      },
+      "dialog": {
+        "factGuardrail": "只填写你真实做过或能够明确说明边界的内容。AI 建议、岗位缺口和准备问题都不能作为个人事实保存。",
+        "experience": "1. 具体做过什么？",
+        "experiencePlaceholder": "描述真实项目、任务或事件，不要只填写能力名称。",
+        "role": "2. 你承担什么角色？",
+        "rolePlaceholder": "说明你的职责范围和个人贡献。",
+        "actionsLabel": "3. 你采取了哪些行动？",
+        "actionsPlaceholder": "每行一项，写清使用的方法、技术或关键决策。",
+        "results": "4. 有什么结果、指标或产物？",
+        "resultsPlaceholder": "没有量化指标时请明确写“无量化结果”，并说明实际产物或影响。",
+        "source": "5. 证据在哪里？",
+        "sourcePlaceholder": "例如：cv.md 项目经历、本地项目路径、文档名称或其他可核对说明。",
+        "adjacentExperience": "相近经历是什么？",
+        "adjacentExperiencePlaceholder": "描述真实存在、与目标要求相近的经历。",
+        "transferable": "哪些部分可以迁移？",
+        "transferablePlaceholder": "说明可复用的方法、技术、业务场景或协作方式。",
+        "boundaries": "哪些部分不能声称已经具备？",
+        "boundariesPlaceholder": "明确能力边界，避免把相近经验写成完全具备。",
+        "timeBudget": "这轮求职愿意投入多少时间？",
+        "willingnessLabel": "是否愿意长期向这个方向发展？",
+        "actionLabel": "选择后续行动",
+        "draftHint": "保存后先形成证据草稿，需要你再次确认才会成为已确认证据。",
+        "decisionHint": "系统只记录你的选择，不会自动替你投递、学习或放弃岗位。",
+        "save": "保存判断",
+        "saving": "保存中",
+        "cancel": "取消",
+        "adjacentEvidenceTitle": "相近经历",
+        "transferablePrefix": "可迁移部分：",
+        "boundariesPrefix": "能力边界：",
+        "userStatement": "用户陈述",
+        "time": {
+          "none": "不投入时间",
+          "underOneHour": "一小时以内",
+          "oneToThreeDays": "一到三天",
+          "oneToThreeWeeks": "一到三周",
+          "longTerm": "长期建设"
+        },
+        "willingness": {
+          "yes": "愿意长期发展",
+          "unsure": "暂时不确定",
+          "no": "不作为长期方向"
+        },
+        "actions": {
+          "acceptRisk": "带风险推进",
+          "acceptRiskDesc": "保留缺口，继续判断或投递当前岗位。",
+          "learn": "短期学习或复习",
+          "learnDesc": "在选定时间内补知识和面试准备，不冒充项目经验。",
+          "project": "建设新项目证据",
+          "projectDesc": "通过真实实践形成后续可验证的职业证据。",
+          "ignore": "暂时忽略或跳过",
+          "ignoreDesc": "不为这项要求投入时间，必要时放弃该岗位。"
+        }
       }
     },
     "greeting": "沟通准备",

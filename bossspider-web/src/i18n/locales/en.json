@@ -451,7 +451,7 @@
       },
       "statuses": {
         "supported": "Confirmed evidence",
-        "doneNeedsFacts": "Done, facts needed",
+        "doneNeedsFacts": "Done, confirm facts",
         "adjacent": "Adjacent experience",
         "confirmedAbsent": "Confirmed not done",
         "unsure": "Still unsure",
@@ -459,6 +459,96 @@
         "partial": "Partial evidence, confirm",
         "notFound": "No evidence in current materials",
         "unknown": "Not assessed"
+      },
+      "classifications": {
+        "done": "I've done this",
+        "adjacent": "Adjacent experience",
+        "not_done": "I haven't done this",
+        "unsure": "Not sure"
+      },
+      "userEvidence": "Facts you added",
+      "evidenceConfirmed": "Confirmed",
+      "evidenceDraft": "Evidence draft",
+      "confirmFact": "Confirm this is factual",
+      "confirmedAbsentStatement": "You confirmed that you do not currently have experience matching this requirement. The system will not present it as an existing capability.",
+      "unsureStatement": "You marked this requirement as uncertain. Choose whether to review, build evidence, or proceed with the risk based on your time budget.",
+      "myDecision": "My assessment",
+      "currentAction": "Current action:",
+      "decisionRationale": {
+        "done": "The user confirmed relevant experience and added a reviewable fact draft.",
+        "adjacent": "The user confirmed adjacent experience; full coverage still requires a transfer rationale.",
+        "not_done": "The user explicitly confirmed they have not done this.",
+        "unsure": "The user cannot currently confirm related experience."
+      },
+      "taskRecommendations": {
+        "extract": "Extract reviewable facts from existing experience",
+        "strengthen": "Confirm and strengthen the role, actions, results, and source",
+        "translate": "Document transferable parts and capability boundaries",
+        "learn": "Complete short-term study or review within the selected time budget",
+        "project": "Build new professional evidence through a real project or practice",
+        "accept_risk": "Keep the gap visible and proceed with the role at risk",
+        "ignore": "Ignore this requirement for now or stop pursuing the role"
+      },
+      "errors": {
+        "saveItem": "Could not save the evidence draft. Try again.",
+        "classify": "Could not save the evidence assessment. Try again.",
+        "action": "Choose a next action.",
+        "saveTask": "Could not save the action task. Try again.",
+        "confirm": "Could not confirm the fact. Try again.",
+        "unknown": "Could not save. Try again."
+      },
+      "dialog": {
+        "factGuardrail": "Only enter things you truly did or boundaries you can state clearly. AI suggestions, job gaps, and preparation questions cannot be saved as personal facts.",
+        "experience": "1. What exactly did you do?",
+        "experiencePlaceholder": "Describe a real project, task, or event rather than only naming a capability.",
+        "role": "2. What role did you personally play?",
+        "rolePlaceholder": "Describe your responsibility boundary and individual contribution.",
+        "actionsLabel": "3. What actions did you take?",
+        "actionsPlaceholder": "One item per line; include methods, technology, or key decisions.",
+        "results": "4. What result, metric, or artifact exists?",
+        "resultsPlaceholder": "If there is no metric, explicitly say so and describe the real artifact or impact.",
+        "source": "5. Where can this be verified?",
+        "sourcePlaceholder": "For example: a cv.md section, local project path, document name, or another reviewable reference.",
+        "adjacentExperience": "What is the adjacent experience?",
+        "adjacentExperiencePlaceholder": "Describe real experience that is close to the target requirement.",
+        "transferable": "Which parts are transferable?",
+        "transferablePlaceholder": "Describe reusable methods, technology, business context, or collaboration patterns.",
+        "boundaries": "What can you not claim yet?",
+        "boundariesPlaceholder": "State the boundary clearly so adjacent experience is not presented as full coverage.",
+        "timeBudget": "How much time will you invest in this search cycle?",
+        "willingnessLabel": "Do you want to develop in this direction long term?",
+        "actionLabel": "Choose the next action",
+        "draftHint": "Saving creates an evidence draft. You must explicitly confirm it before it becomes confirmed evidence.",
+        "decisionHint": "The system records your choice; it will not automatically apply, study, or abandon the role for you.",
+        "save": "Save assessment",
+        "saving": "Saving",
+        "cancel": "Cancel",
+        "adjacentEvidenceTitle": "Adjacent experience",
+        "transferablePrefix": "Transferable: ",
+        "boundariesPrefix": "Boundary: ",
+        "userStatement": "User statement",
+        "time": {
+          "none": "No time investment",
+          "underOneHour": "Under one hour",
+          "oneToThreeDays": "One to three days",
+          "oneToThreeWeeks": "One to three weeks",
+          "longTerm": "Long-term build"
+        },
+        "willingness": {
+          "yes": "Yes, long-term direction",
+          "unsure": "Not sure yet",
+          "no": "Not a long-term direction"
+        },
+        "actions": {
+          "acceptRisk": "Proceed with the risk",
+          "acceptRiskDesc": "Keep the gap visible and continue evaluating or applying.",
+          "learn": "Short-term study or review",
+          "learnDesc": "Prepare knowledge within the chosen time without presenting it as project experience.",
+          "project": "Build new project evidence",
+          "projectDesc": "Create verifiable professional evidence through real practice.",
+          "ignore": "Ignore or skip for now",
+          "ignoreDesc": "Do not invest in this requirement and abandon the role if needed."
+        }
       }
     },
     "greeting": "Greeting prep",

@@ -15,13 +15,31 @@ import {
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
 import { DetailItem } from './DetailItem';
+import { EvidenceDecisionDialog, type EvidenceDecisionInput } from './EvidenceDecisionDialog';
 import { JobDescription } from './JobDescription';
-import type { DecisionStatus, GreetingDraft, GreetingDraftStatus, Job, PipelineItem } from '../types';
-import type { EvidenceCoverage, EvidenceOverviewResponse, EvidenceRequirement } from '../types';
+import type {
+  DecisionStatus,
+  EvidenceClassification,
+  EvidenceCoverage,
+  EvidenceItem,
+  EvidenceItemInput,
+  EvidenceMutationResponse,
+  EvidenceOverviewResponse,
+  EvidenceRequirement,
+  EvidenceTaskInput,
+  GreetingDraft,
+  GreetingDraftStatus,
+  Job,
+  PipelineItem,
+} from '../types';
 
 type WorkspaceTab = 'overview' | 'info' | 'evaluation' | 'materials' | 'interview' | 'records';
 type NextAction = 'llm' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
 type MaterialStepKey = 'llm' | 'resumeSuggestion' | 'resumeDraft' | 'interviewPrep';
+type EvidenceDecisionTarget = {
+  requirement: EvidenceRequirement;
+  classification: EvidenceClassification;
+};
 
 type StatusOption = {
   value: DecisionStatus;
@@ -32,6 +50,18 @@ type JobWorkspaceProps = {
   item: PipelineItem;
   evidenceOverview: EvidenceOverviewResponse | null;
   evidenceLoading: boolean;
+  evidenceError: string;
+  onClassifyEvidenceCoverage: (
+    requirementId: string,
+    classification: EvidenceClassification,
+    evidenceIds?: string[],
+    rationale?: string,
+    confidence?: number,
+  ) => Promise<EvidenceMutationResponse | null>;
+  onCreateEvidenceItem: (item: EvidenceItemInput) => Promise<EvidenceMutationResponse | null>;
+  onUpdateEvidenceItem: (item: EvidenceItem) => Promise<EvidenceMutationResponse | null>;
+  onConfirmEvidenceItem: (evidenceId: string) => Promise<EvidenceMutationResponse | null>;
+  onCreateEvidenceTask: (task: EvidenceTaskInput) => Promise<EvidenceMutationResponse | null>;
   job: Job | null;
   detailLoading: boolean;
   statusOptions: StatusOption[];
@@ -99,6 +129,13 @@ function statusButtonClass(status: DecisionStatus, active: boolean) {
   const classes = STATUS_CLASSES[status];
   if (!classes) return active ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200';
   return active ? classes.active : classes.idle;
+}
+
+function splitFactLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 function MaterialPill({
@@ -189,6 +226,12 @@ export function JobWorkspace({
   item,
   evidenceOverview,
   evidenceLoading,
+  evidenceError,
+  onClassifyEvidenceCoverage,
+  onCreateEvidenceItem,
+  onUpdateEvidenceItem,
+  onConfirmEvidenceItem,
+  onCreateEvidenceTask,
   job,
   detailLoading,
   statusOptions,
@@ -216,6 +259,11 @@ export function JobWorkspace({
   const { t } = useAppTranslation();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
   const [greetingText, setGreetingText] = useState('');
+  const [decisionTarget, setDecisionTarget] = useState<EvidenceDecisionTarget | null>(null);
+  const [decisionSaving, setDecisionSaving] = useState(false);
+  const [decisionError, setDecisionError] = useState('');
+  const [confirmingEvidenceIds, setConfirmingEvidenceIds] = useState<string[]>([]);
+  const [workspaceEvidenceError, setWorkspaceEvidenceError] = useState('');
   const materialReadyCount = [
     item.reportPath,
     item.resumeSuggestionPath,
@@ -237,6 +285,18 @@ export function JobWorkspace({
     () => new Map((evidenceOverview?.coverages || []).map((coverage) => [coverage.requirementId, coverage])),
     [evidenceOverview?.coverages],
   );
+  const evidenceById = useMemo(
+    () => new Map((evidenceOverview?.evidenceItems || []).map((evidence) => [evidence.evidenceId, evidence])),
+    [evidenceOverview?.evidenceItems],
+  );
+  const selectedDecisionEvidence = useMemo(() => {
+    if (!decisionTarget) return null;
+    const coverage = coverageByRequirement.get(decisionTarget.requirement.requirementId);
+    const linked = (coverage?.evidenceIds || [])
+      .map((evidenceId) => evidenceById.get(evidenceId))
+      .filter((evidence): evidence is EvidenceItem => Boolean(evidence));
+    return linked.find((evidence) => evidence.status === 'draft') || linked[0] || null;
+  }, [coverageByRequirement, decisionTarget, evidenceById]);
   const requirementCount = requirements.length || item.requirementCount || 0;
   const confirmedCoverageCount = requirements.length
     ? requirements.filter((requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'supported').length
@@ -259,6 +319,12 @@ export function JobWorkspace({
   useEffect(() => {
     setGreetingText(greetingSourceText);
   }, [greetingDraft?.sourceKey, greetingDraft?.updatedAt, greetingSourceText]);
+
+  useEffect(() => {
+    setDecisionTarget(null);
+    setDecisionError('');
+    setWorkspaceEvidenceError('');
+  }, [item.sourceKey]);
 
   const nextAction = useMemo<NextAction>(() => {
     if (!item.reportPath) return 'llm';
@@ -334,6 +400,95 @@ export function JobWorkspace({
         ? 'border-indigo-900/60 bg-indigo-950/30 text-indigo-300'
         : 'border-zinc-800 bg-zinc-900 text-zinc-400'
   );
+
+  const openEvidenceDecision = (requirement: EvidenceRequirement, classification: EvidenceClassification) => {
+    setDecisionError('');
+    setWorkspaceEvidenceError('');
+    setDecisionTarget({ requirement, classification });
+  };
+
+  const submitEvidenceDecision = async (input: EvidenceDecisionInput) => {
+    if (!decisionTarget) return;
+    setDecisionSaving(true);
+    setDecisionError('');
+    const { requirement } = decisionTarget;
+    try {
+      let evidenceIds: string[] = [];
+      if (input.classification === 'done' || input.classification === 'adjacent') {
+        const isAdjacent = input.classification === 'adjacent';
+        const itemInput: EvidenceItemInput = {
+          title: isAdjacent
+            ? `${requirement.label}：${t('jobWorkspace.evidence.dialog.adjacentEvidenceTitle')}`
+            : `${requirement.label}：${input.experience.slice(0, 32)}`,
+          evidenceType: 'fact',
+          summary: input.experience,
+          userRole: isAdjacent ? '' : input.role,
+          actions: isAdjacent ? [`${t('jobWorkspace.evidence.dialog.transferablePrefix')}${input.transferable}`] : splitFactLines(input.actions),
+          results: isAdjacent ? [`${t('jobWorkspace.evidence.dialog.boundariesPrefix')}${input.boundaries}`] : splitFactLines(input.results),
+          sourceRefs: [{
+            type: 'user_statement',
+            ref: isAdjacent ? t('jobWorkspace.evidence.dialog.userStatement') : input.source,
+            quote: input.experience,
+          }],
+          tags: [requirement.canonicalKey, ...(isAdjacent ? ['adjacent'] : [])],
+          status: 'draft',
+        };
+        const itemResult = selectedDecisionEvidence?.status === 'draft'
+          ? await onUpdateEvidenceItem({ ...selectedDecisionEvidence, ...itemInput, status: 'draft' })
+          : await onCreateEvidenceItem(itemInput);
+        if (!itemResult?.item) throw new Error(t('jobWorkspace.evidence.errors.saveItem'));
+        evidenceIds = [itemResult.item.evidenceId];
+      }
+
+      const rationale = t(`jobWorkspace.evidence.decisionRationale.${input.classification}`);
+      const classificationResult = await onClassifyEvidenceCoverage(
+        requirement.requirementId,
+        input.classification,
+        evidenceIds,
+        rationale,
+        1,
+      );
+      if (!classificationResult) throw new Error(t('jobWorkspace.evidence.errors.classify'));
+
+      const taskType = input.classification === 'done'
+        ? 'strengthen'
+        : input.classification === 'adjacent'
+          ? 'translate'
+          : input.taskType;
+      if (!taskType) throw new Error(t('jobWorkspace.evidence.errors.action'));
+      const taskInput: EvidenceTaskInput = {
+        requirementId: requirement.requirementId,
+        taskType,
+        affectedSourceKeys: [requirement.sourceKey],
+        recommendedAction: t(`jobWorkspace.evidence.taskRecommendations.${taskType}`),
+        estimatedEffortBand: input.timeBudget || 'under_1_hour',
+        timeBudget: input.timeBudget || 'under_1_hour',
+        userWillingness: input.userWillingness || 'yes',
+        priorityBand: requirement.importance === 'required' ? 'high' : 'medium',
+        status: 'pending',
+        completionEvidenceIds: [],
+      };
+      const taskResult = await onCreateEvidenceTask(taskInput);
+      if (!taskResult) throw new Error(t('jobWorkspace.evidence.errors.saveTask'));
+
+      setDecisionTarget(null);
+    } catch (error) {
+      setDecisionError((error as Error).message || t('jobWorkspace.evidence.errors.unknown'));
+    } finally {
+      setDecisionSaving(false);
+    }
+  };
+
+  const confirmEvidence = async (evidenceId: string) => {
+    setWorkspaceEvidenceError('');
+    setConfirmingEvidenceIds((ids) => ids.includes(evidenceId) ? ids : [...ids, evidenceId]);
+    try {
+      const result = await onConfirmEvidenceItem(evidenceId);
+      if (!result) setWorkspaceEvidenceError(t('jobWorkspace.evidence.errors.confirm'));
+    } finally {
+      setConfirmingEvidenceIds((ids) => ids.filter((id) => id !== evidenceId));
+    }
+  };
 
   return (
     <div className="w-[42rem] shrink-0 border-l border-zinc-800 bg-zinc-950 flex flex-col">
@@ -567,6 +722,11 @@ export function JobWorkspace({
                 </div>
               ) : requirements.length ? (
                 <div className="space-y-2.5">
+                  {(workspaceEvidenceError || evidenceError) && (
+                    <div className="rounded border border-red-900/60 bg-red-950/30 p-3 text-xs text-red-300">
+                      {workspaceEvidenceError || evidenceError}
+                    </div>
+                  )}
                   <div className="text-xs leading-relaxed text-zinc-500">
                     {t('jobWorkspace.evidence.requirementsSummary', {
                       count: requirements.length,
@@ -577,8 +737,16 @@ export function JobWorkspace({
                     const coverage = coverageByRequirement.get(requirement.requirementId);
                     const status = evidenceStatus(coverage);
                     const confidence = coverage?.assessmentConfidence ?? coverage?.confidence ?? requirement.extractionConfidence;
-                    const rationale = coverage?.assessmentRationale || coverage?.rationale;
+                    const rationale = coverage?.userDecisionAt
+                      ? coverage?.rationale
+                      : (coverage?.assessmentRationale || coverage?.rationale);
                     const candidateRefs = coverage?.candidateEvidenceRefs || [];
+                    const linkedEvidenceItems = (coverage?.evidenceIds || [])
+                      .map((evidenceId) => evidenceById.get(evidenceId))
+                      .filter((evidence): evidence is EvidenceItem => Boolean(evidence));
+                    const activeTask = (evidenceOverview?.tasks || []).find(
+                      (task) => task.requirementId === requirement.requirementId && (task.status === 'pending' || task.status === 'in_progress'),
+                    );
                     return (
                       <div key={requirement.requirementId} className="rounded border border-zinc-800 bg-zinc-900/35 p-3">
                         <div className="flex items-start justify-between gap-3">
@@ -606,10 +774,42 @@ export function JobWorkspace({
                         )}
 
                         <div className="mt-3 rounded border border-zinc-800/80 bg-zinc-950/70 p-2.5">
-                          {coverage?.coverageStatus === 'supported' ? (
-                            <div className="text-xs text-emerald-300">
-                              {t('jobWorkspace.evidence.confirmedEvidenceCount', { count: coverage.evidenceIds.length })}
+                          {linkedEvidenceItems.length ? (
+                            <div className="space-y-2">
+                              <div className="text-[10px] font-medium uppercase tracking-wide text-indigo-400">{t('jobWorkspace.evidence.userEvidence')}</div>
+                              {linkedEvidenceItems.map((evidence) => (
+                                <div key={evidence.evidenceId} className="rounded border border-zinc-800 bg-zinc-900/60 p-2.5">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-medium text-zinc-200">{evidence.title}</div>
+                                      <div className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{evidence.summary}</div>
+                                    </div>
+                                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${
+                                      evidence.status === 'confirmed'
+                                        ? 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'
+                                        : 'border-amber-900/60 bg-amber-950/30 text-amber-300'
+                                    }`}>
+                                      {evidence.status === 'confirmed' ? t('jobWorkspace.evidence.evidenceConfirmed') : t('jobWorkspace.evidence.evidenceDraft')}
+                                    </span>
+                                  </div>
+                                  {evidence.status === 'draft' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { void confirmEvidence(evidence.evidenceId); }}
+                                      disabled={confirmingEvidenceIds.includes(evidence.evidenceId)}
+                                      className="mt-2 inline-flex items-center gap-1.5 rounded border border-emerald-900/70 bg-emerald-950/30 px-2.5 py-1.5 text-[10px] font-medium text-emerald-300 hover:bg-emerald-900/40 disabled:cursor-wait disabled:opacity-60"
+                                    >
+                                      {confirmingEvidenceIds.includes(evidence.evidenceId) ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+                                      {t('jobWorkspace.evidence.confirmFact')}
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
                             </div>
+                          ) : coverage?.userClassification === 'not_done' ? (
+                            <div className="text-xs leading-relaxed text-red-300">{t('jobWorkspace.evidence.confirmedAbsentStatement')}</div>
+                          ) : coverage?.userClassification === 'unsure' ? (
+                            <div className="text-xs leading-relaxed text-zinc-400">{t('jobWorkspace.evidence.unsureStatement')}</div>
                           ) : candidateRefs.length ? (
                             <div className="space-y-1.5">
                               <div className="text-[10px] font-medium uppercase tracking-wide text-amber-500">{t('jobWorkspace.evidence.candidateSources')}</div>
@@ -631,6 +831,38 @@ export function JobWorkspace({
                             {confidence > 0 && <span className="shrink-0">{t('jobWorkspace.evidence.confidence', { value: Math.round(confidence * 100) })}</span>}
                           </div>
                         )}
+
+                        <div className="mt-3 border-t border-zinc-800 pt-3">
+                          <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">{t('jobWorkspace.evidence.myDecision')}</div>
+                          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                            {(['done', 'adjacent', 'not_done', 'unsure'] as const).map((classification) => {
+                              const active = coverage?.userClassification === classification;
+                              const tones = {
+                                done: active ? 'border-emerald-600 bg-emerald-950/50 text-emerald-200' : 'border-emerald-950/70 text-emerald-400 hover:bg-emerald-950/30',
+                                adjacent: active ? 'border-cyan-600 bg-cyan-950/50 text-cyan-200' : 'border-cyan-950/70 text-cyan-400 hover:bg-cyan-950/30',
+                                not_done: active ? 'border-red-700 bg-red-950/50 text-red-200' : 'border-red-950/70 text-red-400 hover:bg-red-950/30',
+                                unsure: active ? 'border-zinc-600 bg-zinc-800 text-zinc-100' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900',
+                              };
+                              return (
+                                <button
+                                  key={classification}
+                                  type="button"
+                                  onClick={() => openEvidenceDecision(requirement, classification)}
+                                  disabled={decisionSaving}
+                                  className={`min-h-8 min-w-0 whitespace-normal break-words rounded border px-2 py-1.5 text-[10px] font-medium leading-tight transition-colors disabled:opacity-50 ${tones[classification]}`}
+                                >
+                                  {t(`jobWorkspace.evidence.classifications.${classification}`)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {activeTask && (
+                            <div className="mt-2 rounded border border-indigo-950/70 bg-indigo-950/20 px-2.5 py-2 text-[10px] leading-relaxed text-indigo-300">
+                              <span className="mr-1 text-indigo-500">{t('jobWorkspace.evidence.currentAction')}</span>
+                              {activeTask.recommendedAction}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -802,6 +1034,17 @@ export function JobWorkspace({
           </div>
         )}
       </div>
+      {decisionTarget && (
+        <EvidenceDecisionDialog
+          requirement={decisionTarget.requirement}
+          classification={decisionTarget.classification}
+          existingEvidence={selectedDecisionEvidence}
+          saving={decisionSaving}
+          error={decisionError}
+          onCancel={() => { if (!decisionSaving) setDecisionTarget(null); }}
+          onSubmit={(input) => { void submitEvidenceDecision(input); }}
+        />
+      )}
     </div>
   );
 }

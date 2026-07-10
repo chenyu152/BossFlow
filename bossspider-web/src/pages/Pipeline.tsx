@@ -8,7 +8,12 @@ import { useJobWorkspaceArtifacts } from '../hooks/useJobWorkspaceArtifacts';
 import { useSelectedPipelineItem } from '../hooks/useSelectedPipelineItem';
 import type {
   DecisionStatus,
+  EvidenceClassification,
+  EvidenceItem,
+  EvidenceItemInput,
+  EvidenceMutationResponse,
   EvidenceOverviewResponse,
+  EvidenceTaskInput,
   GreetingDraftResponse,
   GreetingDraftStatus,
   InterviewPrepResponse,
@@ -100,6 +105,12 @@ export function Pipeline({
   pipeline,
   evidenceOverview,
   evidenceLoading,
+  evidenceError,
+  onClassifyEvidenceCoverage,
+  onCreateEvidenceItem,
+  onUpdateEvidenceItem,
+  onConfirmEvidenceItem,
+  onCreateEvidenceTask,
   onRefresh,
   onLlmEvaluate,
   llmEvaluatingKeys,
@@ -124,6 +135,18 @@ export function Pipeline({
   pipeline: PipelineResponse | null;
   evidenceOverview: EvidenceOverviewResponse | null;
   evidenceLoading: boolean;
+  evidenceError: string;
+  onClassifyEvidenceCoverage: (
+    requirementId: string,
+    classification: EvidenceClassification,
+    evidenceIds?: string[],
+    rationale?: string,
+    confidence?: number,
+  ) => Promise<EvidenceMutationResponse | null>;
+  onCreateEvidenceItem: (item: EvidenceItemInput) => Promise<EvidenceMutationResponse | null>;
+  onUpdateEvidenceItem: (item: EvidenceItem) => Promise<EvidenceMutationResponse | null>;
+  onConfirmEvidenceItem: (evidenceId: string) => Promise<EvidenceMutationResponse | null>;
+  onCreateEvidenceTask: (task: EvidenceTaskInput) => Promise<EvidenceMutationResponse | null>;
   onRefresh: () => void;
   onLlmEvaluate: (sourceKey: string) => void;
   llmEvaluatingKeys: string[];
@@ -439,6 +462,12 @@ export function Pipeline({
             item={selectedItem}
             evidenceOverview={evidenceOverview}
             evidenceLoading={evidenceLoading}
+            evidenceError={evidenceError}
+            onClassifyEvidenceCoverage={onClassifyEvidenceCoverage}
+            onCreateEvidenceItem={onCreateEvidenceItem}
+            onUpdateEvidenceItem={onUpdateEvidenceItem}
+            onConfirmEvidenceItem={onConfirmEvidenceItem}
+            onCreateEvidenceTask={onCreateEvidenceTask}
             job={selectedJob}
             detailLoading={detailLoading}
             statusOptions={STATUS_OPTIONS}

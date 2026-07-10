@@ -95,6 +95,93 @@ class EvidenceServiceTest(unittest.TestCase):
         self.assertEqual(completed["task"]["status"], "completed")
         self.assertEqual(completed["overview"]["counts"]["pendingTasks"], 0)
 
+    def test_task_creation_is_idempotent_and_replaces_previous_action(self):
+        requirement = evidence_service.upsert_requirements([
+            {
+                "requirementId": "req-action",
+                "canonicalKey": "action-choice",
+                "label": "行动选择",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:2",
+                "jdQuote": "",
+                "extractionConfidence": 1,
+            }
+        ])["requirements"][0]
+        base_task = {
+            "requirementId": requirement["requirementId"],
+            "taskType": "learn",
+            "affectedSourceKeys": ["agent:2"],
+            "recommendedAction": "先学习",
+            "estimatedEffortBand": "1_3_days",
+            "timeBudget": "1_3_days",
+            "userWillingness": "yes",
+            "priorityBand": "high",
+            "status": "pending",
+            "completionEvidenceIds": [],
+        }
+        first = evidence_service.create_evidence_task(base_task)
+        second = evidence_service.create_evidence_task({**base_task, "recommendedAction": "更新后的学习计划"})
+        self.assertEqual(first["task"]["taskId"], second["task"]["taskId"])
+        self.assertEqual(second["task"]["recommendedAction"], "更新后的学习计划")
+
+        replacement = evidence_service.create_evidence_task({**base_task, "taskType": "accept_risk"})
+        tasks = replacement["overview"]["tasks"]
+        self.assertEqual(len(tasks), 2)
+        self.assertEqual(next(task for task in tasks if task["taskType"] == "learn")["status"], "dismissed")
+        self.assertEqual(replacement["task"]["status"], "pending")
+
+    def test_confirming_evidence_completes_strengthening_task(self):
+        evidence_service.upsert_requirements([
+            {
+                "requirementId": "req-confirm-task",
+                "canonicalKey": "confirm-task",
+                "label": "确认事实",
+                "category": "experience",
+                "importance": "required",
+                "sourceKey": "agent:3",
+                "jdQuote": "",
+                "extractionConfidence": 1,
+            }
+        ])
+        created = evidence_service.create_evidence_item({
+            "title": "真实经历",
+            "evidenceType": "fact",
+            "summary": "用户填写的真实经历",
+            "userRole": "负责人",
+            "actions": ["完成行动"],
+            "results": ["形成产物"],
+            "sourceRefs": [{"type": "user_statement", "ref": "用户陈述", "quote": "真实经历"}],
+            "tags": [],
+            "status": "draft",
+        })
+        evidence_id = created["item"]["evidenceId"]
+        evidence_service.classify_coverage({
+            "requirementId": "req-confirm-task",
+            "userClassification": "done",
+            "evidenceIds": [evidence_id],
+            "rationale": "用户确认做过。",
+            "confidence": 1,
+        })
+        evidence_service.create_evidence_task({
+            "requirementId": "req-confirm-task",
+            "taskType": "strengthen",
+            "affectedSourceKeys": ["agent:3"],
+            "recommendedAction": "确认并补强事实",
+            "estimatedEffortBand": "under_1_hour",
+            "timeBudget": "under_1_hour",
+            "userWillingness": "yes",
+            "priorityBand": "high",
+            "status": "pending",
+            "completionEvidenceIds": [],
+        })
+
+        confirmed = evidence_service.confirm_evidence_item(evidence_id)
+
+        task = confirmed["overview"]["tasks"][0]
+        self.assertEqual(task["status"], "completed")
+        self.assertEqual(task["completionEvidenceIds"], [evidence_id])
+
     def test_confirmation_cannot_be_bypassed_by_create_or_update(self):
         created = evidence_service.create_evidence_item({
             "title": "待确认事实",

@@ -362,6 +362,26 @@ def confirm_evidence_item(evidence_id: str) -> dict[str, Any]:
         now = _now()
         item.update({"status": "confirmed", "confirmedAt": now, "lastValidatedAt": now, "updatedAt": now})
         _refresh_coverages_for_evidence(store, evidence_id)
+        requirement_ids = {
+            coverage.get("requirementId")
+            for coverage in store["coverages"]
+            if evidence_id in coverage.get("evidenceIds", [])
+        }
+        for task in store["tasks"]:
+            if (
+                task.get("requirementId") in requirement_ids
+                and task.get("taskType") in {"extract", "strengthen"}
+                and task.get("status") in {"pending", "in_progress"}
+            ):
+                completion_ids = list(dict.fromkeys([*(task.get("completionEvidenceIds") or []), evidence_id]))
+                task.update(
+                    {
+                        "status": "completed",
+                        "completionEvidenceIds": completion_ids,
+                        "completedAt": now,
+                        "updatedAt": now,
+                    }
+                )
         _write_store_unlocked(store)
         return {
             "ok": True,
@@ -463,8 +483,23 @@ def create_evidence_task(payload: dict[str, Any]) -> dict[str, Any]:
         store = _read_store_unlocked()
         _requirement(store, str(payload.get("requirementId") or ""))
         now = _now()
-        task = {**payload, "taskId": _new_id("task"), "createdAt": now, "updatedAt": now}
-        store["tasks"].append(task)
+        active_tasks = [
+            task
+            for task in store["tasks"]
+            if task.get("requirementId") == payload.get("requirementId")
+            and task.get("status") in {"pending", "in_progress"}
+        ]
+        matching_task = next((task for task in active_tasks if task.get("taskType") == payload.get("taskType")), None)
+        for active_task in active_tasks:
+            if active_task is matching_task:
+                continue
+            active_task.update({"status": "dismissed", "updatedAt": now})
+        if matching_task:
+            matching_task.update({**payload, "updatedAt": now})
+            task = matching_task
+        else:
+            task = {**payload, "taskId": _new_id("task"), "createdAt": now, "updatedAt": now}
+            store["tasks"].append(task)
         _write_store_unlocked(store)
         return {"ok": True, "task": task, "overview": _overview(store), "affectedSourceKeys": task["affectedSourceKeys"]}
 

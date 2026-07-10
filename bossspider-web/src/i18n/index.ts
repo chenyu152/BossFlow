@@ -23,8 +23,17 @@ i18n.use(LanguageDetector).init({
 
 if (import.meta.hot) {
   import.meta.hot.accept(['./locales/en.json', './locales/zh.json'], ([nextEn, nextZh]) => {
-    if (nextEn) i18n.addResourceBundle('en', 'common', nextEn.default, true, true);
-    if (nextZh) i18n.addResourceBundle('zh', 'common', nextZh.default, true, true);
+    const replaceBundle = (language: 'en' | 'zh', localeModule: unknown) => {
+      if (!localeModule || typeof localeModule !== 'object') return;
+      const bundle = 'default' in localeModule
+        ? (localeModule as { default?: unknown }).default
+        : localeModule;
+      if (!bundle || typeof bundle !== 'object') return;
+      i18n.addResourceBundle(language, 'common', bundle, true, true);
+    };
+
+    replaceBundle('en', nextEn);
+    replaceBundle('zh', nextZh);
     void i18n.changeLanguage(i18n.resolvedLanguage || i18n.language);
   });
 }
