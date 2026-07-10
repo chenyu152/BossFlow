@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInterview } from './useInterview';
 import { useJobs } from './useJobs';
@@ -12,10 +12,6 @@ type ResourceKey = 'jobs' | 'pipeline' | 'resume' | 'interview';
 
 export function useBossSpider() {
   const { t } = useTranslation('common');
-  const [strategyIndex, setStrategyIndex] = useState(0);
-  const [quickMode, setQuickMode] = useState(false);
-  const [headlessMode, setHeadlessMode] = useState(true);
-  const [autoSqlite, setAutoSqlite] = useState(true);
   const { notice, showNotice } = useNotice();
 
   const {
@@ -115,14 +111,10 @@ export function useBossSpider() {
     startLiveStatusUpdate,
     stopTask,
   } = useTasks({
-    autoSqlite,
     configReady: Boolean(config),
-    headlessMode,
-    quickMode,
     refreshJobs,
     requestBody,
     showNotice,
-    strategyIndex,
     t,
   });
 
@@ -217,10 +209,6 @@ export function useBossSpider() {
     logs,
     parsedLogs,
     recentLogs,
-    strategyIndex,
-    quickMode,
-    headlessMode,
-    autoSqlite,
     notice,
     loading,
     isConfigDirty,
@@ -233,10 +221,6 @@ export function useBossSpider() {
     setJobSearch,
     setSortJobsByScore,
     setSortPipelineByLlmScore,
-    setStrategyIndex,
-    setQuickMode,
-    setHeadlessMode,
-    setAutoSqlite,
     loadConfig,
     refreshJobs,
     refreshPipeline,

@@ -9,18 +9,12 @@ import {
   FileText,
   Inbox,
   ListChecks,
-  PlayCircle,
-  RefreshCw,
-  Settings,
   Sparkles,
   Terminal,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
-import { STRATEGIES } from '../constants';
 import { bossApi } from '../api';
-import { OptionToggle } from '../components/OptionToggle';
-import { StrategyCard } from '../components/StrategyCard';
 import type {
   ConfigPayload,
   CvStatusResponse,
@@ -174,37 +168,17 @@ export function Dashboard({
   config,
   jobs,
   pipeline,
-  strategyIndex,
-  setStrategyIndex,
-  quickMode,
-  setQuickMode,
-  headlessMode,
-  setHeadlessMode,
-  autoSqlite,
-  setAutoSqlite,
   setActiveTab,
   onOpenTask,
   recentLogs,
-  onLogin,
-  onProcessPartial,
   onLoadStoryDrafts,
 }: {
   config: ConfigPayload;
   jobs: Job[];
   pipeline: PipelineResponse | null;
-  strategyIndex: number;
-  setStrategyIndex: (value: number) => void;
-  quickMode: boolean;
-  setQuickMode: (value: boolean) => void;
-  headlessMode: boolean;
-  setHeadlessMode: (value: boolean) => void;
-  autoSqlite: boolean;
-  setAutoSqlite: (value: boolean) => void;
   setActiveTab: (tab: Tab) => void;
   onOpenTask: (tab: Tab, target?: DashboardTaskTarget) => void;
   recentLogs: ParsedLog[];
-  onLogin: () => void;
-  onProcessPartial: () => void;
   onLoadStoryDrafts: () => Promise<InterviewStoryDraftsResponse | null>;
 }) {
   const { t } = useAppTranslation();
@@ -581,51 +555,6 @@ export function Dashboard({
                   <div className="break-all text-[10px] text-zinc-600">{cvStatus.path}</div>
                 </>
               )}
-            </div>
-          </section>
-
-          <section className="rounded-md border border-zinc-800 bg-zinc-950">
-            <div className="border-b border-zinc-800 px-4 py-3">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
-                <Settings size={14} className="text-zinc-400" />
-                {t('dashboard.currentRunConfig')}
-              </h3>
-            </div>
-            <div className="space-y-5 p-4">
-              <div>
-                <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.strategy')}</label>
-                <div className="space-y-2">
-                  {STRATEGIES.map((strategy, index) => (
-                    <StrategyCard
-                      key={strategy.title}
-                      title={strategy.title}
-                      desc={t(strategy.descKey)}
-                      active={strategyIndex === index}
-                      onClick={() => setStrategyIndex(index)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-zinc-500">{t('dashboard.options')}</label>
-                <div className="space-y-2">
-                  <OptionToggle label={t('dashboard.quickMode')} active={quickMode} onToggle={() => setQuickMode(!quickMode)} />
-                  <OptionToggle label={t('dashboard.headless')} active={headlessMode} onToggle={() => setHeadlessMode(!headlessMode)} />
-                  <OptionToggle label={t('dashboard.autoSqlite')} active={autoSqlite} onToggle={() => setAutoSqlite(!autoSqlite)} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 pt-4">
-                <button onClick={onLogin} className="inline-flex items-center justify-center gap-2 rounded bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 transition-colors">
-                  <PlayCircle size={14} />
-                  {t('dashboard.loginSaveCookie')}
-                </button>
-                <button onClick={onProcessPartial} className="inline-flex items-center justify-center gap-2 rounded border border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 transition-colors">
-                  <RefreshCw size={14} />
-                  {t('dashboard.recoverPartial')}
-                </button>
-              </div>
             </div>
           </section>
 

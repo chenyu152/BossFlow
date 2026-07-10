@@ -1,6 +1,5 @@
 import datetime as dt
 import json
-import random
 from pathlib import Path
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
@@ -18,8 +17,6 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager) -> dict:
         with capture_task_output(task_manager):
             keywords = list(config.get("keywords") or [])
             cities = dict(config.get("cities") or {})
-            if payload.quickMode and len(keywords) > 10:
-                keywords = random.sample(keywords, random.randint(6, 10))
             mode = ["standard", "greedy", "scroll"][max(0, min(int(payload.strategyIndex), 2))]
             limits = config.get("scrape_limits") or {}
             port = find_free_port(9222)

@@ -1,7 +1,7 @@
 {
   "nav": {
     "dashboard": "总览",
-    "scope": "搜索范围",
+    "scope": "采集配置",
     "rules": "匹配规则",
     "matchingRules": "入库匹配规则",
     "scoringRules": "岗位评分规划",
@@ -60,7 +60,6 @@
     "currentRunConfig": "当前运行配置",
     "strategy": "策略",
     "options": "选项",
-    "quickMode": "快速模式",
     "headless": "无头模式",
     "autoSqlite": "自动写入 SQLite",
     "loginSaveCookie": "登录 / 保存 Cookie",
@@ -412,11 +411,20 @@
     "noDraftYet": "暂无定制简历。选择建议并生成定制简历 Markdown。"
   },
   "scope": {
-    "title": "采集范围配置",
+    "title": "采集配置",
     "reloadConfig": "重新加载",
     "saveConfig": "保存配置",
+    "runConfig": "当前运行配置",
+    "strategy": "策略",
+    "strategyDisabledHint": "翻页模式经测试较不稳定，暂不开放使用",
+    "options": "选项",
+    "headless": "无头模式",
+    "autoSqlite": "自动写入 SQLite",
+    "loginSaveCookie": "登录 / 保存 Cookie",
+    "recoverPartial": "从中断 JSON 恢复",
     "keywords": "关键词",
     "onePerLine": "每行一个",
+    "cityConfig": "城市配置",
     "citiesQuickSelect": "城市快捷选择",
     "cityCodes": "城市代码",
     "namecode": "城市名=代码",

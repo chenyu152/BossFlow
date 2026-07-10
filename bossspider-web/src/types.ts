@@ -19,6 +19,9 @@ export type ConfigPayload = {
   scrollTarget: number;
   scrollMax: number;
   minSalary: number;
+  strategyIndex: number;
+  headlessMode: boolean;
+  autoSqlite: boolean;
   jobCount: number;
   keywordCount: number;
   cityCount: number;

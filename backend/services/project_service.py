@@ -145,6 +145,9 @@ def config_payload(project_dir: Path) -> Dict[str, Any]:
         "greedyMaxPages": int(limits.get("greedy_max_pages", 0)),
         "maxJobsPerCityRound": int(limits.get("max_jobs_per_city_round", 0)),
         "minSalary": float(config.get("min_salary", MIN_AVG_SALARY_K)),
+        "strategyIndex": 2,
+        "headlessMode": bool(config.get("headless_mode", True)),
+        "autoSqlite": bool(config.get("auto_sqlite", True)),
     }
     payload.update(stats_for_project(project_dir, config))
     return payload
@@ -190,6 +193,10 @@ def save_form_config(payload: ConfigUpdate) -> tuple[Path, Dict[str, Any], Dict[
         "max_jobs_per_city_round": int(old_limits.get("max_jobs_per_city_round", 0)),
     }
     config["min_salary"] = float(payload.minSalary or MIN_AVG_SALARY_K)
+    config["strategy_index"] = 2
+    config.pop("quick_mode", None)
+    config["headless_mode"] = bool(payload.headlessMode)
+    config["auto_sqlite"] = bool(payload.autoSqlite)
     config["cat_rules"] = cat_rules
     config["scoring"] = normalize_scoring_config(scoring_rules)
     config["relevance_keywords"] = split_lines(payload.relevanceText)

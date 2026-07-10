@@ -6,24 +6,16 @@ import { parseLog } from '../utils';
 type TaskRequestBody = Record<string, unknown>;
 
 export function useTasks({
-  autoSqlite,
   configReady,
-  headlessMode,
-  quickMode,
   refreshJobs,
   requestBody,
   showNotice,
-  strategyIndex,
   t,
 }: {
-  autoSqlite: boolean;
   configReady: boolean;
-  headlessMode: boolean;
-  quickMode: boolean;
   refreshJobs: () => Promise<void>;
   requestBody: () => TaskRequestBody;
   showNotice: (message: string) => void;
-  strategyIndex: number;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const [status, setStatus] = useState<Status>('ready');
@@ -55,7 +47,7 @@ export function useTasks({
   const startCrawl = useCallback(async () => {
     if (!configReady) return false;
     try {
-      await bossApi.startCrawl({ ...requestBody(), strategyIndex, quickMode, headlessMode, autoSqlite });
+      await bossApi.startCrawl(requestBody());
       wasRunningRef.current = true;
       setStatus('crawling');
       return true;
@@ -63,7 +55,7 @@ export function useTasks({
       showNotice(t('notices.startFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [autoSqlite, configReady, headlessMode, quickMode, requestBody, showNotice, strategyIndex, t]);
+  }, [configReady, requestBody, showNotice, t]);
 
   const startLogin = useCallback(async () => {
     try {
@@ -79,7 +71,7 @@ export function useTasks({
 
   const processPartial = useCallback(async () => {
     try {
-      await bossApi.processPartial({ ...requestBody(), autoSqlite });
+      await bossApi.processPartial(requestBody());
       wasRunningRef.current = true;
       setStatus('processing-partial');
       return true;
@@ -87,7 +79,7 @@ export function useTasks({
       showNotice(t('notices.processPartialFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [autoSqlite, requestBody, showNotice, t]);
+  }, [requestBody, showNotice, t]);
 
   const startLiveStatusUpdate = useCallback(async (body: JobLiveStatusUpdateRequest) => {
     try {

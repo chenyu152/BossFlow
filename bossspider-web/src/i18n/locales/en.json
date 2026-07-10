@@ -1,7 +1,7 @@
 {
   "nav": {
     "dashboard": "Overview",
-    "scope": "Scope",
+    "scope": "Crawl Config",
     "rules": "Rules",
     "matchingRules": "Ingestion Rules",
     "scoringRules": "Job Scoring Plan",
@@ -60,7 +60,6 @@
     "currentRunConfig": "Current Run Configuration",
     "strategy": "Strategy",
     "options": "Options",
-    "quickMode": "Quick Mode",
     "headless": "Headless",
     "autoSqlite": "Auto SQLite",
     "loginSaveCookie": "Login / Save Cookie",
@@ -411,11 +410,20 @@
     "noDraftYet": "No tailored resume yet. Select suggestions and generate a tailored resume Markdown."
   },
   "scope": {
-    "title": "Crawl Scope Configuration",
+    "title": "Crawl Config",
     "reloadConfig": "Reload Config",
     "saveConfig": "Save Config",
+    "runConfig": "Current Run Configuration",
+    "strategy": "Strategy",
+    "strategyDisabledHint": "Pagination mode was less stable in testing, so it is temporarily unavailable.",
+    "options": "Options",
+    "headless": "Headless",
+    "autoSqlite": "Auto SQLite",
+    "loginSaveCookie": "Login / Save Cookie",
+    "recoverPartial": "Recover from partial JSON",
     "keywords": "Keywords",
     "onePerLine": "One per line",
+    "cityConfig": "City Config",
     "citiesQuickSelect": "Cities Quick Select",
     "cityCodes": "City Codes",
     "namecode": "name=code",

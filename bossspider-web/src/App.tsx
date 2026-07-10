@@ -306,19 +306,9 @@ export default function App() {
                   config={boss.config}
                   jobs={boss.jobs}
                   pipeline={boss.pipeline}
-                  strategyIndex={boss.strategyIndex}
-                  setStrategyIndex={boss.setStrategyIndex}
-                  quickMode={boss.quickMode}
-                  setQuickMode={boss.setQuickMode}
-                  headlessMode={boss.headlessMode}
-                  setHeadlessMode={boss.setHeadlessMode}
-                  autoSqlite={boss.autoSqlite}
-                  setAutoSqlite={boss.setAutoSqlite}
                   setActiveTab={navigateToTab}
                   onOpenTask={openDashboardTask}
                   recentLogs={boss.recentLogs}
-                  onLogin={startLogin}
-                  onProcessPartial={processPartial}
                   onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
                 />
               )}
@@ -330,6 +320,8 @@ export default function App() {
                   onReload={() => {
                     if (boss.config && confirmUnsavedConfig()) void boss.loadConfig(boss.config.project);
                   }}
+                  onLogin={startLogin}
+                  onProcessPartial={processPartial}
                 />
               )}
               {activeTab === 'MatchingRules' && boss.config && (
