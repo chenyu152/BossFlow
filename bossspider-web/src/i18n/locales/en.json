@@ -330,6 +330,7 @@
     "scoreButton": "Score",
     "llmEval": "LLM Eval",
     "noMatch": "No pipeline jobs match this filter.",
+    "backToList": "Back to job list",
     "sourceFile": "Source file",
     "coverage": "Coverage {{n}}%",
     "jdQuality": "JD quality {{n}}%",
@@ -389,7 +390,7 @@
   "jobWorkspace": {
     "title": "Job Workspace",
     "tabs": {
-      "overview": "Overview",
+      "overview": "Role Overview",
       "info": "Job Info",
       "evaluation": "Evaluation",
       "materials": "Materials",

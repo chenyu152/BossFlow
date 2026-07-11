@@ -33,7 +33,7 @@ import type {
   PipelineItem,
 } from '../types';
 
-type WorkspaceTab = 'overview' | 'info' | 'evaluation' | 'materials' | 'interview' | 'records';
+type WorkspaceTab = 'overview' | 'evaluation' | 'materials' | 'interview';
 type NextAction = 'llm' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
 type MaterialStepKey = 'llm' | 'resumeSuggestion' | 'resumeDraft' | 'interviewPrep';
 type EvidenceDecisionTarget = {
@@ -89,6 +89,7 @@ type JobWorkspaceProps = {
   isInterviewPreparing: boolean;
   interviewLoading: boolean;
   onOpenResumeMaterials: () => void;
+  layout?: 'drawer' | 'embedded';
 };
 
 const MATERIAL_TONES = {
@@ -262,6 +263,7 @@ export function JobWorkspace({
   isInterviewPreparing,
   interviewLoading,
   onOpenResumeMaterials,
+  layout = 'drawer',
 }: JobWorkspaceProps) {
   const { t } = useAppTranslation();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
@@ -380,11 +382,9 @@ export function JobWorkspace({
 
   const tabs: Array<{ value: WorkspaceTab; label: string }> = [
     { value: 'overview', label: t('jobWorkspace.tabs.overview') },
-    { value: 'info', label: t('jobWorkspace.tabs.info') },
     { value: 'evaluation', label: t('jobWorkspace.tabs.evaluation') },
     { value: 'materials', label: t('jobWorkspace.tabs.materials') },
     { value: 'interview', label: t('jobWorkspace.tabs.interview') },
-    { value: 'records', label: t('jobWorkspace.tabs.records') },
   ];
 
   const riskText = (risk?: string) => {
@@ -597,8 +597,8 @@ export function JobWorkspace({
   };
 
   return (
-    <div className="w-[42rem] shrink-0 border-l border-zinc-800 bg-zinc-950 flex flex-col">
-      <div className="border-b border-zinc-800 p-4">
+    <div className={`${layout === 'embedded' ? 'min-w-0 flex-1' : 'w-[42rem] shrink-0 border-l border-zinc-800'} flex flex-col bg-zinc-950`}>
+      <div className="border-b border-zinc-800 px-4 py-4 xl:px-6">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="mb-1 text-xs font-medium uppercase tracking-wide text-indigo-300">{t('jobWorkspace.title')}</div>
@@ -621,17 +621,27 @@ export function JobWorkspace({
             >
               <Trash2 size={16} />
             </button>
-            <button onClick={onClose} className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors">
+            <button
+              onClick={onClose}
+              title={t('pipeline.backToList')}
+              className={`rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors ${layout === 'embedded' ? 'lg:hidden' : ''}`}
+            >
               <X size={16} />
             </button>
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <MaterialPill label={t('pipeline.material.llm')} ready={Boolean(item.reportPath)} tone="llm" />
-          <MaterialPill label={t('pipeline.material.resumeSuggestion')} ready={Boolean(item.resumeSuggestionPath)} tone="resume" />
-          <MaterialPill label={t('pipeline.material.resumeDraft')} ready={Boolean(item.resumeDraftPath)} tone="resume" />
-          <MaterialPill label={t('pipeline.material.interviewPrep')} ready={Boolean(item.interviewPrepPath)} tone="interview" />
+          {materialSteps.map((step) => (
+            <MaterialPill
+              key={step.key}
+              label={step.label}
+              ready={step.ready}
+              tone={step.tone}
+              current={step.current}
+              onClick={() => setActiveTab(step.tab)}
+            />
+          ))}
         </div>
       </div>
 
@@ -653,22 +663,20 @@ export function JobWorkspace({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 xl:p-6">
+        <div className="mx-auto w-full max-w-6xl">
         {activeTab === 'overview' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <Section title={t('jobWorkspace.nextAction')}>
-              <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
-                <div className="space-y-2">
-                  <div>
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{t('jobWorkspace.nextActionCurrent')}</div>
-                    <div className="mt-1 text-sm font-semibold text-zinc-100">{t(`jobWorkspace.nextActionLabels.${nextAction}`)}</div>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{t('jobWorkspace.nextActionCurrent')}</span>
+                    <span className="text-sm font-semibold text-zinc-100">{t(`jobWorkspace.nextActionLabels.${nextAction}`)}</span>
                   </div>
-                  <div>
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{t('jobWorkspace.nextActionWhy')}</div>
-                    <div className="mt-1 text-xs leading-relaxed text-zinc-400">{t(`jobWorkspace.nextActionReasons.${nextAction}`)}</div>
-                  </div>
+                  <div className="mt-1 text-xs leading-relaxed text-zinc-400">{t(`jobWorkspace.nextActionReasons.${nextAction}`)}</div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="flex shrink-0 flex-wrap gap-2">
                   {nextAction === 'llm' && (
                     <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="emerald">
                       {isLlmEvaluating && <Loader2 size={13} className="animate-spin" />}
@@ -697,7 +705,10 @@ export function JobWorkspace({
                     </ActionButton>
                   )}
                   {nextAction === 'confirm' && (
-                    <ActionButton onClick={() => setActiveTab('records')} tone="zinc">
+                    <ActionButton
+                      onClick={() => document.querySelector('[data-workspace-section="status-flow"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      tone="zinc"
+                    >
                       <CheckCircle2 size={13} />
                       {t('jobWorkspace.nextActionButtons.confirm')}
                     </ActionButton>
@@ -712,45 +723,31 @@ export function JobWorkspace({
               </div>
             </Section>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
-                <div className="text-xs text-zinc-500">{t('jobWorkspace.materialProgress')}</div>
-                <div className="mt-2 text-2xl font-semibold text-zinc-100">{materialReadyCount}/4</div>
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+                <div className="text-[11px] text-zinc-500">{t('jobWorkspace.materialProgress')}</div>
+                <div className="text-lg font-semibold text-zinc-100">{materialReadyCount}/4</div>
               </div>
-              <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
-                <div className="text-xs text-zinc-500">{t('jobWorkspace.evidence.confirmedCoverage')}</div>
-                <div className="mt-2 text-2xl font-semibold text-emerald-200">{requirementCount ? `${confirmedCoverageCount}/${requirementCount}` : '-'}</div>
-                {potentialEvidenceCount > 0 && <div className="mt-1 text-[10px] text-amber-400">{t('jobWorkspace.evidence.candidateHint', { count: potentialEvidenceCount })}</div>}
+              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+                <div className="min-w-0 text-[11px] text-zinc-500">
+                  <div>{t('jobWorkspace.evidence.confirmedCoverage')}</div>
+                  {potentialEvidenceCount > 0 && <div className="truncate text-[9px] text-amber-400" title={t('jobWorkspace.evidence.candidateHint', { count: potentialEvidenceCount })}>{t('jobWorkspace.evidence.candidateHint', { count: potentialEvidenceCount })}</div>}
+                </div>
+                <div className="shrink-0 text-lg font-semibold text-emerald-200">{requirementCount ? `${confirmedCoverageCount}/${requirementCount}` : '-'}</div>
               </div>
-              <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
-                <div className="text-xs text-zinc-500">{t('jobWorkspace.evidence.pendingDecision')}</div>
-                <div className="mt-2 text-2xl font-semibold text-amber-200">{requirementCount ? pendingDecisionCount : '-'}</div>
+              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+                <div className="text-[11px] text-zinc-500">{t('jobWorkspace.evidence.pendingDecision')}</div>
+                <div className="text-lg font-semibold text-amber-200">{requirementCount ? pendingDecisionCount : '-'}</div>
               </div>
-              <div className="rounded border border-zinc-800 bg-zinc-950 p-3">
-                <div className="text-xs text-zinc-500">{t('jobWorkspace.evidence.confirmedGaps')}</div>
-                <div className="mt-2 text-2xl font-semibold text-red-200">{requirementCount ? confirmedGapCount : '-'}</div>
+              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+                <div className="text-[11px] text-zinc-500">{t('jobWorkspace.evidence.confirmedGaps')}</div>
+                <div className="text-lg font-semibold text-red-200">{requirementCount ? confirmedGapCount : '-'}</div>
               </div>
             </div>
 
-            <Section title={t('pipeline.materials')}>
-              <div className="grid grid-cols-2 gap-2">
-                {materialSteps.map((step) => (
-                  <MaterialPill
-                    key={step.key}
-                    label={step.label}
-                    ready={step.ready}
-                    tone={step.tone}
-                    current={step.current}
-                    onClick={() => setActiveTab(step.tab)}
-                  />
-                ))}
-              </div>
-            </Section>
-          </div>
-        )}
-
-        {activeTab === 'info' && (
-          <div className="space-y-4">
+            <div className="border-t border-zinc-800 pt-3">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('jobWorkspace.tabs.info')}</div>
+            </div>
             {detailLoading && (
               <div className="flex items-center gap-2 text-sm text-zinc-500">
                 <Loader2 size={14} className="animate-spin" />
@@ -781,6 +778,32 @@ export function JobWorkspace({
               </div>
             </Section>
             <JobDescription text={job?.desc} />
+
+            <div data-workspace-section="status-flow" className="scroll-mt-4 border-t border-zinc-800 pt-4">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('jobWorkspace.tabs.records')}</div>
+            </div>
+            <Section title={t('jobWorkspace.statusFlow')}>
+              <div className="grid grid-cols-2 gap-2">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => onStatusChange(option.value)}
+                    className={`rounded border px-2.5 py-1.5 text-xs font-medium transition-colors ${statusButtonClass(option.value, item.decisionStatus === option.value)}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </Section>
+            <Section title={t('jobWorkspace.timeline')}>
+              <div className="space-y-2 text-xs text-zinc-400">
+                <div className="flex justify-between gap-3"><span>{t('pipeline.added')}</span><span className="text-right text-zinc-300">{item.addedAt || '-'}</span></div>
+                <div className="flex justify-between gap-3"><span>{t('pipeline.material.llm')}</span><span className="text-right text-zinc-300">{item.evaluatedAt || '-'}</span></div>
+                <div className="flex justify-between gap-3"><span>{t('pipeline.material.resumeSuggestion')}</span><span className="text-right text-zinc-300">{item.resumeSuggestedAt || '-'}</span></div>
+                <div className="flex justify-between gap-3"><span>{t('pipeline.material.resumeDraft')}</span><span className="text-right text-zinc-300">{item.resumeDraftedAt || '-'}</span></div>
+                <div className="flex justify-between gap-3"><span>{t('pipeline.material.interviewPrep')}</span><span className="text-right text-zinc-300">{item.interviewPreparedAt || '-'}</span></div>
+              </div>
+            </Section>
           </div>
         )}
 
@@ -1207,39 +1230,7 @@ export function JobWorkspace({
           </div>
         )}
 
-        {activeTab === 'records' && (
-          <div className="space-y-4">
-            <Section title={t('jobWorkspace.statusFlow')}>
-              <div className="grid grid-cols-2 gap-2">
-                {statusOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => onStatusChange(option.value)}
-                    className={`rounded border px-2.5 py-1.5 text-xs font-medium transition-colors ${statusButtonClass(option.value, item.decisionStatus === option.value)}`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </Section>
-            <Section title={t('jobWorkspace.timeline')}>
-              <div className="space-y-2 text-xs text-zinc-400">
-                <div className="flex justify-between gap-3"><span>{t('pipeline.added')}</span><span className="text-right text-zinc-300">{item.addedAt || '-'}</span></div>
-                <div className="flex justify-between gap-3"><span>{t('pipeline.material.llm')}</span><span className="text-right text-zinc-300">{item.evaluatedAt || '-'}</span></div>
-                <div className="flex justify-between gap-3"><span>{t('pipeline.material.resumeSuggestion')}</span><span className="text-right text-zinc-300">{item.resumeSuggestedAt || '-'}</span></div>
-                <div className="flex justify-between gap-3"><span>{t('pipeline.material.resumeDraft')}</span><span className="text-right text-zinc-300">{item.resumeDraftedAt || '-'}</span></div>
-                <div className="flex justify-between gap-3"><span>{t('pipeline.material.interviewPrep')}</span><span className="text-right text-zinc-300">{item.interviewPreparedAt || '-'}</span></div>
-              </div>
-            </Section>
-            <button
-              onClick={onDelete}
-              className="flex w-full items-center justify-center gap-2 rounded border border-red-900/70 bg-red-950/20 px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-950/40 transition-colors"
-            >
-              <Trash2 size={15} />
-              {t('pipeline.deleteItem')}
-            </button>
-          </div>
-        )}
+        </div>
       </div>
       {decisionTarget && (
         <EvidenceDecisionDialog

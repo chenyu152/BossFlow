@@ -331,6 +331,7 @@
     "scoreButton": "评分",
     "llmEval": "LLM 精评",
     "noMatch": "没有匹配的候选岗位。",
+    "backToList": "返回岗位列表",
     "sourceFile": "源文件",
     "coverage": "覆盖率 {{n}}%",
     "jdQuality": "JD 质量 {{n}}%",
@@ -390,7 +391,7 @@
   "jobWorkspace": {
     "title": "岗位档案",
     "tabs": {
-      "overview": "概览",
+      "overview": "岗位概览",
       "info": "岗位信息",
       "evaluation": "匹配评估",
       "materials": "简历材料",

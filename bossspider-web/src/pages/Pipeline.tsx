@@ -1,5 +1,5 @@
 import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { JobWorkspace } from '../components/JobWorkspace';
@@ -202,6 +202,7 @@ export function Pipeline({
   const suggestingSet = new Set(resumeSuggestingKeys);
   const preparingSet = new Set(interviewPreparingKeys);
   const resetWorkspaceRef = useRef<() => void>(() => {});
+  const initialSelectionAppliedRef = useRef(false);
 
   const resetWorkspace = useCallback(() => {
     resetWorkspaceRef.current();
@@ -280,6 +281,13 @@ export function Pipeline({
     return [...filtered].sort((a, b) => (b.llmScore ?? -1) - (a.llmScore ?? -1));
   }, [pending, sortByLlmScore, statusFilter]);
 
+  useEffect(() => {
+    if (initialSelectionAppliedRef.current || selectedSourceKey || !displayedPending.length) return;
+    if (targetSourceKey && targetRequestId) return;
+    initialSelectionAppliedRef.current = true;
+    void selectItem(displayedPending[0]);
+  }, [displayedPending, selectItem, selectedSourceKey, targetRequestId, targetSourceKey]);
+
   const riskText = (risk?: string) => {
     if (risk === 'matched') return t('pipeline.risk.ok');
     if (risk === 'near') return t('pipeline.risk.near');
@@ -336,130 +344,78 @@ export function Pipeline({
         ))}
       </div>
 
-      <div className="border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex-1 min-h-0 flex">
-        <div className="flex-1 min-w-0 overflow-auto">
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
+        <aside className={`${selectedItem ? 'hidden lg:flex' : 'flex'} w-full shrink-0 flex-col border-r border-zinc-800 bg-zinc-950/70 lg:w-[23rem] xl:w-[26rem]`}>
+          <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-100">{t('pipeline.title')}</div>
+              <div className="mt-0.5 text-[11px] text-zinc-500">{t('pipeline.pending', { n: displayedPending.length.toLocaleString() })}</div>
+            </div>
+            {sortByLlmScore && (
+              <span className="rounded border border-emerald-900/60 bg-emerald-950/30 px-2 py-1 text-[10px] font-medium text-emerald-300">
+                {t('pipeline.llmSort')}
+              </span>
+            )}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {displayedPending.length ? (
-            <table className="w-full min-w-[1720px] table-fixed text-left text-xs">
-              <colgroup>
-                <col className="w-28" />
-                <col className="w-52" />
-                <col className="w-72" />
-                <col className="w-20" />
-                <col className="w-28" />
-                <col className="w-40" />
-                <col className="w-64" />
-                <col className="w-60" />
-                <col className="w-36" />
-                <col className="w-44" />
-              </colgroup>
-              <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800 shadow-sm z-10">
-                <tr>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.status')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.company')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.jobTitle')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.city')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.salary')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.score')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.llm')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.materials')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400">{t('pipeline.added')}</th>
-                  <th className="px-4 py-2.5 font-medium text-zinc-400 w-40">{t('pipeline.action')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/50">
-                {displayedPending.map((item) => {
-                  const isLlmEvaluating = evaluatingSet.has(item.sourceKey);
-                  return (
-                    <tr
-                      key={item.sourceKey || item.raw}
-                      onClick={() => { void selectItem(item); }}
-                      className={`${selectedSourceKey === item.sourceKey ? 'bg-zinc-800/60' : ''} ${isLlmEvaluating ? 'bg-emerald-950/15 hover:bg-emerald-950/25' : 'hover:bg-zinc-800/40'} cursor-pointer transition-colors`}
-                    >
-                      <td className="px-4 py-2">
-                        <span className={`rounded border px-2 py-1 text-[10px] ${statusBadgeClass(item.decisionStatus)}`}>
-                          {getDecisionLabel(item.decisionStatus, t)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-zinc-200 font-medium truncate" title={item.company}>{item.company}</td>
-                      <td className="px-4 py-2 text-zinc-300 truncate" title={item.title}>{item.title}</td>
-                      <td className="px-4 py-2 text-zinc-400 truncate" title={item.city}>{item.city}</td>
-                      <td className="px-4 py-2 text-emerald-400 truncate" title={item.salary}>{item.salary}</td>
-                      <td className="px-4 py-2">
-                        {item.score ? (
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1.5 rounded bg-zinc-800 px-2 py-1 text-zinc-200">
-                              {item.score.toFixed(1)}
-                              <span className="text-[10px] text-zinc-500">{item.fitLevel}</span>
-                            </span>
-                            <div className="text-[10px] text-zinc-500">
-                              {t('pipeline.expRiskShort', { risk: riskText(item.experienceRisk) })} / {t('pipeline.eduRiskShort', { risk: riskText(item.educationRisk) })}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-zinc-600">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        {isLlmEvaluating ? (
-                          <div className="inline-flex items-center gap-2 rounded bg-emerald-950/60 px-2 py-1 text-emerald-300">
-                            <Loader2 size={12} className="animate-spin" />
-                            {t('pipeline.generating')}
-                          </div>
-                        ) : item.reportPath ? (
-                          <div className="min-w-0 space-y-1">
-                            <span className="inline-flex items-center gap-1.5 rounded bg-emerald-950/60 px-2 py-1 text-emerald-300">
-                              {item.llmScore ? item.llmScore.toFixed(1) : item.reportId}
-                              <span className="text-[10px] text-emerald-500">{item.llmFitLevel || 'Report'}</span>
-                            </span>
-                            <div className="truncate text-[10px] text-zinc-500" title={item.llmRecommendation || item.reportPath}>
-                              {item.llmRecommendation || item.reportPath}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-zinc-600">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex flex-wrap gap-1">
-                          <MaterialBadge label={t('pipeline.materialShort.llm')} ready={Boolean(item.reportPath)} tone="emerald" />
-                          <MaterialBadge label={t('pipeline.materialShort.resumeSuggestion')} ready={Boolean(item.resumeSuggestionPath)} tone="indigo" />
-                          <MaterialBadge label={t('pipeline.materialShort.resumeDraft')} ready={Boolean(item.resumeDraftPath)} tone="indigo" />
-                          <MaterialBadge label={t('pipeline.materialShort.interviewPrep')} ready={Boolean(item.interviewPrepPath)} tone="cyan" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-zinc-500 truncate" title={item.addedAt || '-'}>{item.addedAt || '-'}</td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-2 whitespace-nowrap">
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onLlmEvaluate(item.sourceKey);
-                            }}
-                            disabled={isLlmEvaluating}
-                            className="inline-flex shrink-0 items-center gap-1.5 rounded border border-emerald-900/70 bg-emerald-950/30 px-2.5 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-900/40 disabled:cursor-wait disabled:opacity-60 transition-colors"
-                          >
-                            {isLlmEvaluating ? (
-                              <>
-                                <Loader2 size={13} className="animate-spin" />
-                                {t('pipeline.generating')}
-                              </>
-                            ) : (
-                              t('pipeline.llmEval')
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="space-y-2">
+              {displayedPending.map((item) => {
+                const isLlmEvaluating = evaluatingSet.has(item.sourceKey);
+                const materialReadyCount = [item.reportPath, item.resumeSuggestionPath, item.resumeDraftPath, item.interviewPrepPath].filter(Boolean).length;
+                const isSelected = selectedSourceKey === item.sourceKey;
+                return (
+                  <button
+                    key={item.sourceKey || item.raw}
+                    type="button"
+                    onClick={() => { void selectItem(item); }}
+                    aria-pressed={isSelected}
+                    className={`w-full rounded-md border p-3 text-left transition-colors ${isSelected ? 'border-indigo-700 bg-indigo-950/25 shadow-[inset_3px_0_0_0_rgb(79_70_229)]' : isLlmEvaluating ? 'border-emerald-900/60 bg-emerald-950/15 hover:bg-emerald-950/25' : 'border-zinc-800 bg-zinc-900/35 hover:border-zinc-700 hover:bg-zinc-900/70'}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-zinc-100" title={item.title}>{item.title}</div>
+                        <div className="mt-1 truncate text-xs text-zinc-400" title={item.company}>{item.company}</div>
+                      </div>
+                      <span className={`shrink-0 rounded border px-2 py-1 text-[10px] ${statusBadgeClass(item.decisionStatus)}`}>
+                        {getDecisionLabel(item.decisionStatus, t)}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-zinc-500">
+                      <span className="truncate">{item.city || '-'}</span>
+                      <span className="text-zinc-700">/</span>
+                      <span className="shrink-0 font-medium text-emerald-400">{item.salary || '-'}</span>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-200">
+                        {t('pipeline.score')} {item.score != null ? item.score.toFixed(1) : '-'}
+                      </span>
+                      <span className={`rounded px-2 py-1 text-[11px] font-medium ${item.llmScore != null ? 'bg-emerald-950/60 text-emerald-300' : 'bg-zinc-900 text-zinc-600'}`}>
+                        {isLlmEvaluating ? <Loader2 size={11} className="mr-1 inline animate-spin" /> : null}
+                        {t('pipeline.llm')} {item.llmScore != null ? item.llmScore.toFixed(1) : '-'}
+                      </span>
+                      <span className="ml-auto text-[10px] text-zinc-500">{materialReadyCount}/4 {t('pipeline.materials')}</span>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <MaterialBadge label={t('pipeline.materialShort.llm')} ready={Boolean(item.reportPath)} tone="emerald" />
+                      <MaterialBadge label={t('pipeline.materialShort.resumeSuggestion')} ready={Boolean(item.resumeSuggestionPath)} tone="indigo" />
+                      <MaterialBadge label={t('pipeline.materialShort.resumeDraft')} ready={Boolean(item.resumeDraftPath)} tone="indigo" />
+                      <MaterialBadge label={t('pipeline.materialShort.interviewPrep')} ready={Boolean(item.interviewPrepPath)} tone="cyan" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           ) : (
             <div className="h-full flex items-center justify-center text-sm text-zinc-500">
               {t('pipeline.noMatch')}
             </div>
           )}
-        </div>
+          </div>
+        </aside>
 
         {selectedItem && (
           <JobWorkspace
@@ -504,7 +460,17 @@ export function Pipeline({
               title: selectedItem.title,
               city: selectedItem.city,
             })}
+            layout="embedded"
           />
+        )}
+        {!selectedItem && (
+          <div className="hidden min-w-0 flex-1 items-center justify-center bg-zinc-950/30 p-8 text-center lg:flex">
+            <div className="max-w-sm">
+              <BookOpenText className="mx-auto text-zinc-700" size={30} />
+              <div className="mt-3 text-sm font-medium text-zinc-300">{t('resume.selectJob')}</div>
+              <div className="mt-1 text-xs leading-relaxed text-zinc-600">{t('pipeline.noMatch')}</div>
+            </div>
+          </div>
         )}
       </div>
 
