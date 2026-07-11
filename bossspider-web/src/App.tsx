@@ -88,6 +88,7 @@ export default function App() {
   const [selectedInterviewKey, setSelectedInterviewKey] = useState('');
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [selectedPipelineKey, setSelectedPipelineKey] = useState('');
+  const [selectedEvidenceRequirementId, setSelectedEvidenceRequirementId] = useState('');
   const [selectedResumeKey, setSelectedResumeKey] = useState('');
   const [selectedResumeTarget, setSelectedResumeTarget] = useState<ResumeNavigationTarget | null>(null);
   const [selectedStoryDraftId, setSelectedStoryDraftId] = useState('');
@@ -131,6 +132,7 @@ export default function App() {
     setDashboardTargetRequestId((value) => value + 1);
     setSelectedJobId(tab === 'Jobs' ? target?.jobId ?? null : null);
     setSelectedPipelineKey(tab === 'Pipeline' ? target?.sourceKey ?? '' : '');
+    setSelectedEvidenceRequirementId(tab === 'Pipeline' ? target?.requirementId ?? '' : '');
     setSelectedResumeKey(tab === 'Resume' ? target?.sourceKey ?? '' : '');
     setSelectedResumeTarget(tab === 'Resume' ? { sourceKey: target?.sourceKey ?? '' } : null);
     setSelectedStoryDraftId(tab === 'Story' ? target?.draftId ?? '' : '');
@@ -311,6 +313,7 @@ export default function App() {
                   config={boss.config}
                   jobs={boss.jobs}
                   pipeline={boss.pipeline}
+                  evidenceOverview={boss.evidenceOverview}
                   setActiveTab={navigateToTab}
                   onOpenTask={openDashboardTask}
                   recentLogs={boss.recentLogs}
@@ -393,6 +396,7 @@ export default function App() {
                     setActiveTabStable('Resume');
                   }}
                   targetSourceKey={selectedPipelineKey}
+                  targetRequirementId={selectedEvidenceRequirementId}
                   targetRequestId={dashboardTargetRequestId}
                 />
               )}

@@ -131,6 +131,7 @@ export function Pipeline({
   onDeleteItem,
   onOpenResumeMaterials,
   targetSourceKey,
+  targetRequirementId,
   targetRequestId,
 }: {
   pipeline: PipelineResponse | null;
@@ -168,6 +169,7 @@ export function Pipeline({
   onDeleteItem: (sourceKey: string) => Promise<boolean>;
   onOpenResumeMaterials: (target: ResumeNavigationTarget) => void;
   targetSourceKey?: string;
+  targetRequirementId?: string;
   targetRequestId?: number;
 }) {
   const { t } = useAppTranslation();
@@ -471,6 +473,8 @@ export function Pipeline({
             onConfirmEvidenceItem={onConfirmEvidenceItem}
             onCreateEvidenceTask={onCreateEvidenceTask}
             onOpenPersonalResume={onOpenPersonalResume}
+            targetRequirementId={targetRequirementId}
+            targetRequestId={targetRequestId}
             job={selectedJob}
             detailLoading={detailLoading}
             statusOptions={STATUS_OPTIONS}

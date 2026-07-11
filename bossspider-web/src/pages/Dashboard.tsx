@@ -18,6 +18,7 @@ import { bossApi } from '../api';
 import type {
   ConfigPayload,
   CvStatusResponse,
+  EvidenceOverviewResponse,
   InterviewStoryDraft,
   InterviewStoryDraftsResponse,
   Job,
@@ -33,6 +34,7 @@ export type DashboardTaskTarget = {
   jobId?: number;
   sourceKey?: string;
   draftId?: string;
+  requirementId?: string;
 };
 
 type DashboardTask = {
@@ -116,6 +118,7 @@ function TaskRow({
   const tone = toneClasses[task.tone];
   return (
     <button
+      data-task-id={task.id}
       onClick={() => onOpen(task)}
       className={`group flex w-full items-start gap-3 rounded border p-3 text-left transition-colors hover:border-zinc-600 hover:bg-zinc-900/80 ${tone.border}`}
     >
@@ -168,6 +171,7 @@ export function Dashboard({
   config,
   jobs,
   pipeline,
+  evidenceOverview,
   setActiveTab,
   onOpenTask,
   recentLogs,
@@ -176,6 +180,7 @@ export function Dashboard({
   config: ConfigPayload;
   jobs: Job[];
   pipeline: PipelineResponse | null;
+  evidenceOverview: EvidenceOverviewResponse | null;
   setActiveTab: (tab: Tab) => void;
   onOpenTask: (tab: Tab, target?: DashboardTaskTarget) => void;
   recentLogs: ParsedLog[];
@@ -190,6 +195,77 @@ export function Dashboard({
   const [cvStatus, setCvStatus] = useState<CvStatusResponse | null>(null);
   const [cvLoading, setCvLoading] = useState(false);
   const [cvError, setCvError] = useState('');
+
+  const evidenceTasks = useMemo(() => {
+    const activeTasks = (evidenceOverview?.tasks || []).filter(
+      (task) => task.status === 'pending' || task.status === 'in_progress',
+    );
+    if (!activeTasks.length) return [];
+
+    const requirements = (evidenceOverview?.requirements || []).filter((requirement) => requirement.active !== false);
+    const requirementsById = new Map(requirements.map((requirement) => [requirement.requirementId, requirement]));
+    const pendingSourceKeys = new Set(pending.map((item) => item.sourceKey));
+    const groups = new Map<string, typeof activeTasks>();
+    for (const task of activeTasks) {
+      const requirement = requirementsById.get(task.requirementId);
+      if (!requirement) continue;
+      const groupKey = requirement.canonicalGroupId || requirement.canonicalKey || requirement.requirementId;
+      groups.set(groupKey, [...(groups.get(groupKey) || []), task]);
+    }
+
+    const priorityRank = { high: 0, medium: 1, low: 2 } as const;
+    return Array.from(groups.entries()).map(([groupKey, groupedTasks]) => {
+      const groupedRequirementIds = new Set(groupedTasks.map((task) => task.requirementId));
+      const representativeTask = [...groupedTasks].sort(
+        (a, b) => priorityRank[a.priorityBand] - priorityRank[b.priorityBand],
+      )[0];
+      const representativeRequirement = requirementsById.get(representativeTask.requirementId);
+      const relatedRequirements = requirements.filter(
+        (requirement) => (requirement.canonicalGroupId || requirement.canonicalKey || requirement.requirementId) === groupKey,
+      );
+      const affectedSourceKeys = Array.from(new Set([
+        ...relatedRequirements.map((requirement) => requirement.sourceKey),
+        ...groupedTasks.flatMap((task) => task.affectedSourceKeys || []),
+      ])).filter((sourceKey) => pendingSourceKeys.has(sourceKey));
+      const targetRequirement = representativeRequirement && pendingSourceKeys.has(representativeRequirement.sourceKey)
+        ? representativeRequirement
+        : relatedRequirements.find(
+            (requirement) => requirement.sourceKey === affectedSourceKeys[0] && groupedRequirementIds.has(requirement.requirementId),
+          ) || relatedRequirements.find((requirement) => requirement.sourceKey === affectedSourceKeys[0]);
+      const requiredCount = relatedRequirements.filter(
+        (requirement) => affectedSourceKeys.includes(requirement.sourceKey) && requirement.importance === 'required',
+      ).length;
+      const jobCount = affectedSourceKeys.length;
+      const priority = requiredCount >= 2 || jobCount >= 3 || groupedTasks.some((task) => task.priorityBand === 'high')
+        ? 'high'
+        : requiredCount >= 1 || jobCount >= 2 || groupedTasks.some((task) => task.priorityBand === 'medium')
+          ? 'medium'
+          : 'low';
+      return {
+        id: `evidence:${groupKey}`,
+        title: representativeRequirement?.label || t('dashboardTasks.evidenceUntitled'),
+        detail: representativeTask.recommendedAction || t('dashboardTasks.evidenceDefaultAction'),
+        meta: t('dashboardTasks.evidenceTaskMeta', {
+          priority: t(`dashboardTasks.priority.${priority}`),
+          jobs: jobCount,
+          required: requiredCount,
+        }),
+        tone: (priority === 'high' ? 'amber' : priority === 'medium' ? 'indigo' : 'zinc') as TaskTone,
+        tab: 'Pipeline' as Tab,
+        action: t('dashboardTasks.handleEvidence'),
+        target: targetRequirement?.sourceKey
+          ? { sourceKey: targetRequirement.sourceKey, requirementId: targetRequirement.requirementId }
+          : undefined,
+        priority,
+        jobCount,
+        requiredCount,
+      };
+    }).filter((task) => task.target).sort((a, b) => (
+      priorityRank[a.priority] - priorityRank[b.priority]
+      || b.jobCount - a.jobCount
+      || b.requiredCount - a.requiredCount
+    )).slice(0, 6);
+  }, [evidenceOverview, pending, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -353,6 +429,7 @@ export function Dashboard({
   const waitingCount = waitingItems.length;
   const materialCount = materialTasks.length;
   const storyGapCount = storyGapTasks.length;
+  const evidenceTaskCount = evidenceTasks.length;
   const todayCount = todayJobs.length;
   const jobsToShow = todayJobs.length ? todayJobs : recentJobs;
   const jobSectionTitle = todayJobs.length ? t('dashboardTasks.todayJobs') : t('dashboardTasks.recentJobs');
@@ -381,7 +458,7 @@ export function Dashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
           <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">{t('dashboardTasks.todayNew')}</div>
           <div className="mt-2 text-2xl font-semibold text-zinc-100">{todayCount}</div>
@@ -402,10 +479,24 @@ export function Dashboard({
           <div className="text-[11px] font-medium uppercase tracking-wider text-cyan-500">{t('dashboardTasks.storyGapCount')}</div>
           <div className="mt-2 text-2xl font-semibold text-cyan-200">{storyDraftsLoading ? '...' : storyGapCount}</div>
         </div>
+        <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-amber-500">{t('dashboardTasks.evidenceTaskCount')}</div>
+          <div className="mt-2 text-2xl font-semibold text-amber-200">{evidenceTaskCount}</div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
+          <TaskSection
+            title={t('dashboardTasks.evidenceTasks')}
+            subtitle={t('dashboardTasks.evidenceTasksSubtitle')}
+            empty={t('dashboardTasks.noEvidenceTasks')}
+          >
+            {evidenceTasks.length ? evidenceTasks.map((task) => (
+              <TaskRow key={task.id} task={task} icon={<ListChecks size={15} />} onOpen={(item) => onOpenTask(item.tab, item.target)} />
+            )) : null}
+          </TaskSection>
+
           <TaskSection
             title={jobSectionTitle}
             subtitle={jobSectionSubtitle}

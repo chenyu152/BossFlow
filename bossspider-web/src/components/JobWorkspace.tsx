@@ -64,6 +64,8 @@ type JobWorkspaceProps = {
   onConfirmEvidenceItem: (evidenceId: string) => Promise<EvidenceMutationResponse | null>;
   onCreateEvidenceTask: (task: EvidenceTaskInput) => Promise<EvidenceMutationResponse | null>;
   onOpenPersonalResume: () => void;
+  targetRequirementId?: string;
+  targetRequestId?: number;
   job: Job | null;
   detailLoading: boolean;
   statusOptions: StatusOption[];
@@ -235,6 +237,8 @@ export function JobWorkspace({
   onConfirmEvidenceItem,
   onCreateEvidenceTask,
   onOpenPersonalResume,
+  targetRequirementId,
+  targetRequestId,
   job,
   detailLoading,
   statusOptions,
@@ -328,6 +332,28 @@ export function JobWorkspace({
     setDecisionError('');
     setWorkspaceEvidenceError('');
   }, [item.sourceKey]);
+
+  useEffect(() => {
+    if (!targetRequirementId) return;
+    const targetRequirement = evidenceOverview?.requirements.find(
+      (requirement) => requirement.requirementId === targetRequirementId,
+    );
+    if (!targetRequirement || targetRequirement.sourceKey !== item.sourceKey) return;
+    setActiveTab('evaluation');
+    let scrollFrame = 0;
+    const frame = window.requestAnimationFrame(() => {
+      scrollFrame = window.requestAnimationFrame(() => {
+        document.querySelector(`[data-requirement-id="${targetRequirementId}"]`)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(scrollFrame);
+    };
+  }, [evidenceOverview?.requirements, item.sourceKey, targetRequestId, targetRequirementId]);
 
   const nextAction = useMemo<NextAction>(() => {
     if (!item.reportPath) return 'llm';
