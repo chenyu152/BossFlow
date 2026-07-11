@@ -367,6 +367,7 @@ export default function App() {
                   onUpdateEvidenceItem={boss.updateEvidenceItem}
                   onConfirmEvidenceItem={boss.confirmEvidenceItem}
                   onCreateEvidenceTask={boss.createEvidenceTask}
+                  onOpenPersonalResume={() => navigateToTab('PersonalResume')}
                   onRefresh={() => { void boss.refreshPipeline(); }}
                   onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
                   llmEvaluatingKeys={boss.llmEvaluatingKeys}

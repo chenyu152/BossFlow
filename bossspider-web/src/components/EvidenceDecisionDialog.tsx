@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
 import type {
   EvidenceClassification,
+  EvidenceCoverage,
   EvidenceItem,
   EvidenceRequirement,
   EvidenceTaskType,
@@ -90,6 +91,8 @@ export function EvidenceDecisionDialog({
   requirement,
   classification,
   existingEvidence,
+  candidateEvidenceRefs = [],
+  compactCandidateReview = false,
   saving,
   error,
   onCancel,
@@ -98,6 +101,8 @@ export function EvidenceDecisionDialog({
   requirement: EvidenceRequirement;
   classification: EvidenceClassification;
   existingEvidence?: EvidenceItem | null;
+  candidateEvidenceRefs?: EvidenceCoverage['candidateEvidenceRefs'];
+  compactCandidateReview?: boolean;
   saving: boolean;
   error: string;
   onCancel: () => void;
@@ -116,27 +121,30 @@ export function EvidenceDecisionDialog({
   const [taskType, setTaskType] = useState<EvidenceTaskType | ''>('');
 
   useEffect(() => {
-    setExperience(existingEvidence?.summary || '');
+    const candidateSummary = candidateEvidenceRefs.map((source) => source.quote).filter(Boolean).join('\n');
+    const candidateSource = candidateEvidenceRefs.map((source) => source.locator || source.sourceType).filter(Boolean).join('；');
+    setExperience(existingEvidence?.summary || candidateSummary);
     setRole(existingEvidence?.userRole || '');
     setActions((existingEvidence?.actions || []).join('\n'));
     setResults((existingEvidence?.results || []).join('\n'));
-    setSource(existingEvidence?.sourceRefs?.[0]?.ref || '');
+    setSource(existingEvidence?.sourceRefs?.[0]?.ref || candidateSource);
     setTransferable(classification === 'adjacent' ? (existingEvidence?.actions || []).join('\n') : '');
     setBoundaries(classification === 'adjacent' ? (existingEvidence?.results || []).join('\n') : '');
     setTimeBudget('');
     setUserWillingness('');
     setTaskType('');
-  }, [classification, existingEvidence?.evidenceId, requirement.requirementId]);
+  }, [candidateEvidenceRefs, classification, existingEvidence?.evidenceId, requirement.requirementId]);
 
   const valid = useMemo(() => {
     if (classification === 'done') {
+      if (compactCandidateReview) return Boolean(experience.trim() && source.trim());
       return Boolean(experience.trim() && role.trim() && actions.trim() && results.trim() && source.trim());
     }
     if (classification === 'adjacent') {
       return Boolean(experience.trim() && transferable.trim() && boundaries.trim());
     }
     return Boolean(timeBudget && userWillingness && taskType);
-  }, [actions, boundaries, classification, experience, results, role, source, taskType, timeBudget, transferable, userWillingness]);
+  }, [actions, boundaries, classification, compactCandidateReview, experience, results, role, source, taskType, timeBudget, transferable, userWillingness]);
 
   const timeChoices: Choice[] = [
     { value: 'none', label: t('jobWorkspace.evidence.dialog.time.none') },
@@ -209,7 +217,17 @@ export function EvidenceDecisionDialog({
             {t('jobWorkspace.evidence.dialog.factGuardrail')}
           </div>
 
-          {classification === 'done' && (
+          {classification === 'done' && compactCandidateReview && (
+            <>
+              <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3 text-xs leading-relaxed text-indigo-200">
+                {t('jobWorkspace.evidence.dialog.candidateReviewHint')}
+              </div>
+              <TextField label={t('jobWorkspace.evidence.dialog.candidateEvidence')} value={experience} onChange={setExperience} placeholder={t('jobWorkspace.evidence.dialog.candidateEvidencePlaceholder')} />
+              <TextField label={t('jobWorkspace.evidence.dialog.source')} value={source} onChange={setSource} placeholder={t('jobWorkspace.evidence.dialog.sourcePlaceholder')} rows={2} />
+            </>
+          )}
+
+          {classification === 'done' && !compactCandidateReview && (
             <>
               <TextField label={t('jobWorkspace.evidence.dialog.experience')} value={experience} onChange={setExperience} placeholder={t('jobWorkspace.evidence.dialog.experiencePlaceholder')} />
               <TextField label={t('jobWorkspace.evidence.dialog.role')} value={role} onChange={setRole} placeholder={t('jobWorkspace.evidence.dialog.rolePlaceholder')} rows={2} />
@@ -240,7 +258,9 @@ export function EvidenceDecisionDialog({
 
         <div className="flex items-center justify-between gap-3 border-t border-zinc-800 px-5 py-4">
           <div className="text-[10px] leading-relaxed text-zinc-500">
-            {classification === 'done' || classification === 'adjacent'
+            {compactCandidateReview
+              ? t('jobWorkspace.evidence.dialog.candidateConfirmHint')
+              : classification === 'done' || classification === 'adjacent'
               ? t('jobWorkspace.evidence.dialog.draftHint')
               : t('jobWorkspace.evidence.dialog.decisionHint')}
           </div>
@@ -255,7 +275,11 @@ export function EvidenceDecisionDialog({
               className="inline-flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-              {saving ? t('jobWorkspace.evidence.dialog.saving') : t('jobWorkspace.evidence.dialog.save')}
+              {saving
+                ? t('jobWorkspace.evidence.dialog.saving')
+                : compactCandidateReview
+                  ? t('jobWorkspace.evidence.dialog.confirmAndUse')
+                  : t('jobWorkspace.evidence.dialog.save')}
             </button>
           </div>
         </div>

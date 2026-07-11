@@ -272,6 +272,7 @@ export type LlmEvaluatePipelineResponse = {
     canonicalKey: string;
     label: string;
     category: EvidenceRequirementCategory;
+    verificationMode?: EvidenceVerificationMode;
     importance: EvidenceRequirementImportance;
     jdQuote: string;
     candidateEvidenceRefs: Array<{ sourceType: string; quote: string; locator: string }>;
@@ -442,6 +443,7 @@ export type InterviewPrepResponse = {
 
 export type EvidenceRequirementCategory = 'skill' | 'experience' | 'behavior' | 'education' | 'location' | 'preference' | 'other';
 export type EvidenceRequirementImportance = 'required' | 'preferred' | 'context';
+export type EvidenceVerificationMode = 'document_fact' | 'experience_fact' | 'preference' | 'behavior_example' | 'manual_review';
 export type EvidenceCoverageStatus = 'supported' | 'partial' | 'not_found' | 'user_confirmed_absent' | 'unknown';
 export type EvidenceClassification = 'done' | 'adjacent' | 'not_done' | 'unsure';
 export type EvidenceItemStatus = 'draft' | 'confirmed' | 'rejected' | 'archived';
@@ -451,8 +453,10 @@ export type EvidenceTaskStatus = 'pending' | 'in_progress' | 'completed' | 'dism
 export type EvidenceRequirement = {
   requirementId: string;
   canonicalKey: string;
+  canonicalGroupId?: string;
   label: string;
   category: EvidenceRequirementCategory;
+  verificationMode?: EvidenceVerificationMode;
   importance: EvidenceRequirementImportance;
   sourceKey: string;
   jdQuote: string;
@@ -477,6 +481,7 @@ export type EvidenceItem = {
   results: string[];
   sourceRefs: EvidenceSourceRef[];
   tags: string[];
+  requirementIds?: string[];
   status: EvidenceItemStatus;
   createdAt: string;
   updatedAt: string;
@@ -492,6 +497,11 @@ export type EvidenceCoverage = {
   confidence: number;
   userClassification: EvidenceClassification;
   userDecisionAt: string;
+  decisionSource?: 'assessment' | 'direct' | 'canonical_reuse' | 'source_document';
+  verificationStatus?: 'source_verified' | 'candidate' | 'needs_input' | 'user_confirmed';
+  sourceVerifiedAt?: string;
+  reusedFromRequirementId?: string;
+  reusedAt?: string;
   assessmentStatus?: 'supported' | 'partial' | 'not_found' | 'unknown';
   assessmentRationale?: string;
   assessmentConfidence?: number;
@@ -557,6 +567,7 @@ export type EvidenceMutationResponse = {
   ok: boolean;
   overview: EvidenceOverviewResponse;
   affectedSourceKeys: string[];
+  affectedRequirementIds?: string[];
   item?: EvidenceItem;
   coverage?: EvidenceCoverage;
   task?: EvidenceTask;

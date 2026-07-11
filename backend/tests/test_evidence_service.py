@@ -28,7 +28,7 @@ class EvidenceServiceTest(unittest.TestCase):
     def test_creates_versioned_empty_store(self):
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 1)
+        self.assertEqual(overview["schemaVersion"], 3)
         self.assertEqual(overview["counts"]["requirements"], 0)
         self.assertTrue(Path(overview["path"]).exists())
 
@@ -267,6 +267,198 @@ class EvidenceServiceTest(unittest.TestCase):
         self.assertEqual(second["summary"]["potentialEvidenceRequirementCount"], 0)
         self.assertEqual(second["overview"]["counts"]["unresolvedCoverages"], 0)
 
+    def test_normalizes_canonical_keys_and_reuses_evidence_across_jobs(self):
+        overview = evidence_service.upsert_requirements([
+            {
+                "requirementId": "req-python-a",
+                "canonicalKey": " Python_FastAPI ",
+                "label": "Python 与 FastAPI",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:11",
+            },
+            {
+                "requirementId": "req-python-b",
+                "canonicalKey": "python fastapi",
+                "label": "熟悉 Python/FastAPI",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:12",
+            },
+        ])
+        requirements = {item["requirementId"]: item for item in overview["requirements"]}
+        self.assertEqual(requirements["req-python-a"]["canonicalKey"], "python-fastapi")
+        self.assertEqual(
+            requirements["req-python-a"]["canonicalGroupId"],
+            requirements["req-python-b"]["canonicalGroupId"],
+        )
+
+        created = evidence_service.create_evidence_item({
+            "title": "FastAPI 服务项目",
+            "evidenceType": "project",
+            "summary": "使用 FastAPI 开发服务。",
+            "userRole": "核心开发",
+            "actions": ["设计 API"],
+            "results": ["服务上线"],
+            "sourceRefs": [{"type": "project", "ref": "api", "quote": ""}],
+            "tags": ["python", "fastapi"],
+        })
+        evidence_id = created["item"]["evidenceId"]
+        classified = evidence_service.classify_coverage({
+            "requirementId": "req-python-a",
+            "userClassification": "done",
+            "evidenceIds": [evidence_id],
+            "rationale": "用户确认做过 FastAPI 项目。",
+            "confidence": 1,
+        })
+
+        self.assertEqual(classified["affectedSourceKeys"], ["agent:11", "agent:12"])
+        self.assertEqual(classified["affectedRequirementIds"], ["req-python-a", "req-python-b"])
+        coverages = {item["requirementId"]: item for item in classified["overview"]["coverages"]}
+        self.assertEqual(coverages["req-python-a"]["decisionSource"], "direct")
+        self.assertEqual(coverages["req-python-b"]["decisionSource"], "canonical_reuse")
+        self.assertEqual(coverages["req-python-b"]["reusedFromRequirementId"], "req-python-a")
+        self.assertEqual(coverages["req-python-b"]["evidenceIds"], [evidence_id])
+        linked_item = classified["overview"]["evidenceItems"][0]
+        self.assertEqual(linked_item["requirementIds"], ["req-python-a", "req-python-b"])
+
+        confirmed = evidence_service.confirm_evidence_item(evidence_id)
+        confirmed_coverages = {item["requirementId"]: item for item in confirmed["overview"]["coverages"]}
+        self.assertEqual(confirmed_coverages["req-python-a"]["coverageStatus"], "supported")
+        self.assertEqual(confirmed_coverages["req-python-b"]["coverageStatus"], "supported")
+        self.assertEqual(confirmed["affectedSourceKeys"], ["agent:11", "agent:12"])
+
+    def test_new_assessment_inherits_existing_canonical_evidence(self):
+        assessment = [{
+            "canonicalKey": "Python FastAPI",
+            "label": "Python 与 FastAPI",
+            "category": "skill",
+            "importance": "required",
+            "jdQuote": "熟悉 Python 和 FastAPI",
+            "coverageStatus": "not_found",
+            "rationale": "当前材料未找到。",
+            "confidence": 0.9,
+        }]
+        first = evidence_service.sync_requirement_assessment("agent:21", assessment)
+        first_requirement_id = first["requirements"][0]["requirementId"]
+        created = evidence_service.create_evidence_item({
+            "title": "FastAPI 服务",
+            "evidenceType": "project",
+            "summary": "开发过 FastAPI 服务。",
+            "userRole": "开发者",
+            "actions": ["实现接口"],
+            "results": ["交付服务"],
+            "sourceRefs": [{"type": "user_statement", "ref": "用户陈述", "quote": "开发过 FastAPI 服务"}],
+            "tags": [],
+        })
+        evidence_id = created["item"]["evidenceId"]
+        evidence_service.classify_coverage({
+            "requirementId": first_requirement_id,
+            "userClassification": "done",
+            "evidenceIds": [evidence_id],
+            "rationale": "用户确认做过。",
+            "confidence": 1,
+        })
+        evidence_service.confirm_evidence_item(evidence_id)
+
+        second = evidence_service.sync_requirement_assessment("agent:22", [{**assessment[0], "canonicalKey": "python_fastapi"}])
+        second_coverage = second["coverages"][0]
+        self.assertEqual(second["requirements"][0]["canonicalKey"], "python-fastapi")
+        self.assertEqual(second_coverage["coverageStatus"], "supported")
+        self.assertEqual(second_coverage["decisionSource"], "canonical_reuse")
+        self.assertEqual(second_coverage["reusedFromRequirementId"], first_requirement_id)
+        self.assertEqual(second_coverage["evidenceIds"], [evidence_id])
+        self.assertEqual(second["overview"]["evidenceItems"][0]["requirementIds"], sorted([
+            first_requirement_id,
+            second["requirements"][0]["requirementId"],
+        ]))
+
+    def test_direct_user_decision_is_not_overwritten_by_canonical_reuse(self):
+        evidence_service.upsert_requirements([
+            {"requirementId": "req-direct-a", "canonicalKey": "sql", "label": "SQL", "sourceKey": "agent:31"},
+            {"requirementId": "req-direct-b", "canonicalKey": "SQL", "label": "SQL", "sourceKey": "agent:32"},
+        ])
+        evidence_service.classify_coverage({
+            "requirementId": "req-direct-b",
+            "userClassification": "not_done",
+            "evidenceIds": [],
+            "rationale": "用户明确没有该经历。",
+            "confidence": 1,
+        })
+        created = evidence_service.create_evidence_item({
+            "title": "SQL 项目",
+            "evidenceType": "project",
+            "summary": "另一个岗位确认的 SQL 经历。",
+            "userRole": "开发",
+            "actions": ["编写查询"],
+            "results": [],
+            "sourceRefs": [],
+            "tags": [],
+        })
+        evidence_id = created["item"]["evidenceId"]
+        result = evidence_service.classify_coverage({
+            "requirementId": "req-direct-a",
+            "userClassification": "done",
+            "evidenceIds": [evidence_id],
+            "rationale": "用户确认做过。",
+            "confidence": 1,
+        })
+        coverage = next(item for item in result["overview"]["coverages"] if item["requirementId"] == "req-direct-b")
+        self.assertEqual(coverage["userClassification"], "not_done")
+        self.assertEqual(coverage["coverageStatus"], "user_confirmed_absent")
+        self.assertEqual(coverage["decisionSource"], "direct")
+        self.assertEqual(coverage["evidenceIds"], [])
+
+    def test_document_fact_from_resume_is_source_verified_without_user_confirmation(self):
+        result = evidence_service.sync_requirement_assessment("agent:51", [{
+            "canonicalKey": "bachelor-computer-science",
+            "label": "本科及以上学历，计算机相关专业",
+            "category": "education",
+            "verificationMode": "document_fact",
+            "importance": "required",
+            "jdQuote": "本科及以上学历，计算机相关专业",
+            "candidateEvidenceRefs": [{
+                "sourceType": "cv",
+                "quote": "电子科技大学中山学院｜本科｜计算机科学与技术",
+                "locator": "教育背景",
+            }],
+            "coverageStatus": "supported",
+            "rationale": "简历教育背景直接满足要求。",
+            "confidence": 1,
+        }])
+
+        requirement = result["requirements"][0]
+        coverage = result["coverages"][0]
+        self.assertEqual(requirement["verificationMode"], "document_fact")
+        self.assertEqual(coverage["coverageStatus"], "supported")
+        self.assertEqual(coverage["verificationStatus"], "source_verified")
+        self.assertEqual(coverage["decisionSource"], "source_document")
+        self.assertEqual(coverage["userDecisionAt"], "")
+        self.assertEqual(result["summary"]["supportedRequirementCount"], 1)
+
+    def test_preference_can_be_confirmed_without_creating_evidence(self):
+        overview = evidence_service.upsert_requirements([{
+            "requirementId": "req-location",
+            "canonicalKey": "work-location-shanghai",
+            "label": "工作地点上海",
+            "category": "location",
+            "verificationMode": "preference",
+            "sourceKey": "agent:52",
+        }])
+        self.assertEqual(overview["requirements"][0]["verificationMode"], "preference")
+
+        classified = evidence_service.classify_coverage({
+            "requirementId": "req-location",
+            "userClassification": "done",
+            "evidenceIds": [],
+            "rationale": "用户确认地点符合。",
+            "confidence": 1,
+        })
+
+        self.assertEqual(classified["coverage"]["coverageStatus"], "supported")
+        self.assertEqual(classified["coverage"]["verificationStatus"], "user_confirmed")
+        self.assertEqual(classified["overview"]["evidenceItems"], [])
+
     def test_migrates_missing_collections_without_losing_requirements(self):
         evidence_service.EVIDENCE_STORE_PATH.write_text(
             json.dumps({
@@ -278,11 +470,40 @@ class EvidenceServiceTest(unittest.TestCase):
 
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 1)
+        self.assertEqual(overview["schemaVersion"], 3)
         self.assertEqual(overview["requirements"][0]["requirementId"], "req-existing")
         self.assertEqual(overview["evidenceItems"], [])
         self.assertEqual(overview["coverages"], [])
         self.assertEqual(overview["tasks"], [])
+
+    def test_migrates_v1_canonical_groups_and_evidence_links(self):
+        evidence_service.EVIDENCE_STORE_PATH.write_text(
+            json.dumps({
+                "schemaVersion": 1,
+                "requirements": [{
+                    "requirementId": "req-existing",
+                    "canonicalKey": " Python_FastAPI ",
+                    "sourceKey": "agent:41",
+                }],
+                "evidenceItems": [{"evidenceId": "ev-existing", "status": "confirmed"}],
+                "coverages": [{
+                    "requirementId": "req-existing",
+                    "evidenceIds": ["ev-existing"],
+                    "userClassification": "done",
+                    "userDecisionAt": "2026-07-01T00:00:00+08:00",
+                }],
+                "tasks": [],
+            }),
+            encoding="utf-8",
+        )
+
+        overview = evidence_service.read_evidence_overview()
+
+        self.assertEqual(overview["schemaVersion"], 3)
+        self.assertEqual(overview["requirements"][0]["canonicalKey"], "python-fastapi")
+        self.assertTrue(overview["requirements"][0]["canonicalGroupId"].startswith("cgrp-"))
+        self.assertEqual(overview["coverages"][0]["decisionSource"], "direct")
+        self.assertEqual(overview["evidenceItems"][0]["requirementIds"], ["req-existing"])
 
     def test_rejects_newer_store_version(self):
         evidence_service.EVIDENCE_STORE_PATH.write_text(

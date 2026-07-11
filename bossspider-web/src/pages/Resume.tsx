@@ -11,6 +11,8 @@ type ParsedSuggestion = {
   risk: string;
 };
 
+type SuggestionRisk = 'safe' | 'needs_confirmation' | 'avoid_fabrication' | 'unknown';
+
 function parseSuggestionItems(content: string): ParsedSuggestion[] {
   const items: ParsedSuggestion[] = [];
   let current: ParsedSuggestion | null = null;
@@ -18,8 +20,8 @@ function parseSuggestionItems(content: string): ParsedSuggestion[] {
     const line = raw.trim();
     const match = line.match(/^[-*]\s+\[[ xX]\]\s*(?:\*\*)?([SC]\d[\w-]*)(?:\*\*)?\s*[:：｜|]\s*(.+)$/i);
     if (!match) {
-      if (current && /风险级别/.test(line)) {
-        const riskMatch = line.replace(/\*\*/g, '').match(/风险级别\s*[:：]\s*([^（(]+)/);
+      if (current && /(?:风险级别|risk level)/i.test(line)) {
+        const riskMatch = line.replace(/\*\*/g, '').match(/(?:风险级别|risk level)\s*[:：]\s*([^（(]+)/i);
         if (riskMatch) current.risk = riskMatch[1].trim();
       }
       continue;
@@ -29,12 +31,39 @@ function parseSuggestionItems(content: string): ParsedSuggestion[] {
       .replace(/\*\*/g, '')
       .replace(/[｜|]/g, ' · ')
       .trim();
-    const riskMatch = text.match(/风险级别\s*[:：]\s*([^（(]+)/);
+    const riskMatch = text.match(/(?:风险级别|risk level)\s*[:：]\s*([^（(]+)/i);
     const risk = riskMatch ? riskMatch[1].trim() : '';
     current = { id: id.toUpperCase(), text, risk };
     items.push(current);
   }
   return items;
+}
+
+function normalizeSuggestionRisk(value: string): SuggestionRisk {
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'safe' || normalized === '安全') return 'safe';
+  if (
+    normalized === 'needs_confirmation'
+    || normalized === 'needs_confirm'
+    || normalized === '需确认'
+    || normalized === '需要确认'
+  ) return 'needs_confirmation';
+  if (
+    normalized === 'avoid_fabrication'
+    || normalized === 'avoid'
+    || normalized === '避免编造'
+  ) return 'avoid_fabrication';
+  return 'unknown';
+}
+
+function defaultSelectedSuggestionIds(suggestion: ResumeSuggestionResponse | null) {
+  const items = parseSuggestionItems(suggestion?.content || '');
+  const evidenceById = new Map((suggestion?.evidenceMap || []).map((claim) => [claim.claimId, claim]));
+  return new Set(
+    items
+      .filter((item) => normalizeSuggestionRisk(evidenceById.get(item.id)?.risk || item.risk) === 'safe')
+      .map((item) => item.id),
+  );
 }
 
 function markdownArticleClass(accent: 'indigo' | 'emerald' = 'indigo') {
@@ -156,8 +185,7 @@ export function Resume({
           : null;
         if (cancelled) return;
         setSuggestion(suggestionData);
-        const parsed = parseSuggestionItems(suggestionData?.content || '');
-        setSelectedSuggestionIds(new Set(parsed.map((item) => item.id)));
+        setSelectedSuggestionIds(defaultSelectedSuggestionIds(suggestionData));
         if (selectedItem.resumeDraftPath) {
           const draftData = await onLoadDraft(selectedItem.sourceKey);
           if (!cancelled) setDraft(draftData);
@@ -259,6 +287,11 @@ export function Resume({
                       </button>
                     )}
                   </div>
+                  {parsedSuggestions.length > 0 && (
+                    <div className="border-b border-zinc-800/80 bg-zinc-950/40 px-4 py-2 text-[11px] leading-relaxed text-zinc-500">
+                      {t('resume.selectionPolicy')}
+                    </div>
+                  )}
                   <div className="p-4">
                     {loading ? (
                       <div className="flex items-center gap-2 text-sm text-zinc-500">

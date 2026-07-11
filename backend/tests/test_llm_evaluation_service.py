@@ -58,10 +58,34 @@ class RequirementAssessmentParserTest(unittest.TestCase):
 
         self.assertEqual(len(requirements), 3)
         self.assertEqual(requirements[0]["canonicalKey"], "go-concurrency")
+        self.assertEqual(requirements[0]["verificationMode"], "experience_fact")
         self.assertEqual(requirements[0]["confidence"], 1.0)
         self.assertEqual(requirements[1]["category"], "other")
         self.assertEqual(requirements[1]["candidateEvidenceRefs"], [])
         self.assertEqual(requirements[2]["coverageStatus"], "unknown")
+
+    def test_infers_document_fact_verification_for_education(self):
+        payload = [{
+            "canonicalKey": "bachelor-computer-science",
+            "label": "本科及以上学历，计算机相关专业",
+            "category": "education",
+            "candidateEvidenceRefs": [{
+                "sourceType": "cv",
+                "quote": "本科｜计算机科学与技术",
+                "locator": "教育背景",
+            }],
+            "coverageStatus": "supported",
+            "confidence": 1,
+        }]
+        text = (
+            "---BOSSFLOW_REQUIREMENT_ASSESSMENT---\n"
+            f"{json.dumps(payload, ensure_ascii=False)}\n"
+            "---END_REQUIREMENT_ASSESSMENT---"
+        )
+
+        requirement = _parse_requirement_assessment(text)[0]
+
+        self.assertEqual(requirement["verificationMode"], "document_fact")
 
     def test_supported_without_a_source_is_downgraded_to_not_found(self):
         payload = [{

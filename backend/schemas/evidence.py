@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 RequirementCategory = Literal["skill", "experience", "behavior", "education", "location", "preference", "other"]
 RequirementImportance = Literal["required", "preferred", "context"]
+RequirementVerificationMode = Literal["document_fact", "experience_fact", "preference", "behavior_example", "manual_review"]
 EvidenceType = Literal["fact", "project", "metric", "artifact", "story"]
 EvidenceStatus = Literal["draft", "confirmed", "rejected", "archived"]
 EvidenceClassification = Literal["done", "adjacent", "not_done", "unsure"]
@@ -15,8 +16,10 @@ EvidenceTaskStatus = Literal["pending", "in_progress", "completed", "dismissed"]
 class RequirementPayload(BaseModel):
     requirementId: str = ""
     canonicalKey: str
+    canonicalGroupId: str = ""
     label: str
     category: RequirementCategory = "other"
+    verificationMode: RequirementVerificationMode = "manual_review"
     importance: RequirementImportance = "context"
     sourceKey: str
     jdQuote: str = ""
@@ -42,6 +45,7 @@ class EvidenceItemCreateRequest(BaseModel):
     results: list[str] = Field(default_factory=list)
     sourceRefs: list[EvidenceSourceRefPayload] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    requirementIds: list[str] = Field(default_factory=list)
     status: Literal["draft"] = "draft"
 
 

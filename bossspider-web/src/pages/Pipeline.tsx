@@ -111,6 +111,7 @@ export function Pipeline({
   onUpdateEvidenceItem,
   onConfirmEvidenceItem,
   onCreateEvidenceTask,
+  onOpenPersonalResume,
   onRefresh,
   onLlmEvaluate,
   llmEvaluatingKeys,
@@ -147,6 +148,7 @@ export function Pipeline({
   onUpdateEvidenceItem: (item: EvidenceItem) => Promise<EvidenceMutationResponse | null>;
   onConfirmEvidenceItem: (evidenceId: string) => Promise<EvidenceMutationResponse | null>;
   onCreateEvidenceTask: (task: EvidenceTaskInput) => Promise<EvidenceMutationResponse | null>;
+  onOpenPersonalResume: () => void;
   onRefresh: () => void;
   onLlmEvaluate: (sourceKey: string) => void;
   llmEvaluatingKeys: string[];
@@ -468,6 +470,7 @@ export function Pipeline({
             onUpdateEvidenceItem={onUpdateEvidenceItem}
             onConfirmEvidenceItem={onConfirmEvidenceItem}
             onCreateEvidenceTask={onCreateEvidenceTask}
+            onOpenPersonalResume={onOpenPersonalResume}
             job={selectedJob}
             detailLoading={detailLoading}
             statusOptions={STATUS_OPTIONS}

@@ -175,6 +175,7 @@ GREETING_READY: <yes|no>
     "canonicalKey": "规范、稳定、适合跨岗位聚合的键",
     "label": "要求名称",
     "category": "skill|experience|behavior|education|location|preference|other",
+    "verificationMode": "document_fact|experience_fact|preference|behavior_example|manual_review",
     "importance": "required|preferred|context",
     "jdQuote": "JD 中的对应短句",
     "candidateEvidenceRefs": [
@@ -190,6 +191,8 @@ GREETING_READY: <yes|no>
 Requirement assessment 规则：
 - 提取 5-12 条对岗位决策最重要的要求，合并语义重复项。
 - canonicalKey 应简短、稳定；相同能力在不同岗位中应尽量使用相同 key。
+- 学历、专业、证书等可由简历原文直接核验的结构化事实使用 document_fact。
+- 技能和项目经历使用 experience_fact，行为举例使用 behavior_example，地点和求职偏好使用 preference。
 - candidateEvidenceRefs 只能引用 cv.md 中真实存在的内容；没有证据时必须是空数组。
 - supported 表示当前材料中存在直接证据，partial 表示只有相近或不完整证据。
 - 当前材料中未找到证据时只能输出 not_found，绝不能输出 user_confirmed_absent。
@@ -290,6 +293,7 @@ def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
     allowed_categories = {"skill", "experience", "behavior", "education", "location", "preference", "other"}
     allowed_importance = {"required", "preferred", "context"}
     allowed_statuses = {"supported", "partial", "not_found", "unknown"}
+    allowed_verification_modes = {"document_fact", "experience_fact", "preference", "behavior_example", "manual_review"}
     requirements: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
 
@@ -309,6 +313,18 @@ def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
             importance = "context"
         if coverage_status not in allowed_statuses:
             coverage_status = "unknown"
+        verification_mode = str(raw_item.get("verificationMode") or "").strip().lower()
+        if verification_mode not in allowed_verification_modes:
+            if category == "education":
+                verification_mode = "document_fact"
+            elif category in {"location", "preference"}:
+                verification_mode = "preference"
+            elif category == "behavior":
+                verification_mode = "behavior_example"
+            elif category in {"skill", "experience"}:
+                verification_mode = "experience_fact"
+            else:
+                verification_mode = "manual_review"
         try:
             confidence = max(0.0, min(1.0, float(raw_item.get("confidence", 0))))
         except (TypeError, ValueError):
@@ -337,6 +353,7 @@ def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
                 "canonicalKey": canonical_key,
                 "label": label,
                 "category": category,
+                "verificationMode": verification_mode,
                 "importance": importance,
                 "jdQuote": str(raw_item.get("jdQuote") or "").strip(),
                 "candidateEvidenceRefs": refs,
