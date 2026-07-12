@@ -35,7 +35,6 @@ import type {
 
 type WorkspaceTab = 'overview' | 'evaluation' | 'materials' | 'interview';
 type NextAction = 'llm' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
-type MaterialStepKey = 'llm' | 'resumeSuggestion' | 'resumeDraft' | 'interviewPrep';
 type EvidenceDecisionTarget = {
   requirement: EvidenceRequirement;
   classification: EvidenceClassification;
@@ -366,20 +365,6 @@ export function JobWorkspace({
     return 'review';
   }, [item.decisionStatus, item.interviewPrepPath, item.reportPath, item.resumeDraftPath, item.resumeSuggestionPath]);
 
-  const materialSteps: Array<{
-    key: MaterialStepKey;
-    label: string;
-    ready: boolean;
-    tone: 'llm' | 'resume' | 'interview';
-    tab: WorkspaceTab;
-    current: boolean;
-  }> = [
-    { key: 'llm', label: t('pipeline.material.llm'), ready: Boolean(item.reportPath), tone: 'llm', tab: 'evaluation', current: nextAction === 'llm' },
-    { key: 'resumeSuggestion', label: t('pipeline.material.resumeSuggestion'), ready: Boolean(item.resumeSuggestionPath), tone: 'resume', tab: 'materials', current: nextAction === 'resume' },
-    { key: 'resumeDraft', label: t('pipeline.material.resumeDraft'), ready: Boolean(item.resumeDraftPath), tone: 'resume', tab: 'materials', current: nextAction === 'draft' },
-    { key: 'interviewPrep', label: t('pipeline.material.interviewPrep'), ready: Boolean(item.interviewPrepPath), tone: 'interview', tab: 'interview', current: nextAction === 'interview' },
-  ];
-
   const tabs: Array<{ value: WorkspaceTab; label: string }> = [
     { value: 'overview', label: t('jobWorkspace.tabs.overview') },
     { value: 'evaluation', label: t('jobWorkspace.tabs.evaluation') },
@@ -629,19 +614,6 @@ export function JobWorkspace({
               <X size={16} />
             </button>
           </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {materialSteps.map((step) => (
-            <MaterialPill
-              key={step.key}
-              label={step.label}
-              ready={step.ready}
-              tone={step.tone}
-              current={step.current}
-              onClick={() => setActiveTab(step.tab)}
-            />
-          ))}
         </div>
       </div>
 
