@@ -803,7 +803,17 @@
     "generatingKeywords": "生成中...",
     "keywordSuggestionMeta": "已参考 {{count}} 个岗位。",
     "appendSuggestions": "追加到现有词库",
-    "replaceWithSuggestions": "覆盖为建议词库"
+    "replaceWithSuggestions": "覆盖为建议词库",
+    "generateMatchingRules": "LLM 生成配置",
+    "generatingMatchingRules": "正在生成...",
+    "matchingSuggestionTitle": "查看 LLM 生成的入库规则草稿",
+    "matchingSuggestionHint": "草稿仅参考求职关键词和已有入库规则；不会参考简历或城市，也不会自动修改或保存当前项目配置。",
+    "matchingSuggestionBasedOn": "本次草稿仅参考：{{sources}}",
+    "matchingSuggestionReplaceCount": "分类：{{before}} → {{after}}",
+    "matchingSuggestionWarnings": "请确认这些假设",
+    "matchingSuggestionSaveReminder": "应用后只会写入当前编辑，仍需点击“保存配置”才会生效。",
+    "discardSuggestion": "放弃草稿",
+    "applySuggestion": "应用到当前编辑"
   },
   "logs": {
     "title": "运行日志",

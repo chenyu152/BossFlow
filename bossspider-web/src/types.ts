@@ -226,6 +226,17 @@ export type ScoringKeywordSuggestionResponse = {
   rationale: string;
 };
 
+export type MatchingRulesSuggestionResponse = {
+  ok: boolean;
+  project: string;
+  basedOn: string[];
+  categoryRules: Record<string, string[]>;
+  relevanceKeywords: string[];
+  blacklistKeywords: string[];
+  rationale: string;
+  warnings: string[];
+};
+
 export type ScoreJobsResponse = {
   ok: boolean;
   project: string;

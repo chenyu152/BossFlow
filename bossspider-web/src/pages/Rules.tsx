@@ -2,7 +2,7 @@ import { BrainCircuit, ChevronDown, Plus, Tags, Trash2, Wand2, X } from 'lucide-
 import { type ReactNode, useMemo, useState } from 'react';
 import { bossApi } from '../api';
 import { useAppTranslation } from '../i18n';
-import type { ScoringKeywordSuggestionResponse } from '../types';
+import type { MatchingRulesSuggestionResponse, ScoringKeywordSuggestionResponse } from '../types';
 import type { ConfigPatch, ConfigPayload } from '../types';
 
 type RulesTab = 'matching' | 'scoring';
@@ -140,6 +140,9 @@ export function Rules({
   const [keywordSuggestions, setKeywordSuggestions] = useState<ScoringKeywordSuggestionResponse | null>(null);
   const [keywordSuggestionLoading, setKeywordSuggestionLoading] = useState(false);
   const [keywordSuggestionError, setKeywordSuggestionError] = useState('');
+  const [matchingSuggestion, setMatchingSuggestion] = useState<MatchingRulesSuggestionResponse | null>(null);
+  const [matchingSuggestionLoading, setMatchingSuggestionLoading] = useState(false);
+  const [matchingSuggestionError, setMatchingSuggestionError] = useState('');
 
   const categoryRules = useMemo(
     () => parseObject<CategoryRules>(config.catRulesText, {}),
@@ -316,6 +319,33 @@ export function Rules({
     setScoringValue(['keywordHints'], next);
   };
 
+  const generateMatchingSuggestion = async () => {
+    setMatchingSuggestionLoading(true);
+    setMatchingSuggestionError('');
+    try {
+      setMatchingSuggestion(await bossApi.generateMatchingRulesSuggestion(config.project, {
+        keywordsText: config.keywordsText,
+        catRulesText: config.catRulesText,
+        relevanceText: config.relevanceText,
+        blacklistText: config.blacklistText,
+      }));
+    } catch (error) {
+      setMatchingSuggestionError((error as Error).message);
+    } finally {
+      setMatchingSuggestionLoading(false);
+    }
+  };
+
+  const applyMatchingSuggestion = () => {
+    if (!matchingSuggestion) return;
+    updateConfig({
+      catRulesText: stringify(matchingSuggestion.categoryRules),
+      relevanceText: matchingSuggestion.relevanceKeywords.join('\n'),
+      blacklistText: matchingSuggestion.blacklistKeywords.join('\n'),
+    });
+    setMatchingSuggestion(null);
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
@@ -323,12 +353,24 @@ export function Rules({
           <h1 className="text-lg font-semibold text-zinc-100">{t(mode === 'matching' ? 'rules.matchingTitle' : 'rules.scoringTitle')}</h1>
           <p className="mt-1 text-sm text-zinc-500">{t(mode === 'matching' ? 'rules.matchingSubtitle' : 'rules.scoringSubtitle')}</p>
         </div>
-        <button
-          onClick={() => void onSave()}
-          className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
-        >
-          {t('rules.saveRules')}
-        </button>
+        <div className="flex items-center gap-2">
+          {mode === 'matching' && (
+            <button
+              onClick={() => void generateMatchingSuggestion()}
+              disabled={matchingSuggestionLoading}
+              className="inline-flex items-center gap-2 rounded border border-cyan-900/70 bg-cyan-950/30 px-3 py-1.5 text-sm font-medium text-cyan-200 hover:bg-cyan-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Wand2 size={14} />
+              {matchingSuggestionLoading ? t('rules.generatingMatchingRules') : t('rules.generateMatchingRules')}
+            </button>
+          )}
+          <button
+            onClick={() => void onSave()}
+            className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
+          >
+            {t('rules.saveRules')}
+          </button>
+        </div>
       </div>
 
       {mode === 'matching' ? (
@@ -572,6 +614,67 @@ export function Rules({
         </div>
       )}
 
+      {mode === 'matching' && matchingSuggestionError && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-md rounded border border-red-900/60 bg-red-950/95 px-4 py-3 text-sm text-red-200 shadow-xl">
+          {matchingSuggestionError}
+        </div>
+      )}
+
+      {mode === 'matching' && matchingSuggestion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
+              <div>
+                <h2 className="text-base font-semibold text-zinc-100">{t('rules.matchingSuggestionTitle')}</h2>
+                <p className="mt-1 text-sm text-zinc-400">{t('rules.matchingSuggestionHint')}</p>
+              </div>
+              <button onClick={() => setMatchingSuggestion(null)} className="rounded border border-zinc-800 p-1.5 text-zinc-500 hover:text-zinc-200" title={t('rules.cancel')}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="min-h-0 space-y-5 overflow-y-auto p-5">
+              {matchingSuggestion.rationale && (
+                <p className="rounded border border-cyan-900/60 bg-cyan-950/20 p-3 text-sm text-cyan-100">{matchingSuggestion.rationale}</p>
+              )}
+              <p className="text-xs text-zinc-500">{t('rules.matchingSuggestionBasedOn', { sources: matchingSuggestion.basedOn.join('、') })}</p>
+              <section>
+                <div className="mb-2 flex items-baseline justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-zinc-100">{t('rules.categoryRules')}</h3>
+                  <span className="text-xs text-zinc-500">{t('rules.matchingSuggestionReplaceCount', { before: Object.keys(categoryRules).length, after: Object.keys(matchingSuggestion.categoryRules).length })}</span>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(matchingSuggestion.categoryRules).map(([name, keywords]) => (
+                    <div key={name} className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
+                      <div className="text-sm font-medium text-zinc-100">{name}</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {keywords.map((keyword) => <span key={keyword} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{keyword}</span>)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <SuggestionKeywordPreview title={t('rules.fallbackKeywords')} values={matchingSuggestion.relevanceKeywords} />
+              <SuggestionKeywordPreview title={t('rules.blacklistKeywords')} values={matchingSuggestion.blacklistKeywords} tone="red" />
+              {matchingSuggestion.warnings.length > 0 && (
+                <section className="rounded border border-amber-900/60 bg-amber-950/20 p-3">
+                  <h3 className="text-sm font-medium text-amber-200">{t('rules.matchingSuggestionWarnings')}</h3>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/90">
+                    {matchingSuggestion.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                </section>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 p-4">
+              <p className="text-xs text-zinc-500">{t('rules.matchingSuggestionSaveReminder')}</p>
+              <div className="flex gap-2">
+                <button onClick={() => setMatchingSuggestion(null)} className="rounded border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900">{t('rules.discardSuggestion')}</button>
+                <button onClick={applyMatchingSuggestion} className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">{t('rules.applySuggestion')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {mode === 'scoring' && customPresetDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-lg border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
@@ -673,6 +776,22 @@ function KeywordInputs({ values, onChange, placeholder }: { values: string[]; on
         </div>
       ))}
     </div>
+  );
+}
+
+function SuggestionKeywordPreview({ title, values, tone = 'zinc' }: { title: string; values: string[]; tone?: 'zinc' | 'red' }) {
+  const className = tone === 'red'
+    ? 'border-red-900/50 bg-red-950/20 text-red-100'
+    : 'border-zinc-800 bg-zinc-900/50 text-zinc-300';
+  return (
+    <section>
+      <h3 className="mb-2 text-sm font-semibold text-zinc-100">{title}</h3>
+      <div className="flex min-h-12 flex-wrap gap-1.5 rounded border border-zinc-800 bg-zinc-900/20 p-3">
+        {values.length
+          ? values.map((value) => <span key={value} className={`rounded border px-2 py-1 text-xs ${className}`}>{value}</span>)
+          : <span className="text-xs text-zinc-600">-</span>}
+      </div>
+    </section>
   );
 }
 

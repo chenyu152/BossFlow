@@ -802,7 +802,17 @@
     "generatingKeywords": "Generating...",
     "keywordSuggestionMeta": "Referenced {{count}} jobs.",
     "appendSuggestions": "Append to current keywords",
-    "replaceWithSuggestions": "Replace with suggestions"
+    "replaceWithSuggestions": "Replace with suggestions",
+    "generateMatchingRules": "Generate with LLM",
+    "generatingMatchingRules": "Generating...",
+    "matchingSuggestionTitle": "Review generated ingestion rules",
+    "matchingSuggestionHint": "This draft uses only target job keywords and existing ingestion rules. It never uses a resume or city, and it does not change or save the current project automatically.",
+    "matchingSuggestionBasedOn": "This draft only uses: {{sources}}",
+    "matchingSuggestionReplaceCount": "Categories: {{before}} → {{after}}",
+    "matchingSuggestionWarnings": "Assumptions to confirm",
+    "matchingSuggestionSaveReminder": "Apply only updates the current editor. Save Config is still required to persist it.",
+    "discardSuggestion": "Discard draft",
+    "applySuggestion": "Apply to current editor"
   },
   "logs": {
     "title": "Logs",

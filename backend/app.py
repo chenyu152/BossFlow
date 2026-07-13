@@ -20,6 +20,7 @@ from backend.schemas.evidence import (
 from backend.schemas.greeting import GreetingDraftSaveRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
 from backend.schemas.jobs import JobLiveStatusUpdateRequest
+from backend.schemas.matching import MatchingRulesSuggestionRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, ResumeSuggestionRequest
 from backend.schemas.scoring import ScoringKeywordSuggestionRequest
@@ -51,6 +52,7 @@ from backend.services.interview_service import (
 )
 from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
 from backend.services.live_status_service import start_live_status_update_task
+from backend.services.matching_suggestion_service import suggest_matching_rules
 from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
 from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
 from backend.services.project_service import (
@@ -161,6 +163,12 @@ def score_job_rows(payload: ScoreJobsRequest):
 def create_scoring_keyword_suggestions(payload: ScoringKeywordSuggestionRequest):
     with project_workspace(_workspace_project(payload.project)):
         return suggest_scoring_keywords(payload.project, payload.limit)
+
+
+@app.post("/api/matching-rules/suggestions")
+def create_matching_rules_suggestions(payload: MatchingRulesSuggestionRequest):
+    with project_workspace(_workspace_project(payload.project)):
+        return suggest_matching_rules(payload.project, payload.model_dump())
 
 
 @app.post("/api/jobs/live-status/update")

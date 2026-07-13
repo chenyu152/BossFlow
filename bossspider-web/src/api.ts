@@ -24,6 +24,7 @@ import type {
   JobLiveStatusUpdateRequest,
   JobsResponse,
   LlmEvaluatePipelineResponse,
+  MatchingRulesSuggestionResponse,
   PipelineDeleteResponse,
   PipelineReportResponse,
   PipelineResponse,
@@ -143,6 +144,13 @@ export const bossApi = {
     return request<ScoringKeywordSuggestionResponse>('/api/scoring/keyword-suggestions', {
       method: 'POST',
       body: JSON.stringify({ project, limit }),
+    });
+  },
+
+  generateMatchingRulesSuggestion(project: string, snapshot: Pick<ConfigPayload, 'keywordsText' | 'catRulesText' | 'relevanceText' | 'blacklistText'>) {
+    return request<MatchingRulesSuggestionResponse>('/api/matching-rules/suggestions', {
+      method: 'POST',
+      body: JSON.stringify({ project, ...snapshot }),
     });
   },
 
