@@ -2,9 +2,10 @@ import { BookOpenText, BrainCircuit, ExternalLink, FileText, Loader2, RefreshCw,
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { EvidenceDetailDrawer } from '../components/EvidenceDetailDrawer';
 import { useAppTranslation } from '../i18n';
 import { extractStoryDraftsFromPrep } from '../storyUtils';
-import type { InterviewItem, InterviewPrepResponse, InterviewStory, InterviewStoryBankResponse, InterviewStoryDraft, InterviewStoryDraftsResponse } from '../types';
+import type { EvidenceOverviewResponse, InterviewItem, InterviewPrepResponse, InterviewStory, InterviewStoryBankResponse, InterviewStoryDraft, InterviewStoryDraftsResponse } from '../types';
 
 type PrepStoryStatus = 'new' | 'draft' | 'promoted' | 'dismissed';
 
@@ -57,8 +58,15 @@ function storyExistsInBank(storyBank: InterviewStoryBankResponse | null, draft: 
   )));
 }
 
+function evidenceCitationMarkdown(content: string) {
+  return content.replace(/【证据：(ev-[a-zA-Z0-9-]+)】/g, (_match, evidenceId) => (
+    `[【证据：${evidenceId}】](evidence:${evidenceId})`
+  ));
+}
+
 export function Interview({
   items,
+  evidenceOverview,
   preparingKeys,
   selectedKey,
   onSelectedKeyChange,
@@ -72,6 +80,7 @@ export function Interview({
   onGeneratePrep,
 }: {
   items: InterviewItem[];
+  evidenceOverview: EvidenceOverviewResponse | null;
   preparingKeys: string[];
   selectedKey: string;
   onSelectedKeyChange: (sourceKey: string) => void;
@@ -90,6 +99,7 @@ export function Interview({
   const [prep, setPrep] = useState<InterviewPrepResponse | null>(null);
   const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
   const preparingSet = new Set(preparingKeys);
 
   const selectedItem = useMemo(
@@ -98,6 +108,15 @@ export function Interview({
   );
   const isPreparing = selectedItem ? preparingSet.has(selectedItem.sourceKey) : false;
   const evidenceContext = prep?.evidenceContext;
+  const selectedEvidence = useMemo(
+    () => (evidenceOverview?.evidenceItems || []).find((evidence) => evidence.evidenceId === selectedEvidenceId) || null,
+    [evidenceOverview?.evidenceItems, selectedEvidenceId],
+  );
+  const jobLabels = useMemo(
+    () => new Map(items.map((item) => [item.sourceKey, `${item.company} · ${item.title}`])),
+    [items],
+  );
+  const renderedPrepContent = useMemo(() => evidenceCitationMarkdown(prep?.content || ''), [prep?.content]);
   const prepStoryDrafts = useMemo(() => extractStoryDraftsFromPrep(prep?.content || ''), [prep]);
   const prepStoryRows = useMemo<PrepStoryRow[]>(() => {
     if (!selectedItem || !prep) return [];
@@ -282,16 +301,18 @@ export function Interview({
                           <div className="mb-1.5 text-zinc-500">{t('interview.confirmedEvidence')}</div>
                           <div className="flex flex-wrap gap-1.5">
                             {evidenceContext.confirmedEvidence.map((evidence) => (
-                              <span
+                              <button
+                                type="button"
                                 key={evidence.evidenceId}
+                                onClick={() => setSelectedEvidenceId(evidence.evidenceId)}
                                 title={[
                                   evidence.summary,
                                   ...Array.from(new Set(evidence.sourceRefs.map((ref) => ref.ref).filter(Boolean))).map((ref) => `来源：${ref}`),
                                 ].filter(Boolean).join('\n')}
-                                className="rounded border border-emerald-900/60 bg-emerald-950/25 px-2 py-1 text-emerald-200"
+                                className="rounded border border-emerald-900/60 bg-emerald-950/25 px-2 py-1 text-left text-emerald-200 transition-colors hover:bg-emerald-950/50"
                               >
                                 {evidence.evidenceId} · {evidence.title || t('interview.confirmedEvidence')}
-                              </span>
+                              </button>
                             ))}
                           </div>
                           <div className="mt-1.5 text-[10px] text-zinc-500">{t('interview.evidenceCitationHint')}</div>
@@ -466,7 +487,28 @@ export function Interview({
                   {prep.prepPath}
                 </div>
                 <article className={markdownArticleClass()}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{prep.content}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ href, children }) => {
+                        const evidenceId = href?.startsWith('evidence:') ? href.slice('evidence:'.length) : '';
+                        if (evidenceId) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEvidenceId(evidenceId)}
+                              className="rounded border border-emerald-900/70 bg-emerald-950/30 px-1.5 py-0.5 text-emerald-200 transition-colors hover:bg-emerald-950/60"
+                            >
+                              {children}
+                            </button>
+                          );
+                        }
+                        return <a href={href} className="text-cyan-300 underline underline-offset-2">{children}</a>;
+                      },
+                    }}
+                  >
+                    {renderedPrepContent}
+                  </ReactMarkdown>
                 </article>
               </div>
             ) : selectedItem?.interviewPrepPath ? (
@@ -483,6 +525,14 @@ export function Interview({
           </section>
         </main>
       </div>
+      {selectedEvidence && (
+        <EvidenceDetailDrawer
+          evidence={selectedEvidence}
+          overview={evidenceOverview}
+          jobLabels={jobLabels}
+          onClose={() => setSelectedEvidenceId('')}
+        />
+      )}
     </div>
   );
 }

@@ -441,6 +441,7 @@ export default function App() {
               {activeTab === 'Interview' && (
                 <Interview
                   items={boss.interviewItems}
+                  evidenceOverview={boss.evidenceOverview}
                   preparingKeys={boss.interviewPreparingKeys}
                   selectedKey={selectedInterviewKey}
                   onSelectedKeyChange={setSelectedInterviewKey}
