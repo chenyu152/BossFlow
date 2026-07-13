@@ -2,6 +2,7 @@ import { BookOpenText, CheckSquare, FileText, Loader2, RefreshCw, Square, Wand2 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { EvidenceDetailDrawer } from '../components/EvidenceDetailDrawer';
 import type { EvidenceOverviewResponse, ResumeDraftResponse, ResumeEvidenceClaim, ResumeItem, ResumeNavigationTarget, ResumeSuggestionResponse } from '../types';
 import { useAppTranslation } from '../i18n';
 
@@ -141,6 +142,7 @@ export function Resume({
   const [suggestion, setSuggestion] = useState<ResumeSuggestionResponse | null>(null);
   const [draft, setDraft] = useState<ResumeDraftResponse | null>(null);
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
   const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const appliedTargetRef = useRef('');
@@ -158,6 +160,11 @@ export function Resume({
   const globalEvidenceById = useMemo(
     () => new Map((evidenceOverview?.evidenceItems || []).map((item) => [item.evidenceId, item])),
     [evidenceOverview?.evidenceItems],
+  );
+  const selectedEvidence = globalEvidenceById.get(selectedEvidenceId) || null;
+  const jobLabels = useMemo(
+    () => new Map(items.map((item) => [item.sourceKey, `${item.company} · ${item.title}`])),
+    [items],
   );
   const allSelected = parsedSuggestions.length > 0 && parsedSuggestions.every((item) => selectedSuggestionIds.has(item.id));
   const draftEvidenceIds = useMemo(() => Array.from(new Set(
@@ -365,7 +372,23 @@ export function Resume({
                                      </span>
                                    )}
                                    {linkedEvidence.map((entry) => (
-                                     <span key={entry.evidenceId} className="rounded border border-cyan-900/70 bg-cyan-950/30 px-1.5 py-0.5 text-cyan-300" title={linkedEvidenceTitle}>
+                                     <span
+                                       key={entry.evidenceId}
+                                       role="button"
+                                       tabIndex={0}
+                                       onClick={(event) => {
+                                         event.stopPropagation();
+                                         setSelectedEvidenceId(entry.evidenceId);
+                                       }}
+                                       onKeyDown={(event) => {
+                                         if (event.key !== 'Enter' && event.key !== ' ') return;
+                                         event.preventDefault();
+                                         event.stopPropagation();
+                                         setSelectedEvidenceId(entry.evidenceId);
+                                       }}
+                                       className="cursor-pointer rounded border border-cyan-900/70 bg-cyan-950/30 px-1.5 py-0.5 text-cyan-300 transition-colors hover:bg-cyan-950/60"
+                                       title={linkedEvidenceTitle}
+                                     >
                                        {t('resume.evidenceId', { id: entry.evidenceId })}
                                      </span>
                                    ))}
@@ -440,9 +463,15 @@ export function Resume({
                           .map((source) => `${source.ref || source.type || '-'}：${source.quote || '-'}`)
                           .join('\n');
                         return (
-                          <span key={evidenceId} className="rounded border border-cyan-900/70 px-1.5 py-0.5 text-[10px] text-cyan-200" title={`${evidence?.title || evidenceId}${sourceRefs ? `\n${sourceRefs}` : ''}`}>
+                          <button
+                            key={evidenceId}
+                            type="button"
+                            onClick={() => setSelectedEvidenceId(evidenceId)}
+                            className="rounded border border-cyan-900/70 px-1.5 py-0.5 text-[10px] text-cyan-200 transition-colors hover:bg-cyan-950/50"
+                            title={`${evidence?.title || evidenceId}${sourceRefs ? `\n${sourceRefs}` : ''}`}
+                          >
                             {t('resume.evidenceId', { id: evidenceId })}
-                          </span>
+                          </button>
                         );
                       })}
                     </div>
@@ -462,6 +491,14 @@ export function Resume({
           </section>
         </main>
       </div>
+      {selectedEvidence && (
+        <EvidenceDetailDrawer
+          evidence={selectedEvidence}
+          overview={evidenceOverview}
+          jobLabels={jobLabels}
+          onClose={() => setSelectedEvidenceId('')}
+        />
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
 import { DetailItem } from './DetailItem';
+import { EvidenceDetailDrawer } from './EvidenceDetailDrawer';
 import { EvidenceDecisionDialog, type EvidenceDecisionInput } from './EvidenceDecisionDialog';
 import { JobDescription } from './JobDescription';
 import type {
@@ -89,6 +90,7 @@ type JobWorkspaceProps = {
   isInterviewPreparing: boolean;
   interviewLoading: boolean;
   onOpenResumeMaterials: () => void;
+  jobLabels: Map<string, string>;
   layout?: 'drawer' | 'embedded';
 };
 
@@ -264,6 +266,7 @@ export function JobWorkspace({
   isInterviewPreparing,
   interviewLoading,
   onOpenResumeMaterials,
+  jobLabels,
   layout = 'drawer',
 }: JobWorkspaceProps) {
   const { t } = useAppTranslation();
@@ -274,6 +277,7 @@ export function JobWorkspace({
   const [decisionError, setDecisionError] = useState('');
   const [confirmingEvidenceIds, setConfirmingEvidenceIds] = useState<string[]>([]);
   const [workspaceEvidenceError, setWorkspaceEvidenceError] = useState('');
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
   const materialReadyCount = [
     item.reportPath,
     item.resumeSuggestionPath,
@@ -299,6 +303,7 @@ export function JobWorkspace({
     () => new Map((evidenceOverview?.evidenceItems || []).map((evidence) => [evidence.evidenceId, evidence])),
     [evidenceOverview?.evidenceItems],
   );
+  const selectedEvidence = evidenceById.get(selectedEvidenceId) || null;
   const selectedDecisionEvidence = useMemo(() => {
     if (!decisionTarget) return null;
     const coverage = coverageByRequirement.get(decisionTarget.requirement.requirementId);
@@ -952,10 +957,14 @@ export function JobWorkspace({
                               {linkedEvidenceItems.map((evidence) => (
                                 <div key={evidence.evidenceId} className="rounded border border-zinc-800 bg-zinc-900/60 p-2.5">
                                   <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedEvidenceId(evidence.evidenceId)}
+                                      className="min-w-0 text-left"
+                                    >
                                       <div className="text-xs font-medium text-zinc-200">{evidence.title}</div>
                                       <div className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{evidence.summary}</div>
-                                    </div>
+                                    </button>
                                     <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${
                                       evidence.status === 'confirmed'
                                         ? 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'
@@ -1260,6 +1269,14 @@ export function JobWorkspace({
           error={decisionError}
           onCancel={() => { if (!decisionSaving) setDecisionTarget(null); }}
           onSubmit={(input) => { void submitEvidenceDecision(input); }}
+        />
+      )}
+      {selectedEvidence && (
+        <EvidenceDetailDrawer
+          evidence={selectedEvidence}
+          overview={evidenceOverview}
+          jobLabels={jobLabels}
+          onClose={() => setSelectedEvidenceId('')}
         />
       )}
     </div>

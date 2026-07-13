@@ -279,6 +279,10 @@ export function Pipeline({
 
   const pending = pipeline?.pending || [];
   const processed = pipeline?.processed || [];
+  const jobLabels = useMemo(
+    () => new Map([...pending, ...processed].map((item) => [item.sourceKey, `${item.company} · ${item.title}`])),
+    [pending, processed],
+  );
   const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all');
   const [evidenceFilter, setEvidenceFilter] = useState<'all' | EvidenceReadiness>('all');
   const [sortByEvidence, setSortByEvidence] = useState(false);
@@ -643,6 +647,7 @@ export function Pipeline({
               title: selectedItem.title,
               city: selectedItem.city,
             })}
+            jobLabels={jobLabels}
             layout="embedded"
           />
         )}
