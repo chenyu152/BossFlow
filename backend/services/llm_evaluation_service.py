@@ -14,10 +14,11 @@ from backend.services.greeting_service import sync_greeting_draft_from_report
 from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
 from backend.services.project_service import resolve_project
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-CV_PATH = BASE_DIR / "cv.md"
-PROFILE_PATH = BASE_DIR / "profile.yml"
-REPORTS_DIR = BASE_DIR / "reports" / "jobs"
+CV_PATH = workspace_path("cv.md")
+PROFILE_PATH = workspace_path("profile.yml")
+REPORTS_DIR = workspace_path("reports/jobs")
 
 
 def _read_text(path: Path, limit: int | None = None) -> str:

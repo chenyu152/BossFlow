@@ -420,6 +420,7 @@ export default function App() {
               )}
               {activeTab === 'PersonalResume' && (
                 <PersonalResume
+                  project={boss.project}
                   items={boss.resumeItems}
                   onRefreshItems={() => { void boss.refreshResumeItems(); }}
                   onLoadDraft={boss.loadResumeDraft}

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInterview } from './useInterview';
 import { useEvidence } from './useEvidence';
@@ -14,7 +14,9 @@ type ResourceKey = 'jobs' | 'pipeline' | 'resume' | 'interview' | 'evidence';
 export function useBossSpider() {
   const { t } = useTranslation('common');
   const { notice, showNotice } = useNotice();
-  const evidence = useEvidence();
+  const activeProjectRef = useRef('agent');
+  const getActiveProject = useCallback(() => activeProjectRef.current, []);
+  const evidence = useEvidence(getActiveProject);
 
   const {
     jobs,
@@ -46,7 +48,7 @@ export function useBossSpider() {
     saveGreetingDraft,
     updatePipelineStatus,
     deletePipelineItem: deletePipelineItemBase,
-  } = usePipeline({ showNotice, t });
+  } = usePipeline({ showNotice, t, getProject: getActiveProject });
 
   const {
     interviewItems,
@@ -59,7 +61,7 @@ export function useBossSpider() {
     promoteInterviewStoryDraft,
     generateInterviewPrep: generateInterviewPrepBase,
     loadInterviewPrep,
-  } = useInterview({ showNotice, t });
+  } = useInterview({ showNotice, t, getProject: getActiveProject });
 
   const {
     resumeItems,
@@ -71,15 +73,16 @@ export function useBossSpider() {
     generateResumeDraft: generateResumeDraftBase,
     loadResumeDraft,
     saveResumeDraft,
-  } = useResume({ showNotice, t });
+  } = useResume({ showNotice, t, getProject: getActiveProject });
 
   const loadInitialResources = useCallback(async (projectName: string) => {
+    activeProjectRef.current = projectName;
     await Promise.all([
       loadJobs(projectName, ''),
-      refreshPipeline(),
-      refreshResumeItems(),
-      refreshInterviewItems(),
-      evidence.refreshEvidenceOverview(),
+      refreshPipeline(projectName),
+      refreshResumeItems(projectName),
+      refreshInterviewItems(projectName),
+      evidence.refreshEvidenceOverview(projectName),
     ]);
   }, [evidence.refreshEvidenceOverview, loadJobs, refreshInterviewItems, refreshPipeline, refreshResumeItems]);
 

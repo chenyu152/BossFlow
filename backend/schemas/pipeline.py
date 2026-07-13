@@ -11,6 +11,7 @@ class EvaluatePipelineItemRequest(BaseModel):
 
 
 class ScorePipelineRequest(BaseModel):
+    project: str = ""
     sourceKeys: list[str] = Field(default_factory=list)
 
 

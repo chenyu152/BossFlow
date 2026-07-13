@@ -14,10 +14,11 @@ from fastapi import HTTPException
 
 from backend.storage.file_lock import exclusive_file_lock
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-DATA_DIR = BASE_DIR / "data"
-EVIDENCE_STORE_PATH = DATA_DIR / "evidence-store.json"
-EVIDENCE_LOCK_PATH = DATA_DIR / ".evidence-store.lock"
+DATA_DIR = workspace_path("data")
+EVIDENCE_STORE_PATH = workspace_path("data/evidence-store.json")
+EVIDENCE_LOCK_PATH = workspace_path("data/.evidence-store.lock")
 EVIDENCE_SCHEMA_VERSION = 3
 
 VERIFICATION_MODES = {"document_fact", "experience_fact", "preference", "behavior_example", "manual_review"}

@@ -5,19 +5,21 @@ import type { GreetingDraftResponse, GreetingDraftStatus, PipelineResponse } fro
 export function usePipeline({
   showNotice,
   t,
+  getProject,
 }: {
   showNotice: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
+  getProject: () => string;
 }) {
   const [pipeline, setPipeline] = useState<PipelineResponse | null>(null);
   const [sortPipelineByLlmScore, setSortPipelineByLlmScore] = useState(false);
   const [llmEvaluatingKeys, setLlmEvaluatingKeys] = useState<string[]>([]);
 
-  const refreshPipeline = useCallback(async () => {
-    const data = await bossApi.getPipeline();
-    setPipeline(data);
+  const refreshPipeline = useCallback(async (project = getProject()) => {
+    const data = await bossApi.getPipeline(project);
+    if (getProject() === project) setPipeline(data);
     return data;
-  }, []);
+  }, [getProject]);
 
   const addJobsToPipeline = useCallback(async (projectName: string | undefined, jobIds: number[]) => {
     if (!projectName || !jobIds.length) return false;
@@ -46,7 +48,7 @@ export function usePipeline({
 
   const scoreAllPipeline = useCallback(async () => {
     try {
-      const data = await bossApi.scorePipeline();
+      const data = await bossApi.scorePipeline(getProject());
       setPipeline(data.pipeline);
       showNotice(t('notices.batchScoreComplete', {
         scored: data.scored,
@@ -57,7 +59,7 @@ export function usePipeline({
       showNotice(t('notices.batchScoreFailed', { error: (error as Error).message }));
       return false;
     }
-  }, [showNotice, t]);
+  }, [getProject, showNotice, t]);
 
   const llmEvaluatePipelineItem = useCallback(async (sourceKey: string) => {
     setLlmEvaluatingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);

@@ -9,15 +9,16 @@ from backend.services.job_service import get_jobs_by_ids
 from backend.services.project_service import resolve_project
 from backend.storage.file_lock import exclusive_file_lock
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-DATA_DIR = BASE_DIR / "data"
-PIPELINE_PATH = DATA_DIR / "pipeline.md"
-PIPELINE_LOCK_PATH = DATA_DIR / ".pipeline.lock"
+DATA_DIR = workspace_path("data")
+PIPELINE_PATH = workspace_path("data/pipeline.md")
+PIPELINE_LOCK_PATH = workspace_path("data/.pipeline.lock")
 PIPELINE_SCHEMA_VERSION = 1
 PIPELINE_META_MARKER = "<!-- bossspider-pipeline:"
-REPORTS_DIR = BASE_DIR / "reports" / "jobs"
-RESUMES_DIR = BASE_DIR / "output" / "resumes"
-INTERVIEW_OUTPUT_DIR = BASE_DIR / "output" / "interview-prep"
+REPORTS_DIR = workspace_path("reports/jobs")
+RESUMES_DIR = workspace_path("output/resumes")
+INTERVIEW_OUTPUT_DIR = workspace_path("output/interview-prep")
 DECISION_STATUSES = {"needs_llm", "needs_review", "ready_to_greet", "greeted", "interviewing", "skipped", "archived"}
 
 

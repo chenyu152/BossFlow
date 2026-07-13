@@ -64,6 +64,7 @@ from backend.services.project_service import (
 from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion, save_resume_draft
 from backend.services.scoring_suggestion_service import suggest_scoring_keywords
 from backend.services.task_service import TaskManager
+from backend.services.workspace_service import project_from_source_key, project_workspace
 from crawler.boss import load_config
 
 app = FastAPI(title="BossSpider Web Backend", version="0.1.0")
@@ -76,6 +77,10 @@ app.add_middleware(
 )
 
 task_manager = TaskManager()
+
+
+def _workspace_project(project: Optional[str] = None, source_key: str = "") -> str:
+    return project_from_source_key(source_key) if source_key else (project or default_project_name())
 
 
 @app.get("/api/projects")
@@ -102,23 +107,27 @@ def get_stats(project: Optional[str] = None):
 
 
 @app.get("/api/cv/status")
-def get_cv_status():
-    return cv_status()
+def get_cv_status(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return cv_status()
 
 
 @app.get("/api/cv")
-def get_cv_document():
-    return read_cv_document()
+def get_cv_document(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return read_cv_document()
 
 
 @app.put("/api/cv")
 def update_cv_document(payload: CvSaveRequest):
-    return save_cv_document(payload.content)
+    with project_workspace(_workspace_project(payload.project)):
+        return save_cv_document(payload.content)
 
 
 @app.post("/api/cv/from-template")
-def create_cv_template():
-    return create_cv_from_template()
+def create_cv_template(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return create_cv_from_template()
 
 
 @app.get("/api/jobs")
@@ -144,12 +153,14 @@ def get_job_item(project: str, jobId: int):
 
 @app.post("/api/jobs/score")
 def score_job_rows(payload: ScoreJobsRequest):
-    return score_jobs(payload.project, payload.jobIds)
+    with project_workspace(_workspace_project(payload.project)):
+        return score_jobs(payload.project, payload.jobIds)
 
 
 @app.post("/api/scoring/keyword-suggestions")
 def create_scoring_keyword_suggestions(payload: ScoringKeywordSuggestionRequest):
-    return suggest_scoring_keywords(payload.project, payload.limit)
+    with project_workspace(_workspace_project(payload.project)):
+        return suggest_scoring_keywords(payload.project, payload.limit)
 
 
 @app.post("/api/jobs/live-status/update")
@@ -158,174 +169,210 @@ def update_job_live_status(payload: JobLiveStatusUpdateRequest):
 
 
 @app.get("/api/pipeline")
-def get_pipeline():
-    return read_pipeline()
+def get_pipeline(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return read_pipeline()
 
 
 @app.get("/api/pipeline/report")
 def get_pipeline_report(sourceKey: str):
-    return read_pipeline_report(sourceKey)
+    with project_workspace(_workspace_project(source_key=sourceKey)):
+        return read_pipeline_report(sourceKey)
 
 
 @app.get("/api/greetings/draft")
 def get_greeting_draft(sourceKey: str):
-    return read_greeting_draft(sourceKey)
+    with project_workspace(_workspace_project(source_key=sourceKey)):
+        return read_greeting_draft(sourceKey)
 
 
 @app.put("/api/greetings/draft")
 def update_greeting_draft(payload: GreetingDraftSaveRequest):
-    return save_greeting_draft(payload.sourceKey, payload.editedText, payload.status)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return save_greeting_draft(payload.sourceKey, payload.editedText, payload.status)
 
 
 @app.post("/api/pipeline/jobs")
 def add_pipeline_jobs(payload: AddJobsToPipelineRequest):
-    return add_jobs_to_pipeline(payload.project, payload.jobIds)
+    with project_workspace(_workspace_project(payload.project)):
+        return add_jobs_to_pipeline(payload.project, payload.jobIds)
 
 
 @app.post("/api/pipeline/status")
 def update_pipeline_status(payload: PipelineStatusRequest):
-    return update_pipeline_item_status(payload.sourceKey, payload.decisionStatus)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return update_pipeline_item_status(payload.sourceKey, payload.decisionStatus)
 
 
 @app.delete("/api/pipeline/item")
 def delete_pipeline(payload: PipelineDeleteRequest):
-    return delete_pipeline_item(payload.sourceKey)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return delete_pipeline_item(payload.sourceKey)
 
 
 @app.post("/api/pipeline/evaluate")
 def evaluate_pipeline(payload: EvaluatePipelineItemRequest):
-    result = evaluate_pipeline_item(payload.sourceKey)
-    return {**result, "pipeline": read_pipeline()}
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        result = evaluate_pipeline_item(payload.sourceKey)
+        return {**result, "pipeline": read_pipeline()}
 
 
 @app.post("/api/pipeline/score")
 def score_pipeline(payload: ScorePipelineRequest):
-    return score_pipeline_items(payload.sourceKeys)
+    project = _workspace_project(payload.project, payload.sourceKeys[0] if payload.sourceKeys else "")
+    with project_workspace(project):
+        return score_pipeline_items(payload.sourceKeys)
 
 
 @app.post("/api/pipeline/llm-evaluate")
 def llm_evaluate_pipeline(payload: LlmEvaluatePipelineItemRequest):
-    return llm_evaluate_pipeline_item(payload.sourceKey)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return llm_evaluate_pipeline_item(payload.sourceKey)
 
 
 @app.post("/api/resume/suggestions")
 def create_resume_suggestions(payload: ResumeSuggestionRequest):
-    return generate_resume_suggestions(payload.sourceKey)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return generate_resume_suggestions(payload.sourceKey)
 
 
 @app.get("/api/evidence/overview")
-def get_evidence_overview():
-    return read_evidence_overview()
+def get_evidence_overview(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return read_evidence_overview()
 
 
 @app.get("/api/evidence/requirements")
-def get_evidence_requirements(sourceKey: str = ""):
-    return list_requirements(sourceKey)
+def get_evidence_requirements(sourceKey: str = "", project: Optional[str] = None):
+    with project_workspace(_workspace_project(project, sourceKey)):
+        return list_requirements(sourceKey)
 
 
 @app.put("/api/evidence/requirements")
 def save_evidence_requirements(payload: RequirementsUpsertRequest):
-    return upsert_requirements([item.model_dump() for item in payload.requirements])
+    source_key = payload.requirements[0].sourceKey if payload.requirements else ""
+    with project_workspace(_workspace_project(payload.project, source_key)):
+        return upsert_requirements([item.model_dump() for item in payload.requirements])
 
 
 @app.get("/api/evidence/tasks")
-def get_evidence_tasks(status: str = "", sourceKey: str = ""):
-    return list_evidence_tasks(status, sourceKey)
+def get_evidence_tasks(status: str = "", sourceKey: str = "", project: Optional[str] = None):
+    with project_workspace(_workspace_project(project, sourceKey)):
+        return list_evidence_tasks(status, sourceKey)
 
 
 @app.post("/api/evidence/coverage/classify")
 def classify_evidence_coverage(payload: EvidenceCoverageClassifyRequest):
-    return classify_coverage(payload.model_dump())
+    with project_workspace(_workspace_project(payload.project)):
+        return classify_coverage(payload.model_dump())
 
 
 @app.post("/api/evidence/items")
 def add_evidence_item(payload: EvidenceItemCreateRequest):
-    return create_evidence_item(payload.model_dump())
+    with project_workspace(_workspace_project(payload.project)):
+        return create_evidence_item(payload.model_dump())
 
 
 @app.put("/api/evidence/items")
 def save_evidence_item(payload: EvidenceItemUpdateRequest):
-    return update_evidence_item(payload.model_dump())
+    with project_workspace(_workspace_project(payload.project)):
+        return update_evidence_item(payload.model_dump())
 
 
 @app.post("/api/evidence/items/confirm")
 def confirm_evidence(payload: EvidenceItemConfirmRequest):
-    return confirm_evidence_item(payload.evidenceId)
+    with project_workspace(_workspace_project(payload.project)):
+        return confirm_evidence_item(payload.evidenceId)
 
 
 @app.post("/api/evidence/tasks")
 def add_evidence_task(payload: EvidenceTaskCreateRequest):
-    return create_evidence_task(payload.model_dump())
+    with project_workspace(_workspace_project(payload.project)):
+        return create_evidence_task(payload.model_dump())
 
 
 @app.put("/api/evidence/tasks")
 def save_evidence_task(payload: EvidenceTaskUpdateRequest):
-    return update_evidence_task(payload.model_dump())
+    with project_workspace(_workspace_project(payload.project)):
+        return update_evidence_task(payload.model_dump())
 
 
 @app.get("/api/resume/items")
-def get_resume_items():
-    return list_resume_items()
+def get_resume_items(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return list_resume_items()
 
 
 @app.get("/api/resume/suggestion")
 def get_resume_suggestion(sourceKey: str):
-    return read_resume_suggestion(sourceKey)
+    with project_workspace(_workspace_project(source_key=sourceKey)):
+        return read_resume_suggestion(sourceKey)
 
 
 @app.post("/api/resume/draft")
 def create_resume_draft(payload: ResumeDraftRequest):
-    return generate_resume_draft(payload.sourceKey, payload.approvedSuggestionIds, payload.userNotes)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return generate_resume_draft(payload.sourceKey, payload.approvedSuggestionIds, payload.userNotes)
 
 
 @app.get("/api/resume/draft")
 def get_resume_draft(sourceKey: str):
-    return read_resume_draft(sourceKey)
+    with project_workspace(_workspace_project(source_key=sourceKey)):
+        return read_resume_draft(sourceKey)
 
 
 @app.put("/api/resume/draft")
 def update_resume_draft(payload: ResumeDraftSaveRequest):
-    return save_resume_draft(payload.sourceKey, payload.content)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return save_resume_draft(payload.sourceKey, payload.content)
 
 
 @app.get("/api/interview/items")
-def get_interview_items():
-    return list_interview_items()
+def get_interview_items(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return list_interview_items()
 
 
 @app.get("/api/interview/story-bank")
-def get_interview_story_bank():
-    return read_story_bank()
+def get_interview_story_bank(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return read_story_bank()
 
 
 @app.put("/api/interview/story-bank")
 def update_interview_story_bank(payload: StoryBankSaveRequest):
-    return save_story_bank([story.model_dump() for story in payload.stories])
+    with project_workspace(_workspace_project(payload.project)):
+        return save_story_bank([story.model_dump() for story in payload.stories])
 
 
 @app.get("/api/interview/story-drafts")
-def get_interview_story_drafts():
-    return read_story_drafts()
+def get_interview_story_drafts(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return read_story_drafts()
 
 
 @app.put("/api/interview/story-drafts")
 def update_interview_story_drafts(payload: StoryDraftsSaveRequest):
-    return save_story_drafts([draft.model_dump() for draft in payload.drafts])
+    with project_workspace(_workspace_project(payload.project)):
+        return save_story_drafts([draft.model_dump() for draft in payload.drafts])
 
 
 @app.post("/api/interview/story-drafts/promote")
 def confirm_interview_story_draft(payload: StoryDraftPromoteRequest):
-    return promote_story_draft(payload.draftId, payload.draft.model_dump())
+    with project_workspace(_workspace_project(payload.project)):
+        return promote_story_draft(payload.draftId, payload.draft.model_dump())
 
 
 @app.post("/api/interview/prep")
 def create_interview_prep(payload: InterviewPrepRequest):
-    return generate_interview_prep(payload.sourceKey, payload.userNotes)
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return generate_interview_prep(payload.sourceKey, payload.userNotes)
 
 
 @app.get("/api/interview/prep")
 def get_interview_prep(sourceKey: str):
-    return read_interview_prep(sourceKey)
+    with project_workspace(_workspace_project(source_key=sourceKey)):
+        return read_interview_prep(sourceKey)
 
 
 @app.post("/api/tasks/crawl")

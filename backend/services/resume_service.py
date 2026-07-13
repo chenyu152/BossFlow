@@ -19,8 +19,9 @@ from backend.services.llm_evaluation_service import (
 from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
 from backend.services.evidence_service import read_evidence_overview
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-RESUME_OUTPUT_DIR = BASE_DIR / "output" / "resumes"
+RESUME_OUTPUT_DIR = workspace_path("output/resumes")
 
 
 def _next_resume_id() -> str:

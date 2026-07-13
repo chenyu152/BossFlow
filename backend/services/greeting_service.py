@@ -8,9 +8,10 @@ from fastapi import HTTPException
 
 from backend.services.pipeline_service import find_pipeline_item
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-GREETINGS_DIR = BASE_DIR / "data" / "greetings"
-GREETING_DRAFTS_PATH = GREETINGS_DIR / "greeting-drafts.json"
+GREETINGS_DIR = workspace_path("data/greetings")
+GREETING_DRAFTS_PATH = workspace_path("data/greetings/greeting-drafts.json")
 GREETING_STATUSES = {"draft", "edited", "copied", "sent", "dismissed"}
 
 
@@ -61,7 +62,7 @@ def _safe_report_text(path_value: str) -> str:
         path = Path(path_value).resolve()
     except OSError:
         return ""
-    reports_root = (BASE_DIR / "reports" / "jobs").resolve()
+    reports_root = workspace_path("reports/jobs").resolve()
     if reports_root != path and reports_root not in path.parents:
         return ""
     if path.suffix.lower() != ".md" or not path.exists() or not path.is_file():

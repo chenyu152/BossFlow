@@ -5,19 +5,21 @@ import type { ResumeDraftResponse, ResumeItem, ResumeSuggestionResponse } from '
 export function useResume({
   showNotice,
   t,
+  getProject,
 }: {
   showNotice: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
+  getProject: () => string;
 }) {
   const [resumeItems, setResumeItems] = useState<ResumeItem[]>([]);
   const [resumeSuggestingKeys, setResumeSuggestingKeys] = useState<string[]>([]);
   const [resumeDraftingKeys, setResumeDraftingKeys] = useState<string[]>([]);
 
-  const refreshResumeItems = useCallback(async () => {
-    const data = await bossApi.getResumeItems();
-    setResumeItems(data.items || []);
+  const refreshResumeItems = useCallback(async (project = getProject()) => {
+    const data = await bossApi.getResumeItems(project);
+    if (getProject() === project) setResumeItems(data.items || []);
     return data.items || [];
-  }, []);
+  }, [getProject]);
 
   const generateResumeSuggestions = useCallback(async (sourceKey: string): Promise<ResumeSuggestionResponse | null> => {
     setResumeSuggestingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);

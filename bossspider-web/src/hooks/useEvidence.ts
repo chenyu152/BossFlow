@@ -11,17 +11,17 @@ import type {
   EvidenceTaskStatus,
 } from '../types';
 
-export function useEvidence() {
+export function useEvidence(getProject: () => string) {
   const [evidenceOverview, setEvidenceOverview] = useState<EvidenceOverviewResponse | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState('');
 
-  const refreshEvidenceOverview = useCallback(async () => {
+  const refreshEvidenceOverview = useCallback(async (project = getProject()) => {
     setEvidenceLoading(true);
     setEvidenceError('');
     try {
-      const data = await bossApi.getEvidenceOverview();
-      setEvidenceOverview(data);
+      const data = await bossApi.getEvidenceOverview(project);
+      if (getProject() === project) setEvidenceOverview(data);
       return data;
     } catch (error) {
       setEvidenceError((error as Error).message);
@@ -29,7 +29,7 @@ export function useEvidence() {
     } finally {
       setEvidenceLoading(false);
     }
-  }, []);
+  }, [getProject]);
 
   const applyMutation = useCallback((data: EvidenceMutationResponse) => {
     setEvidenceOverview(data.overview);
@@ -39,7 +39,7 @@ export function useEvidence() {
 
   const upsertEvidenceRequirements = useCallback(async (requirements: EvidenceRequirement[]) => {
     try {
-      const data = await bossApi.upsertEvidenceRequirements(requirements);
+      const data = await bossApi.upsertEvidenceRequirements(getProject(), requirements);
       setEvidenceOverview(data);
       setEvidenceError('');
       return data;
@@ -47,7 +47,7 @@ export function useEvidence() {
       setEvidenceError((error as Error).message);
       return null;
     }
-  }, []);
+  }, [getProject]);
 
   const classifyEvidenceCoverage = useCallback(async (
     requirementId: string,
@@ -58,6 +58,7 @@ export function useEvidence() {
   ) => {
     try {
       return applyMutation(await bossApi.classifyEvidenceCoverage(
+        getProject(),
         requirementId,
         classification,
         evidenceIds,
@@ -68,43 +69,43 @@ export function useEvidence() {
       setEvidenceError((error as Error).message);
       return null;
     }
-  }, [applyMutation]);
+  }, [applyMutation, getProject]);
 
   const createEvidenceItem = useCallback(async (item: EvidenceItemInput) => {
     try {
-      return applyMutation(await bossApi.createEvidenceItem(item));
+      return applyMutation(await bossApi.createEvidenceItem(getProject(), item));
     } catch (error) {
       setEvidenceError((error as Error).message);
       return null;
     }
-  }, [applyMutation]);
+  }, [applyMutation, getProject]);
 
   const updateEvidenceItem = useCallback(async (item: EvidenceItem) => {
     try {
-      return applyMutation(await bossApi.updateEvidenceItem(item));
+      return applyMutation(await bossApi.updateEvidenceItem(getProject(), item));
     } catch (error) {
       setEvidenceError((error as Error).message);
       return null;
     }
-  }, [applyMutation]);
+  }, [applyMutation, getProject]);
 
   const confirmEvidenceItem = useCallback(async (evidenceId: string) => {
     try {
-      return applyMutation(await bossApi.confirmEvidenceItem(evidenceId));
+      return applyMutation(await bossApi.confirmEvidenceItem(getProject(), evidenceId));
     } catch (error) {
       setEvidenceError((error as Error).message);
       return null;
     }
-  }, [applyMutation]);
+  }, [applyMutation, getProject]);
 
   const createEvidenceTask = useCallback(async (task: EvidenceTaskInput) => {
     try {
-      return applyMutation(await bossApi.createEvidenceTask(task));
+      return applyMutation(await bossApi.createEvidenceTask(getProject(), task));
     } catch (error) {
       setEvidenceError((error as Error).message);
       return null;
     }
-  }, [applyMutation]);
+  }, [applyMutation, getProject]);
 
   const updateEvidenceTask = useCallback(async (
     taskId: string,
@@ -112,12 +113,12 @@ export function useEvidence() {
     completionEvidenceIds: string[] = [],
   ) => {
     try {
-      return applyMutation(await bossApi.updateEvidenceTask(taskId, status, completionEvidenceIds));
+      return applyMutation(await bossApi.updateEvidenceTask(getProject(), taskId, status, completionEvidenceIds));
     } catch (error) {
       setEvidenceError((error as Error).message);
       return null;
     }
-  }, [applyMutation]);
+  }, [applyMutation, getProject]);
 
   return {
     evidenceOverview,

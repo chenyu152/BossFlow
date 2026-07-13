@@ -13,72 +13,74 @@ import type {
 export function useInterview({
   showNotice,
   t,
+  getProject,
 }: {
   showNotice: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
+  getProject: () => string;
 }) {
   const [interviewItems, setInterviewItems] = useState<InterviewItem[]>([]);
   const [interviewPreparingKeys, setInterviewPreparingKeys] = useState<string[]>([]);
 
-  const refreshInterviewItems = useCallback(async () => {
-    const data = await bossApi.getInterviewItems();
-    setInterviewItems(data.items || []);
+  const refreshInterviewItems = useCallback(async (project = getProject()) => {
+    const data = await bossApi.getInterviewItems(project);
+    if (getProject() === project) setInterviewItems(data.items || []);
     return data.items || [];
-  }, []);
+  }, [getProject]);
 
   const loadInterviewStoryBank = useCallback(async (): Promise<InterviewStoryBankResponse | null> => {
     try {
-      return await bossApi.getInterviewStoryBank();
+      return await bossApi.getInterviewStoryBank(getProject());
     } catch (error) {
       showNotice(t('notices.loadStoryBankFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice, t]);
+  }, [getProject, showNotice, t]);
 
   const saveInterviewStoryBank = useCallback(async (stories: InterviewStory[]): Promise<InterviewStoryBankResponse | null> => {
     try {
-      const data = await bossApi.saveInterviewStoryBank(stories);
+      const data = await bossApi.saveInterviewStoryBank(getProject(), stories);
       showNotice(t('notices.storyBankSaved'));
       return data;
     } catch (error) {
       showNotice(t('notices.saveStoryBankFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice, t]);
+  }, [getProject, showNotice, t]);
 
   const loadInterviewStoryDrafts = useCallback(async (): Promise<InterviewStoryDraftsResponse | null> => {
     try {
-      return await bossApi.getInterviewStoryDrafts();
+      return await bossApi.getInterviewStoryDrafts(getProject());
     } catch (error) {
       showNotice(t('notices.loadStoryDraftsFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice, t]);
+  }, [getProject, showNotice, t]);
 
   const saveInterviewStoryDrafts = useCallback(async (drafts: InterviewStoryDraft[]): Promise<InterviewStoryDraftsResponse | null> => {
     try {
-      const data = await bossApi.saveInterviewStoryDrafts(drafts);
+      const data = await bossApi.saveInterviewStoryDrafts(getProject(), drafts);
       showNotice(t('notices.storyDraftsSaved'));
       return data;
     } catch (error) {
       showNotice(t('notices.saveStoryDraftsFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice, t]);
+  }, [getProject, showNotice, t]);
 
   const promoteInterviewStoryDraft = useCallback(async (
     draftId: string,
     draft: InterviewStoryDraft,
   ): Promise<InterviewStoryDraftPromoteResponse | null> => {
     try {
-      const data = await bossApi.promoteInterviewStoryDraft(draftId, draft);
+      const data = await bossApi.promoteInterviewStoryDraft(getProject(), draftId, draft);
       showNotice(t('notices.storyDraftPromoted'));
       return data;
     } catch (error) {
       showNotice(t('notices.storyDraftPromoteFailed', { error: (error as Error).message }));
       return null;
     }
-  }, [showNotice, t]);
+  }, [getProject, showNotice, t]);
 
   const generateInterviewPrep = useCallback(async (
     sourceKey: string,

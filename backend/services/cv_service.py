@@ -5,8 +5,9 @@ from typing import Any
 from fastapi import HTTPException
 
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-CV_PATH = BASE_DIR / "cv.md"
+CV_PATH = workspace_path("cv.md")
 CV_EXAMPLE_PATH = BASE_DIR / "cv.example.md"
 
 

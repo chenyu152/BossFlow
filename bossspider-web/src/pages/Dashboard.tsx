@@ -288,7 +288,7 @@ export function Dashboard({
     setCvLoading(true);
     setCvError('');
     try {
-      setCvStatus(await bossApi.getCvStatus());
+      setCvStatus(await bossApi.getCvStatus(config.project));
     } catch (error) {
       setCvError((error as Error).message);
     } finally {
@@ -298,7 +298,7 @@ export function Dashboard({
 
   useEffect(() => {
     void loadCvStatus();
-  }, []);
+  }, [config.project]);
 
   const todayJobs = useMemo(
     () => jobs

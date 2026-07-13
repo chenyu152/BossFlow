@@ -19,12 +19,13 @@ from backend.services.llm_evaluation_service import (
 from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
 from backend.services.evidence_service import read_evidence_overview
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-INTERVIEW_DATA_DIR = BASE_DIR / "data" / "interview-prep"
-INTERVIEW_OUTPUT_DIR = BASE_DIR / "output" / "interview-prep"
-STORY_BANK_PATH = INTERVIEW_DATA_DIR / "story-bank.md"
-STORY_DRAFTS_PATH = INTERVIEW_DATA_DIR / "story-drafts.json"
-RESUME_OUTPUT_DIR = BASE_DIR / "output" / "resumes"
+INTERVIEW_DATA_DIR = workspace_path("data/interview-prep")
+INTERVIEW_OUTPUT_DIR = workspace_path("output/interview-prep")
+STORY_BANK_PATH = workspace_path("data/interview-prep/story-bank.md")
+STORY_DRAFTS_PATH = workspace_path("data/interview-prep/story-drafts.json")
+RESUME_OUTPUT_DIR = workspace_path("output/resumes")
 
 
 def _next_interview_id() -> str:

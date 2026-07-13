@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Any
 
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-DATA_DIR = BASE_DIR / "data"
-SCORES_PATH = DATA_DIR / "job_scores.json"
+DATA_DIR = workspace_path("data")
+SCORES_PATH = workspace_path("data/job_scores.json")
 
 SCORE_FIELDS = [
     "score",

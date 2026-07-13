@@ -26,12 +26,14 @@ const checkKeys = [
 type EditorTarget = { kind: 'base' } | { kind: 'tailored'; item: ResumeItem };
 
 export function PersonalResume({
+  project,
   items,
   onRefreshItems,
   onLoadDraft,
   onSaveDraft,
   onDirtyChange,
 }: {
+  project: string;
   items: ResumeItem[];
   onRefreshItems: () => void;
   onLoadDraft: (sourceKey: string) => Promise<ResumeDraftResponse | null>;
@@ -70,7 +72,7 @@ export function PersonalResume({
     setError('');
     setMessage('');
     try {
-      const data = await bossApi.getCvDocument();
+      const data = await bossApi.getCvDocument(project);
       setCvDocument(data);
       setTarget({ kind: 'base' });
       setContent(data.content || '');
@@ -86,7 +88,7 @@ export function PersonalResume({
   useEffect(() => {
     void loadBaseResume();
     onRefreshItems();
-  }, []);
+  }, [project]);
 
   const confirmDiscard = () => !dirty || window.confirm(t('personalResume.unsavedSwitchConfirm'));
 
@@ -129,7 +131,7 @@ export function PersonalResume({
     setMessage('');
     try {
       if (target.kind === 'base') {
-        const data = await bossApi.saveCvDocument(content);
+        const data = await bossApi.saveCvDocument(project, content);
         setCvDocument(data);
         setContent(data.content || '');
         setSavedContent(data.content || '');
@@ -156,7 +158,7 @@ export function PersonalResume({
     setError('');
     setMessage('');
     try {
-      await bossApi.createCvFromTemplate();
+      await bossApi.createCvFromTemplate(project);
       await loadBaseResume();
       setMessage(t('personalResume.templateCreated'));
     } catch (createError) {

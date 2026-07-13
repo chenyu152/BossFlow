@@ -22,6 +22,7 @@ class InterviewStoryPayload(BaseModel):
 
 
 class StoryBankSaveRequest(BaseModel):
+    project: str = ""
     stories: list[InterviewStoryPayload]
 
 
@@ -38,9 +39,11 @@ class InterviewStoryDraftPayload(InterviewStoryPayload):
 
 
 class StoryDraftsSaveRequest(BaseModel):
+    project: str = ""
     drafts: list[InterviewStoryDraftPayload]
 
 
 class StoryDraftPromoteRequest(BaseModel):
+    project: str = ""
     draftId: str
     draft: InterviewStoryDraftPayload

@@ -12,8 +12,9 @@ from backend.services.project_service import resolve_project
 from backend.services.scoring_config import scoring_config_for_project
 from backend.services.score_store import update_job_score, update_job_scores
 from backend.storage.paths import BASE_DIR
+from backend.services.workspace_service import workspace_path
 
-CV_PATH = BASE_DIR / "cv.md"
+CV_PATH = workspace_path("cv.md")
 
 KEYWORD_HINTS = [
     "agent", "llm", "rag", "langchain", "prompt", "openai", "deepseek", "ai", "大模型", "智能体",

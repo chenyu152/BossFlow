@@ -27,6 +27,7 @@ class RequirementPayload(BaseModel):
 
 
 class RequirementsUpsertRequest(BaseModel):
+    project: str = ""
     requirements: list[RequirementPayload] = Field(default_factory=list)
 
 
@@ -37,6 +38,7 @@ class EvidenceSourceRefPayload(BaseModel):
 
 
 class EvidenceItemCreateRequest(BaseModel):
+    project: str = ""
     title: str
     evidenceType: EvidenceType = "fact"
     summary: str = ""
@@ -55,10 +57,12 @@ class EvidenceItemUpdateRequest(EvidenceItemCreateRequest):
 
 
 class EvidenceItemConfirmRequest(BaseModel):
+    project: str = ""
     evidenceId: str
 
 
 class EvidenceCoverageClassifyRequest(BaseModel):
+    project: str = ""
     requirementId: str
     userClassification: EvidenceClassification
     evidenceIds: list[str] = Field(default_factory=list)
@@ -67,6 +71,7 @@ class EvidenceCoverageClassifyRequest(BaseModel):
 
 
 class EvidenceTaskCreateRequest(BaseModel):
+    project: str = ""
     requirementId: str
     taskType: EvidenceTaskType
     affectedSourceKeys: list[str] = Field(default_factory=list)
@@ -80,6 +85,7 @@ class EvidenceTaskCreateRequest(BaseModel):
 
 
 class EvidenceTaskUpdateRequest(BaseModel):
+    project: str = ""
     taskId: str
     status: EvidenceTaskStatus
     completionEvidenceIds: list[str] = Field(default_factory=list)

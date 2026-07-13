@@ -75,22 +75,22 @@ export const bossApi = {
     });
   },
 
-  getCvStatus() {
-    return request<CvStatusResponse>('/api/cv/status');
+  getCvStatus(project: string) {
+    return request<CvStatusResponse>(`/api/cv/status?project=${encodeURIComponent(project)}`);
   },
 
-  createCvFromTemplate() {
-    return request<CvStatusResponse>('/api/cv/from-template', { method: 'POST' });
+  createCvFromTemplate(project: string) {
+    return request<CvStatusResponse>(`/api/cv/from-template?project=${encodeURIComponent(project)}`, { method: 'POST' });
   },
 
-  getCvDocument() {
-    return request<CvDocumentResponse>('/api/cv');
+  getCvDocument(project: string) {
+    return request<CvDocumentResponse>(`/api/cv?project=${encodeURIComponent(project)}`);
   },
 
-  saveCvDocument(content: string) {
+  saveCvDocument(project: string, content: string) {
     return request<CvDocumentResponse>('/api/cv', {
       method: 'PUT',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ project, content }),
     });
   },
 
@@ -106,8 +106,8 @@ export const bossApi = {
     );
   },
 
-  getPipeline() {
-    return request<PipelineResponse>('/api/pipeline');
+  getPipeline(project: string) {
+    return request<PipelineResponse>(`/api/pipeline?project=${encodeURIComponent(project)}`);
   },
 
   getPipelineReport(sourceKey: string) {
@@ -160,10 +160,10 @@ export const bossApi = {
     });
   },
 
-  scorePipeline(sourceKeys: string[] = []) {
+  scorePipeline(project: string, sourceKeys: string[] = []) {
     return request<ScorePipelineResponse>('/api/pipeline/score', {
       method: 'POST',
-      body: JSON.stringify({ sourceKeys }),
+      body: JSON.stringify({ project, sourceKeys }),
     });
   },
 
@@ -199,8 +199,8 @@ export const bossApi = {
     return request<ResumeSuggestionResponse>(`/api/resume/suggestion?sourceKey=${encodeURIComponent(sourceKey)}`);
   },
 
-  getResumeItems() {
-    return request<ResumeItemsResponse>('/api/resume/items');
+  getResumeItems(project: string) {
+    return request<ResumeItemsResponse>(`/api/resume/items?project=${encodeURIComponent(project)}`);
   },
 
   generateResumeDraft(sourceKey: string, approvedSuggestionIds: string[], userNotes: string) {
@@ -221,24 +221,27 @@ export const bossApi = {
     });
   },
 
-  getEvidenceOverview() {
-    return request<EvidenceOverviewResponse>('/api/evidence/overview');
+  getEvidenceOverview(project: string) {
+    return request<EvidenceOverviewResponse>(`/api/evidence/overview?project=${encodeURIComponent(project)}`);
   },
 
-  getEvidenceRequirements(sourceKey = '') {
-    const query = sourceKey ? `?sourceKey=${encodeURIComponent(sourceKey)}` : '';
+  getEvidenceRequirements(project: string, sourceKey = '') {
+    const params = new URLSearchParams({ project });
+    if (sourceKey) params.set('sourceKey', sourceKey);
+    const query = `?${params.toString()}`;
     return request<EvidenceRequirementsResponse>(`/api/evidence/requirements${query}`);
   },
 
-  upsertEvidenceRequirements(requirements: EvidenceRequirement[]) {
+  upsertEvidenceRequirements(project: string, requirements: EvidenceRequirement[]) {
     return request<EvidenceOverviewResponse>('/api/evidence/requirements', {
       method: 'PUT',
-      body: JSON.stringify({ requirements }),
+      body: JSON.stringify({ project, requirements }),
     });
   },
 
-  getEvidenceTasks(status = '', sourceKey = '') {
+  getEvidenceTasks(project: string, status = '', sourceKey = '') {
     const params = new URLSearchParams();
+    params.set('project', project);
     if (status) params.set('status', status);
     if (sourceKey) params.set('sourceKey', sourceKey);
     const query = params.size ? `?${params.toString()}` : '';
@@ -246,6 +249,7 @@ export const bossApi = {
   },
 
   classifyEvidenceCoverage(
+    project: string,
     requirementId: string,
     userClassification: EvidenceClassification,
     evidenceIds: string[] = [],
@@ -254,75 +258,75 @@ export const bossApi = {
   ) {
     return request<EvidenceMutationResponse>('/api/evidence/coverage/classify', {
       method: 'POST',
-      body: JSON.stringify({ requirementId, userClassification, evidenceIds, rationale, confidence }),
+      body: JSON.stringify({ project, requirementId, userClassification, evidenceIds, rationale, confidence }),
     });
   },
 
-  createEvidenceItem(item: EvidenceItemInput) {
+  createEvidenceItem(project: string, item: EvidenceItemInput) {
     return request<EvidenceMutationResponse>('/api/evidence/items', {
       method: 'POST',
-      body: JSON.stringify(item),
+      body: JSON.stringify({ project, ...item }),
     });
   },
 
-  updateEvidenceItem(item: EvidenceItem) {
+  updateEvidenceItem(project: string, item: EvidenceItem) {
     return request<EvidenceMutationResponse>('/api/evidence/items', {
       method: 'PUT',
-      body: JSON.stringify(item),
+      body: JSON.stringify({ project, ...item }),
     });
   },
 
-  confirmEvidenceItem(evidenceId: string) {
+  confirmEvidenceItem(project: string, evidenceId: string) {
     return request<EvidenceMutationResponse>('/api/evidence/items/confirm', {
       method: 'POST',
-      body: JSON.stringify({ evidenceId }),
+      body: JSON.stringify({ project, evidenceId }),
     });
   },
 
-  createEvidenceTask(task: EvidenceTaskInput) {
+  createEvidenceTask(project: string, task: EvidenceTaskInput) {
     return request<EvidenceMutationResponse>('/api/evidence/tasks', {
       method: 'POST',
-      body: JSON.stringify(task),
+      body: JSON.stringify({ project, ...task }),
     });
   },
 
-  updateEvidenceTask(taskId: string, status: EvidenceTaskInput['status'], completionEvidenceIds: string[] = []) {
+  updateEvidenceTask(project: string, taskId: string, status: EvidenceTaskInput['status'], completionEvidenceIds: string[] = []) {
     return request<EvidenceMutationResponse>('/api/evidence/tasks', {
       method: 'PUT',
-      body: JSON.stringify({ taskId, status, completionEvidenceIds }),
+      body: JSON.stringify({ project, taskId, status, completionEvidenceIds }),
     });
   },
 
-  getInterviewItems() {
-    return request<InterviewItemsResponse>('/api/interview/items');
+  getInterviewItems(project: string) {
+    return request<InterviewItemsResponse>(`/api/interview/items?project=${encodeURIComponent(project)}`);
   },
 
-  getInterviewStoryBank() {
-    return request<InterviewStoryBankResponse>('/api/interview/story-bank');
+  getInterviewStoryBank(project: string) {
+    return request<InterviewStoryBankResponse>(`/api/interview/story-bank?project=${encodeURIComponent(project)}`);
   },
 
-  saveInterviewStoryBank(stories: unknown[]) {
+  saveInterviewStoryBank(project: string, stories: unknown[]) {
     return request<InterviewStoryBankResponse>('/api/interview/story-bank', {
       method: 'PUT',
-      body: JSON.stringify({ stories }),
+      body: JSON.stringify({ project, stories }),
     });
   },
 
-  getInterviewStoryDrafts() {
-    return request<InterviewStoryDraftsResponse>('/api/interview/story-drafts');
+  getInterviewStoryDrafts(project: string) {
+    return request<InterviewStoryDraftsResponse>(`/api/interview/story-drafts?project=${encodeURIComponent(project)}`);
   },
 
-  saveInterviewStoryDrafts(drafts: unknown[]) {
+  saveInterviewStoryDrafts(project: string, drafts: unknown[]) {
     return request<InterviewStoryDraftsResponse>('/api/interview/story-drafts', {
       method: 'PUT',
-      body: JSON.stringify({ drafts }),
+      body: JSON.stringify({ project, drafts }),
     });
   },
 
-  promoteInterviewStoryDraft(draftId: string, draft: InterviewStoryDraft) {
+  promoteInterviewStoryDraft(project: string, draftId: string, draft: InterviewStoryDraft) {
     return request<InterviewStoryDraftPromoteResponse>('/api/interview/story-drafts/promote', {
       method: 'POST',
-      body: JSON.stringify({ draftId, draft }),
+      body: JSON.stringify({ project, draftId, draft }),
     });
   },
 

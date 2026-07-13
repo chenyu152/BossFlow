@@ -17,6 +17,7 @@ export function useProjectsConfig({
   const [loading, setLoading] = useState(false);
   const [isConfigDirty, setIsConfigDirty] = useState(false);
   const projectRef = useRef(project);
+  const loadEpochRef = useRef(0);
   const tRef = useRef(t);
 
   useEffect(() => {
@@ -28,9 +29,11 @@ export function useProjectsConfig({
   }, [t]);
 
   const loadConfig = useCallback(async (targetProject?: string) => {
+    const loadEpoch = ++loadEpochRef.current;
     setLoading(true);
     try {
       const data = await bossApi.getConfig(targetProject ?? projectRef.current);
+      if (loadEpoch !== loadEpochRef.current) return;
       setConfig(data);
       setIsConfigDirty(false);
       setProject(data.project);
@@ -39,7 +42,7 @@ export function useProjectsConfig({
     } catch (error) {
       showNotice(tRef.current('notices.loadFailed', { error: (error as Error).message }));
     } finally {
-      setLoading(false);
+      if (loadEpoch === loadEpochRef.current) setLoading(false);
     }
   }, [loadInitialResources, showNotice]);
 
