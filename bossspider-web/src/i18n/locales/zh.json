@@ -881,6 +881,7 @@
     "targetJob": "目标岗位",
     "evidenceBasis": "面试证据依据",
     "confirmedEvidence": "已确认职业证据",
+    "evidenceCitationHint": "文档中的相关问答会标记为【证据：ev-*】。",
     "sourceVerifiedFacts": "简历直接核验",
     "pendingEvidence": "待确认要求",
     "evidencePendingHint": "这些内容只会作为追问或待补充项，不会写成已完成经历。",

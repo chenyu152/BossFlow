@@ -25,6 +25,11 @@ function splitMarkdownTableRow(line: string): string[] {
     .map((cell) => cell.trim().replace(/\*\*/g, ''));
 }
 
+function isMarkdownTableSeparator(line: string): boolean {
+  const cells = splitMarkdownTableRow(line);
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
 function sectionLines(content: string, headingPattern: RegExp): string[] {
   const lines = content.split(/\r?\n/);
   const section: string[] = [];
@@ -54,7 +59,7 @@ export function extractStoryDraftsFromPrep(content: string): InterviewStory[] {
 
   for (const raw of sectionLines(content, /^##\s+C[.、\s]/)) {
     const line = raw.trim();
-    if (!line.startsWith('|') || /^[-|\s]+$/.test(line) || line.includes('问题/能力点')) continue;
+    if (!line.startsWith('|') || isMarkdownTableSeparator(line) || line.includes('问题/能力点')) continue;
     const [theme, title, why, angle, risk] = splitMarkdownTableRow(line);
     if (!title || title === '推荐故事') continue;
     drafts.push({

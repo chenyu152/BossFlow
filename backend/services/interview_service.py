@@ -558,6 +558,7 @@ Evidence rules:
 - Confirmed professional evidence is reusable across jobs. Use only the evidence IDs supplied below to support interview-ready experience, follow-up questions, and revision priorities; cite an evidence ID where useful.
 - Source-verified resume facts may be used as objective facts only. Do not invent an evidence ID or expand one into a project experience.
 - Pending requirements may only appear as follow-up questions, risks, or facts the user needs to supply. Never present them as completed candidate experience, metrics, or STAR stories.
+- In the generated Markdown, attach `【证据：ev-...】` to every recommended answer angle, story match, or review point that relies on confirmed professional evidence. Use `【简历直接核验】` for source-verified resume facts and `【待补充】` for pending requirements. Do not cite an ID that is not supplied below.
 """
     user += f"""
 

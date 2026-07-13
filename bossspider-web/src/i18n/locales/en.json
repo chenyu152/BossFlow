@@ -880,6 +880,7 @@
     "targetJob": "Target job",
     "evidenceBasis": "Interview evidence basis",
     "confirmedEvidence": "Confirmed professional evidence",
+    "evidenceCitationHint": "Related answers in the prep document are tagged as 【Evidence: ev-*】.",
     "sourceVerifiedFacts": "Resume-verified facts",
     "pendingEvidence": "Requirements still pending",
     "evidencePendingHint": "These are kept as follow-up or missing facts, never presented as completed experience.",

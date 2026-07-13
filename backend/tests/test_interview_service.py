@@ -56,6 +56,7 @@ class InterviewServiceTest(unittest.TestCase):
         self.assertIn("Confirmed professional evidence", prompts[1]["content"])
         self.assertIn("Missing proof", prompts[1]["content"])
         self.assertIn("Pending requirements may only appear", prompts[0]["content"])
+        self.assertIn("【证据：ev-...】", prompts[0]["content"])
 
 
 if __name__ == "__main__":

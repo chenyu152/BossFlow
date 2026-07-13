@@ -294,6 +294,7 @@ export function Interview({
                               </span>
                             ))}
                           </div>
+                          <div className="mt-1.5 text-[10px] text-zinc-500">{t('interview.evidenceCitationHint')}</div>
                         </div>
                       )}
                       {evidenceContext.sourceVerifiedRequirements.length > 0 && (
