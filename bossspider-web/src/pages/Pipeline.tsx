@@ -9,15 +9,18 @@ import { useSelectedPipelineItem } from '../hooks/useSelectedPipelineItem';
 import type {
   DecisionStatus,
   EvidenceClassification,
+  EvidenceCoverage,
   EvidenceItem,
   EvidenceItemInput,
   EvidenceMutationResponse,
   EvidenceOverviewResponse,
+  EvidenceRequirement,
   EvidenceTaskInput,
   GreetingDraftResponse,
   GreetingDraftStatus,
   InterviewPrepResponse,
   Job,
+  PipelineItem,
   PipelineReportResponse,
   PipelineResponse,
   ResumeNavigationTarget,
@@ -99,6 +102,85 @@ function MaterialBadge({ label, ready, tone = 'zinc' }: { label: string; ready: 
       {label}
     </span>
   );
+}
+
+type EvidenceReadiness = 'ready' | 'needs_confirmation' | 'hard_gap' | 'unassessed';
+
+type EvidenceReadinessSummary = {
+  status: EvidenceReadiness;
+  requirementCount: number;
+  supportedCount: number;
+  pendingDecisionCount: number;
+  confirmedHardGapCount: number;
+};
+
+const EVIDENCE_READINESS_ORDER: Record<EvidenceReadiness, number> = {
+  hard_gap: 0,
+  needs_confirmation: 1,
+  unassessed: 2,
+  ready: 3,
+};
+
+function getEvidenceReadiness(
+  item: PipelineItem,
+  requirements: EvidenceRequirement[],
+  coverageByRequirement: Map<string, EvidenceCoverage>,
+): EvidenceReadinessSummary {
+  const requirementCount = requirements.length || item.requirementCount || 0;
+  const hasAssessment = requirements.length > 0 || Boolean(item.requirementAssessedAt);
+  if (!hasAssessment || !requirementCount) {
+    return {
+      status: 'unassessed',
+      requirementCount: 0,
+      supportedCount: 0,
+      pendingDecisionCount: 0,
+      confirmedHardGapCount: 0,
+    };
+  }
+
+  if (!requirements.length) {
+    const pendingDecisionCount = Math.max(0, item.unresolvedRequirementCount || 0);
+    return {
+      status: pendingDecisionCount ? 'needs_confirmation' : 'ready',
+      requirementCount,
+      supportedCount: item.supportedRequirementCount || 0,
+      pendingDecisionCount,
+      confirmedHardGapCount: 0,
+    };
+  }
+
+  const supportedCount = requirements.filter(
+    (requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'supported',
+  ).length;
+  const pendingDecisionCount = requirements.filter((requirement) => {
+    const coverage = coverageByRequirement.get(requirement.requirementId);
+    return coverage?.coverageStatus !== 'supported' && !coverage?.userDecisionAt;
+  }).length;
+  const confirmedHardGapCount = requirements.filter((requirement) => {
+    const coverage = coverageByRequirement.get(requirement.requirementId);
+    return requirement.importance === 'required' && coverage?.coverageStatus === 'user_confirmed_absent';
+  }).length;
+
+  return {
+    status: confirmedHardGapCount
+      ? 'hard_gap'
+      : pendingDecisionCount
+        ? 'needs_confirmation'
+        : 'ready',
+    requirementCount,
+    supportedCount,
+    pendingDecisionCount,
+    confirmedHardGapCount,
+  };
+}
+
+function evidenceReadinessClass(status: EvidenceReadiness) {
+  return {
+    ready: 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-950/65',
+    needs_confirmation: 'border-amber-900/70 bg-amber-950/40 text-amber-300 hover:bg-amber-950/65',
+    hard_gap: 'border-red-900/70 bg-red-950/40 text-red-300 hover:bg-red-950/65',
+    unassessed: 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-900',
+  }[status];
 }
 
 export function Pipeline({
@@ -198,6 +280,9 @@ export function Pipeline({
   const pending = pipeline?.pending || [];
   const processed = pipeline?.processed || [];
   const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all');
+  const [evidenceFilter, setEvidenceFilter] = useState<'all' | EvidenceReadiness>('all');
+  const [sortByEvidence, setSortByEvidence] = useState(false);
+  const [evidenceFocus, setEvidenceFocus] = useState<{ sourceKey: string; requestId: number } | null>(null);
   const evaluatingSet = new Set(llmEvaluatingKeys);
   const suggestingSet = new Set(resumeSuggestingKeys);
   const preparingSet = new Set(interviewPreparingKeys);
@@ -273,13 +358,57 @@ export function Pipeline({
   const isSelectedInterviewPreparing = selectedItem ? preparingSet.has(selectedItem.sourceKey) : false;
   const isSelectedLlmEvaluating = selectedItem ? evaluatingSet.has(selectedItem.sourceKey) : false;
 
+  const requirementsBySourceKey = useMemo(() => {
+    const grouped = new Map<string, EvidenceRequirement[]>();
+    (evidenceOverview?.requirements || []).forEach((requirement) => {
+      if (requirement.active === false) return;
+      const requirements = grouped.get(requirement.sourceKey) || [];
+      requirements.push(requirement);
+      grouped.set(requirement.sourceKey, requirements);
+    });
+    return grouped;
+  }, [evidenceOverview?.requirements]);
+  const coverageByRequirement = useMemo(
+    () => new Map((evidenceOverview?.coverages || []).map((coverage) => [coverage.requirementId, coverage])),
+    [evidenceOverview?.coverages],
+  );
+  const evidenceReadinessBySourceKey = useMemo(
+    () => new Map(pending.map((item) => [
+      item.sourceKey,
+      getEvidenceReadiness(item, requirementsBySourceKey.get(item.sourceKey) || [], coverageByRequirement),
+    ])),
+    [coverageByRequirement, pending, requirementsBySourceKey],
+  );
+
   const displayedPending = useMemo(() => {
-    const filtered = statusFilter === 'all'
+    const statusFiltered = statusFilter === 'all'
       ? pending
       : pending.filter((item) => item.decisionStatus === statusFilter);
-    if (!sortByLlmScore) return filtered;
-    return [...filtered].sort((a, b) => (b.llmScore ?? -1) - (a.llmScore ?? -1));
-  }, [pending, sortByLlmScore, statusFilter]);
+    const filtered = evidenceFilter === 'all'
+      ? statusFiltered
+      : statusFiltered.filter((item) => evidenceReadinessBySourceKey.get(item.sourceKey)?.status === evidenceFilter);
+    if (!sortByLlmScore && !sortByEvidence) return filtered;
+    return [...filtered].sort((left, right) => {
+      if (sortByEvidence) {
+        const readinessDifference = EVIDENCE_READINESS_ORDER[evidenceReadinessBySourceKey.get(left.sourceKey)?.status || 'unassessed']
+          - EVIDENCE_READINESS_ORDER[evidenceReadinessBySourceKey.get(right.sourceKey)?.status || 'unassessed'];
+        if (readinessDifference) return readinessDifference;
+        const pendingDifference = (evidenceReadinessBySourceKey.get(right.sourceKey)?.pendingDecisionCount || 0)
+          - (evidenceReadinessBySourceKey.get(left.sourceKey)?.pendingDecisionCount || 0);
+        if (pendingDifference) return pendingDifference;
+      }
+      if (sortByLlmScore) return (right.llmScore ?? -1) - (left.llmScore ?? -1);
+      return 0;
+    });
+  }, [evidenceFilter, evidenceReadinessBySourceKey, pending, sortByEvidence, sortByLlmScore, statusFilter]);
+
+  const openEvidenceReadiness = useCallback((item: PipelineItem) => {
+    setEvidenceFocus((current) => ({
+      sourceKey: item.sourceKey,
+      requestId: (current?.requestId || 0) + 1,
+    }));
+    void selectItem(item);
+  }, [selectItem]);
 
   useEffect(() => {
     if (initialSelectionAppliedRef.current || selectedSourceKey || !displayedPending.length) return;
@@ -326,6 +455,14 @@ export function Pipeline({
             <ArrowDownWideNarrow size={14} />
             {t('pipeline.llmSort')}
           </button>
+          <button
+            onClick={() => setSortByEvidence((value) => !value)}
+            disabled={!pending.length}
+            className={`inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByEvidence ? 'border-amber-800 bg-amber-950/40 text-amber-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
+          >
+            <ArrowDownWideNarrow size={14} />
+            {t('pipeline.evidence.sort')}
+          </button>
           <button onClick={onRefresh} className="p-1.5 border border-zinc-800 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors">
             <RefreshCw size={14} />
           </button>
@@ -340,6 +477,23 @@ export function Pipeline({
             className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${filter.value === 'all' ? (statusFilter === 'all' ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200') : statusButtonClass(filter.value, statusFilter === filter.value)}`}
           >
             {filter.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-zinc-900 pt-3">
+        <span className="mr-1 text-xs text-zinc-500">{t('pipeline.evidence.title')}</span>
+        {(['all', 'ready', 'needs_confirmation', 'hard_gap', 'unassessed'] as const).map((filter) => (
+          <button
+            key={filter}
+            onClick={() => setEvidenceFilter(filter)}
+            className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+              evidenceFilter === filter
+                ? filter === 'all' ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : evidenceReadinessClass(filter)
+                : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+            }`}
+          >
+            {t(`pipeline.evidence.filters.${filter}`)}
           </button>
         ))}
       </div>
@@ -366,11 +520,18 @@ export function Pipeline({
                 const isSelected = selectedSourceKey === item.sourceKey;
                 return (
                   <button
-                    key={item.sourceKey || item.raw}
-                    type="button"
-                    onClick={() => { void selectItem(item); }}
-                    aria-pressed={isSelected}
-                    className={`w-full rounded-md border p-3 text-left transition-colors ${isSelected ? 'border-indigo-700 bg-indigo-950/25 shadow-[inset_3px_0_0_0_rgb(79_70_229)]' : isLlmEvaluating ? 'border-emerald-900/60 bg-emerald-950/15 hover:bg-emerald-950/25' : 'border-zinc-800 bg-zinc-900/35 hover:border-zinc-700 hover:bg-zinc-900/70'}`}
+                      key={item.sourceKey || item.raw}
+                      type="button"
+                      tabIndex={0}
+                      onClick={(event) => {
+                        if ((event.target as HTMLElement).closest('[data-evidence-readiness]')) {
+                          openEvidenceReadiness(item);
+                          return;
+                        }
+                        void selectItem(item);
+                      }}
+                      aria-pressed={isSelected}
+                      className={`w-full rounded-md border p-3 text-left transition-colors ${isSelected ? 'border-indigo-700 bg-indigo-950/25 shadow-[inset_3px_0_0_0_rgb(79_70_229)]' : isLlmEvaluating ? 'border-emerald-900/60 bg-emerald-950/15 hover:bg-emerald-950/25' : 'border-zinc-800 bg-zinc-900/35 hover:border-zinc-700 hover:bg-zinc-900/70'}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -405,6 +566,27 @@ export function Pipeline({
                       <MaterialBadge label={t('pipeline.materialShort.resumeDraft')} ready={Boolean(item.resumeDraftPath)} tone="indigo" />
                       <MaterialBadge label={t('pipeline.materialShort.interviewPrep')} ready={Boolean(item.interviewPrepPath)} tone="cyan" />
                     </div>
+                    {(() => {
+                      const readiness = evidenceReadinessBySourceKey.get(item.sourceKey) || getEvidenceReadiness(item, [], coverageByRequirement);
+                      return (
+                        <span
+                          data-evidence-readiness
+                          className={`mt-2 flex w-full items-center justify-between gap-2 rounded border px-2 py-1.5 text-left text-[10px] transition-colors ${evidenceReadinessClass(readiness.status)}`}
+                          title={t('pipeline.evidence.openEvaluation')}
+                        >
+                          <span className="shrink-0 font-medium">{t(`pipeline.evidence.readiness.${readiness.status}`)}</span>
+                          {readiness.requirementCount ? (
+                            <span className="min-w-0 truncate text-right">
+                              {readiness.supportedCount}/{readiness.requirementCount} {t('pipeline.evidence.covered')}
+                              {' · '}{readiness.pendingDecisionCount} {t('pipeline.evidence.pending')}
+                              {' · '}{readiness.confirmedHardGapCount} {t('pipeline.evidence.hardGaps')}
+                            </span>
+                          ) : (
+                            <span>{t('pipeline.evidence.openEvaluation')}</span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </button>
                 );
               })}
@@ -431,6 +613,7 @@ export function Pipeline({
             onOpenPersonalResume={onOpenPersonalResume}
             targetRequirementId={targetRequirementId}
             targetRequestId={targetRequestId}
+            evidenceFocusRequestId={evidenceFocus?.sourceKey === selectedItem.sourceKey ? evidenceFocus.requestId : undefined}
             job={selectedJob}
             detailLoading={detailLoading}
             statusOptions={STATUS_OPTIONS}

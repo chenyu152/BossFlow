@@ -386,6 +386,27 @@
       "near": "接近",
       "risk": "风险",
       "unknown": "未知"
+    },
+    "evidence": {
+      "title": "证据准备度",
+      "sort": "证据优先",
+      "covered": "已覆盖",
+      "pending": "待确认",
+      "hardGaps": "硬性缺口",
+      "openEvaluation": "查看匹配评估",
+      "filters": {
+        "all": "全部",
+        "ready": "可推进",
+        "needs_confirmation": "待确认",
+        "hard_gap": "硬性缺口",
+        "unassessed": "待评估"
+      },
+      "readiness": {
+        "ready": "可推进",
+        "needs_confirmation": "待确认",
+        "hard_gap": "存在硬性缺口",
+        "unassessed": "待评估"
+      }
     }
   },
   "jobWorkspace": {

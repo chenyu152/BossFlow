@@ -385,6 +385,27 @@
       "near": "near",
       "risk": "risk",
       "unknown": "unknown"
+    },
+    "evidence": {
+      "title": "Evidence readiness",
+      "sort": "Evidence first",
+      "covered": "covered",
+      "pending": "to confirm",
+      "hardGaps": "hard gaps",
+      "openEvaluation": "Open assessment",
+      "filters": {
+        "all": "All",
+        "ready": "Ready",
+        "needs_confirmation": "To confirm",
+        "hard_gap": "Hard gaps",
+        "unassessed": "Unassessed"
+      },
+      "readiness": {
+        "ready": "Ready to proceed",
+        "needs_confirmation": "Needs confirmation",
+        "hard_gap": "Hard gap found",
+        "unassessed": "Needs assessment"
+      }
     }
   },
   "jobWorkspace": {

@@ -65,6 +65,7 @@ type JobWorkspaceProps = {
   onOpenPersonalResume: () => void;
   targetRequirementId?: string;
   targetRequestId?: number;
+  evidenceFocusRequestId?: number;
   job: Job | null;
   detailLoading: boolean;
   statusOptions: StatusOption[];
@@ -239,6 +240,7 @@ export function JobWorkspace({
   onOpenPersonalResume,
   targetRequirementId,
   targetRequestId,
+  evidenceFocusRequestId,
   job,
   detailLoading,
   statusOptions,
@@ -355,6 +357,11 @@ export function JobWorkspace({
       window.cancelAnimationFrame(scrollFrame);
     };
   }, [evidenceOverview?.requirements, item.sourceKey, targetRequestId, targetRequirementId]);
+
+  useEffect(() => {
+    if (!evidenceFocusRequestId) return;
+    setActiveTab('evaluation');
+  }, [evidenceFocusRequestId]);
 
   const nextAction = useMemo<NextAction>(() => {
     if (!item.reportPath) return 'llm';
