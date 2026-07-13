@@ -423,6 +423,9 @@
     "nextActionWhy": "Why",
     "nextActionLabels": {
       "llm": "Missing LLM evaluation",
+      "evidence_assessment": "Missing structured evidence assessment",
+      "evidence_gap": "A confirmed hard gap exists",
+      "evidence_review": "Core requirements need confirmation",
       "resume": "Missing resume suggestions",
       "draft": "Missing tailored resume",
       "interview": "Missing interview prep",
@@ -431,6 +434,9 @@
     },
     "nextActionReasons": {
       "llm": "First decide whether this role is worth spending more time on.",
+      "evidence_assessment": "This report has not produced structured core requirements yet. Re-evaluate it before judging evidence readiness.",
+      "evidence_gap": "You have confirmed that at least one required experience is absent. Decide whether to proceed with that risk, prepare, or skip first.",
+      "evidence_review": "Some core requirements still need an evidence decision. Confirm them before generating materials so inferred content is not treated as personal fact.",
       "resume": "The evaluation is ready, so the JD requirements can be turned into concrete resume edits.",
       "draft": "Resume suggestions exist. Open Resume Materials, review them, and generate the tailored resume next.",
       "interview": "Resume materials are ready, so interview questions and story material can be prepared next.",
@@ -439,7 +445,10 @@
     },
     "nextActionButtons": {
       "draft": "View resume suggestions",
-      "confirm": "Update status"
+      "confirm": "Update status",
+      "evidenceAssessment": "Re-evaluate",
+      "evidenceGap": "Resolve {{count}} hard gaps",
+      "evidenceReview": "Confirm {{count}} requirements"
     },
     "openResumeMaterials": "Open Resume Materials",
     "nextActions": {

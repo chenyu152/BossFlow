@@ -424,6 +424,9 @@
     "nextActionWhy": "原因",
     "nextActionLabels": {
       "llm": "缺少 LLM 精评",
+      "evidence_assessment": "缺少结构化证据评估",
+      "evidence_gap": "存在已确认硬性缺口",
+      "evidence_review": "有核心要求待确认",
       "resume": "缺少简历建议",
       "draft": "缺少定制简历",
       "interview": "缺少面试准备",
@@ -432,6 +435,9 @@
     },
     "nextActionReasons": {
       "llm": "需要先判断这个岗位是否值得继续投入时间。",
+      "evidence_assessment": "这份报告尚未提取结构化核心要求。重新精评后，系统才能正确判断证据准备度。",
+      "evidence_gap": "存在你已确认未做过的硬性要求。请先决定是否带风险推进、补充准备或跳过。",
+      "evidence_review": "还有核心要求尚未完成证据判断；确认后再生成材料，可以避免把推断内容当作个人事实。",
       "resume": "精评已完成，可以开始把 JD 要求转成可执行的简历修改点。",
       "draft": "已有简历建议，下一步需要去简历材料页确认建议并生成定制简历。",
       "interview": "简历材料已经具备，可以继续准备岗位面试问题和故事素材。",
@@ -440,7 +446,10 @@
     },
     "nextActionButtons": {
       "draft": "查看简历建议",
-      "confirm": "更新状态"
+      "confirm": "更新状态",
+      "evidenceAssessment": "重新精评",
+      "evidenceGap": "处理 {{count}} 个硬性缺口",
+      "evidenceReview": "确认 {{count}} 条要求"
     },
     "openResumeMaterials": "去简历材料页生成",
     "nextActions": {

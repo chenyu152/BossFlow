@@ -34,7 +34,7 @@ import type {
 } from '../types';
 
 type WorkspaceTab = 'overview' | 'evaluation' | 'materials' | 'interview';
-type NextAction = 'llm' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
+type NextAction = 'llm' | 'evidence_assessment' | 'evidence_gap' | 'evidence_review' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
 type EvidenceDecisionTarget = {
   requirement: EvidenceRequirement;
   classification: EvidenceClassification;
@@ -312,11 +312,19 @@ export function JobWorkspace({
     ? requirements.filter((requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'supported').length
     : item.supportedRequirementCount || 0;
   const pendingDecisionCount = requirements.length
-    ? requirements.filter((requirement) => !coverageByRequirement.get(requirement.requirementId)?.userDecisionAt).length
+    ? requirements.filter((requirement) => {
+      const coverage = coverageByRequirement.get(requirement.requirementId);
+      return coverage?.coverageStatus !== 'supported' && !coverage?.userDecisionAt;
+    }).length
     : item.unresolvedRequirementCount || 0;
   const confirmedGapCount = requirements.filter(
     (requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'user_confirmed_absent',
   ).length;
+  const confirmedHardGapCount = requirements.filter((requirement) => (
+    requirement.importance === 'required'
+      && coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'user_confirmed_absent'
+  )).length;
+  const hasEvidenceAssessment = requirements.length > 0 || Boolean(item.requirementAssessedAt);
   const potentialEvidenceCount = requirements.length
     ? requirements.filter((requirement) => {
       const coverage = coverageByRequirement.get(requirement.requirementId);
@@ -365,12 +373,24 @@ export function JobWorkspace({
 
   const nextAction = useMemo<NextAction>(() => {
     if (!item.reportPath) return 'llm';
+    if (!hasEvidenceAssessment) return 'evidence_assessment';
+    if (confirmedHardGapCount > 0) return 'evidence_gap';
+    if (pendingDecisionCount > 0) return 'evidence_review';
     if (!item.resumeSuggestionPath) return 'resume';
     if (!item.resumeDraftPath) return 'draft';
     if (!item.interviewPrepPath) return 'interview';
     if (item.decisionStatus === 'needs_review') return 'confirm';
     return 'review';
-  }, [item.decisionStatus, item.interviewPrepPath, item.reportPath, item.resumeDraftPath, item.resumeSuggestionPath]);
+  }, [
+    confirmedHardGapCount,
+    hasEvidenceAssessment,
+    item.decisionStatus,
+    item.interviewPrepPath,
+    item.reportPath,
+    item.resumeDraftPath,
+    item.resumeSuggestionPath,
+    pendingDecisionCount,
+  ]);
 
   const tabs: Array<{ value: WorkspaceTab; label: string }> = [
     { value: 'overview', label: t('jobWorkspace.tabs.overview') },
@@ -660,6 +680,24 @@ export function JobWorkspace({
                     <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="emerald">
                       {isLlmEvaluating && <Loader2 size={13} className="animate-spin" />}
                       {isLlmEvaluating ? t('pipeline.generating') : t('pipeline.llmEval')}
+                    </ActionButton>
+                  )}
+                  {nextAction === 'evidence_assessment' && (
+                    <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="emerald">
+                      {isLlmEvaluating ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+                      {isLlmEvaluating ? t('pipeline.generating') : t('jobWorkspace.nextActionButtons.evidenceAssessment')}
+                    </ActionButton>
+                  )}
+                  {nextAction === 'evidence_gap' && (
+                    <ActionButton onClick={() => setActiveTab('evaluation')} tone="red">
+                      <CheckCircle2 size={13} />
+                      {t('jobWorkspace.nextActionButtons.evidenceGap', { count: confirmedHardGapCount })}
+                    </ActionButton>
+                  )}
+                  {nextAction === 'evidence_review' && (
+                    <ActionButton onClick={() => setActiveTab('evaluation')} tone="amber">
+                      <CheckCircle2 size={13} />
+                      {t('jobWorkspace.nextActionButtons.evidenceReview', { count: pendingDecisionCount })}
                     </ActionButton>
                   )}
                   {nextAction === 'resume' && (
