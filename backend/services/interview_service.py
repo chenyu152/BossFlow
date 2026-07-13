@@ -17,6 +17,7 @@ from backend.services.llm_evaluation_service import (
     _slug,
 )
 from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
+from backend.services.evidence_service import read_evidence_overview
 from backend.storage.paths import BASE_DIR
 
 INTERVIEW_DATA_DIR = BASE_DIR / "data" / "interview-prep"
@@ -66,6 +67,89 @@ def _safe_interview_prep_path(path_value: str) -> Path:
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(status_code=404, detail="Interview prep file not found")
     return resolved
+
+
+def _load_interview_prep_json(prep_path: Path) -> dict[str, Any]:
+    json_path = prep_path.with_suffix(".json")
+    if not json_path.exists() or not json_path.is_file():
+        return {}
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _interview_evidence_context(source_key: str) -> dict[str, list[dict[str, Any]]]:
+    """Return evidence that is safe to use for one job's interview preparation."""
+    overview = read_evidence_overview()
+    requirements = [
+        item
+        for item in overview.get("requirements", [])
+        if item.get("sourceKey") == source_key and item.get("active") is not False
+    ]
+    requirement_ids = {str(item.get("requirementId") or "") for item in requirements}
+    coverages_by_requirement = {
+        str(item.get("requirementId") or ""): item
+        for item in overview.get("coverages", [])
+        if str(item.get("requirementId") or "") in requirement_ids
+    }
+    evidence_by_id = {
+        str(item.get("evidenceId") or ""): item
+        for item in overview.get("evidenceItems", [])
+        if item.get("status") == "confirmed"
+    }
+    confirmed_ids = {
+        str(evidence_id)
+        for coverage in coverages_by_requirement.values()
+        if coverage.get("coverageStatus") == "supported"
+        for evidence_id in coverage.get("evidenceIds") or []
+        if str(evidence_id) in evidence_by_id
+    }
+    source_verified_requirements = [
+        {
+            "requirementId": requirement.get("requirementId", ""),
+            "label": requirement.get("label", ""),
+            "jdQuote": requirement.get("jdQuote", ""),
+            "candidateEvidenceRefs": coverages_by_requirement.get(
+                str(requirement.get("requirementId") or ""), {}
+            ).get("candidateEvidenceRefs", []),
+        }
+        for requirement in requirements
+        if (
+            coverages_by_requirement.get(str(requirement.get("requirementId") or ""), {}).get("coverageStatus") == "supported"
+            and coverages_by_requirement.get(str(requirement.get("requirementId") or ""), {}).get("verificationStatus") == "source_verified"
+        )
+    ]
+    pending_requirements = [
+        {
+            "requirementId": requirement.get("requirementId", ""),
+            "label": requirement.get("label", ""),
+            "importance": requirement.get("importance", "context"),
+            "coverageStatus": coverage.get("coverageStatus", "unknown"),
+            "userClassification": coverage.get("userClassification", ""),
+            "rationale": coverage.get("rationale", ""),
+        }
+        for requirement in requirements
+        for coverage in [coverages_by_requirement.get(str(requirement.get("requirementId") or ""), {})]
+        if coverage.get("coverageStatus") != "supported"
+    ]
+    return {
+        "confirmedEvidence": [
+            {
+                "evidenceId": evidence_id,
+                "title": evidence_by_id[evidence_id].get("title", ""),
+                "summary": evidence_by_id[evidence_id].get("summary", ""),
+                "userRole": evidence_by_id[evidence_id].get("userRole", ""),
+                "actions": evidence_by_id[evidence_id].get("actions", []),
+                "results": evidence_by_id[evidence_id].get("results", []),
+                "sourceRefs": evidence_by_id[evidence_id].get("sourceRefs", []),
+            }
+            for evidence_id in sorted(confirmed_ids)
+        ],
+        "sourceVerifiedRequirements": source_verified_requirements,
+        "pendingRequirements": pending_requirements,
+    }
 
 
 def _ensure_story_bank() -> None:
@@ -379,6 +463,7 @@ def _prompt(
     story_bank: str,
     report_text: str,
     resume_draft_text: str,
+    evidence_context: dict[str, list[dict[str, Any]]],
     user_notes: str,
 ) -> list[dict[str, str]]:
     cv_text = _read_text(CV_PATH, 18000)
@@ -467,6 +552,30 @@ profile.yml：
 {user_notes or "无"}
 ```
 """
+    system += """
+
+Evidence rules:
+- Confirmed professional evidence is reusable across jobs. Use only the evidence IDs supplied below to support interview-ready experience, follow-up questions, and revision priorities; cite an evidence ID where useful.
+- Source-verified resume facts may be used as objective facts only. Do not invent an evidence ID or expand one into a project experience.
+- Pending requirements may only appear as follow-up questions, risks, or facts the user needs to supply. Never present them as completed candidate experience, metrics, or STAR stories.
+"""
+    user += f"""
+
+Confirmed professional evidence (reusable across jobs):
+```json
+{json.dumps(evidence_context.get("confirmedEvidence", []), ensure_ascii=False, indent=2)}
+```
+
+Source-verified resume facts:
+```json
+{json.dumps(evidence_context.get("sourceVerifiedRequirements", []), ensure_ascii=False, indent=2)}
+```
+
+Pending requirements (only use as follow-up questions or missing facts):
+```json
+{json.dumps(evidence_context.get("pendingRequirements", []), ensure_ascii=False, indent=2)}
+```
+"""
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
@@ -476,7 +585,8 @@ def generate_interview_prep(source_key: str, user_notes: str = "") -> dict[str, 
     story_bank = STORY_BANK_PATH.read_text(encoding="utf-8")
     report_text = _safe_read_markdown(str(item.get("reportPath") or ""), REPORTS_DIR, 15000)
     resume_draft_text = _safe_read_markdown(str(item.get("resumeDraftPath") or ""), RESUME_OUTPUT_DIR, 16000)
-    content = _call_llm(_prompt(job, item, story_bank, report_text, resume_draft_text, user_notes))
+    evidence_context = _interview_evidence_context(source_key)
+    content = _call_llm(_prompt(job, item, story_bank, report_text, resume_draft_text, evidence_context, user_notes))
 
     prep_id = _next_interview_id()
     now = dt.datetime.now()
@@ -497,6 +607,8 @@ def generate_interview_prep(source_key: str, user_notes: str = "") -> dict[str, 
         "prepPath": str(prep_path),
         "storyBankPath": str(STORY_BANK_PATH),
         "userNotes": user_notes,
+        "evidenceBindingVersion": 1,
+        "evidenceContext": evidence_context,
     }
     json_path = prep_path.with_suffix(".json")
     json_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -518,6 +630,8 @@ def generate_interview_prep(source_key: str, user_notes: str = "") -> dict[str, 
         "prepPath": str(prep_path),
         "jsonPath": str(json_path),
         "content": content,
+        "evidenceBindingVersion": 1,
+        "evidenceContext": evidence_context,
         "pipeline": read_pipeline(),
     }
 
@@ -527,10 +641,17 @@ def read_interview_prep(source_key: str) -> dict[str, Any]:
     if not item:
         raise HTTPException(status_code=404, detail=f"Pipeline item not found: {source_key}")
     path = _safe_interview_prep_path(str(item.get("interviewPrepPath") or ""))
+    meta = _load_interview_prep_json(path)
+    evidence_context = meta.get("evidenceContext")
+    if not isinstance(evidence_context, dict):
+        evidence_context = _interview_evidence_context(source_key)
     return {
         "ok": True,
         "sourceKey": source_key,
         "interviewPrepId": item.get("interviewPrepId", ""),
         "prepPath": str(path),
+        "jsonPath": str(path.with_suffix(".json")),
         "content": path.read_text(encoding="utf-8"),
+        "evidenceBindingVersion": int(meta.get("evidenceBindingVersion") or 0),
+        "evidenceContext": evidence_context,
     }

@@ -434,6 +434,24 @@ export type InterviewStoryDraftPromoteResponse = {
   storyDrafts: InterviewStoryDraftsResponse;
 };
 
+export type InterviewPrepEvidenceContext = {
+  confirmedEvidence: Array<Pick<EvidenceItem, 'evidenceId' | 'title' | 'summary' | 'userRole' | 'actions' | 'results' | 'sourceRefs'>>;
+  sourceVerifiedRequirements: Array<{
+    requirementId: string;
+    label: string;
+    jdQuote: string;
+    candidateEvidenceRefs: NonNullable<EvidenceCoverage['candidateEvidenceRefs']>;
+  }>;
+  pendingRequirements: Array<{
+    requirementId: string;
+    label: string;
+    importance: EvidenceRequirementImportance;
+    coverageStatus: EvidenceCoverageStatus;
+    userClassification: string;
+    rationale: string;
+  }>;
+};
+
 export type InterviewPrepResponse = {
   ok: boolean;
   sourceKey: string;
@@ -441,6 +459,8 @@ export type InterviewPrepResponse = {
   prepPath: string;
   jsonPath?: string;
   content: string;
+  evidenceBindingVersion?: number;
+  evidenceContext?: InterviewPrepEvidenceContext;
   pipeline?: PipelineResponse;
 };
 

@@ -97,6 +97,7 @@ export function Interview({
     [items, selectedKey],
   );
   const isPreparing = selectedItem ? preparingSet.has(selectedItem.sourceKey) : false;
+  const evidenceContext = prep?.evidenceContext;
   const prepStoryDrafts = useMemo(() => extractStoryDraftsFromPrep(prep?.content || ''), [prep]);
   const prepStoryRows = useMemo<PrepStoryRow[]>(() => {
     if (!selectedItem || !prep) return [];
@@ -266,6 +267,63 @@ export function Interview({
                     <div className="mt-3 rounded border border-emerald-900/50 bg-emerald-950/20 p-3 text-xs leading-relaxed text-zinc-300">
                       {selectedItem.llmRecommendation}
                     </div>
+                  )}
+                </div>
+
+                <div className="rounded border border-zinc-800 bg-zinc-950">
+                  <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3 text-sm font-semibold text-zinc-100">
+                    <BrainCircuit size={14} className="text-emerald-400" />
+                    {t('interview.evidenceBasis')}
+                  </div>
+                  {evidenceContext ? (
+                    <div className="space-y-3 p-4 text-xs">
+                      {evidenceContext.confirmedEvidence.length > 0 && (
+                        <div>
+                          <div className="mb-1.5 text-zinc-500">{t('interview.confirmedEvidence')}</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {evidenceContext.confirmedEvidence.map((evidence) => (
+                              <span
+                                key={evidence.evidenceId}
+                                title={[
+                                  evidence.summary,
+                                  ...Array.from(new Set(evidence.sourceRefs.map((ref) => ref.ref).filter(Boolean))).map((ref) => `来源：${ref}`),
+                                ].filter(Boolean).join('\n')}
+                                className="rounded border border-emerald-900/60 bg-emerald-950/25 px-2 py-1 text-emerald-200"
+                              >
+                                {evidence.evidenceId} · {evidence.title || t('interview.confirmedEvidence')}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {evidenceContext.sourceVerifiedRequirements.length > 0 && (
+                        <div>
+                          <div className="mb-1.5 text-zinc-500">{t('interview.sourceVerifiedFacts')}</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {evidenceContext.sourceVerifiedRequirements.map((requirement) => (
+                              <span
+                                key={requirement.requirementId}
+                                title={requirement.candidateEvidenceRefs.map((ref) => ref.quote).filter(Boolean).join('\n')}
+                                className="rounded border border-cyan-900/60 bg-cyan-950/20 px-2 py-1 text-cyan-200"
+                              >
+                                {requirement.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {evidenceContext.pendingRequirements.length > 0 && (
+                        <div className="rounded border border-amber-900/50 bg-amber-950/15 px-3 py-2 text-amber-100">
+                          <span className="font-medium">{t('interview.pendingEvidence')}：{evidenceContext.pendingRequirements.length}</span>
+                          <span className="ml-2 text-amber-200/80">{t('interview.evidencePendingHint')}</span>
+                        </div>
+                      )}
+                      {!evidenceContext.confirmedEvidence.length && !evidenceContext.sourceVerifiedRequirements.length && !evidenceContext.pendingRequirements.length && (
+                        <div className="text-zinc-500">{t('interview.evidenceUnavailable')}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-xs leading-relaxed text-zinc-500">{t('interview.evidenceUnavailable')}</div>
                   )}
                 </div>
 
