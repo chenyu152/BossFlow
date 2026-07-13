@@ -2,7 +2,7 @@ import { BookOpenText, CheckSquare, FileText, Loader2, RefreshCw, Square, Wand2 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ResumeDraftResponse, ResumeItem, ResumeNavigationTarget, ResumeSuggestionResponse } from '../types';
+import type { EvidenceOverviewResponse, ResumeDraftResponse, ResumeEvidenceClaim, ResumeItem, ResumeNavigationTarget, ResumeSuggestionResponse } from '../types';
 import { useAppTranslation } from '../i18n';
 
 type ParsedSuggestion = {
@@ -56,12 +56,18 @@ function normalizeSuggestionRisk(value: string): SuggestionRisk {
   return 'unknown';
 }
 
+function isEligibleForDraft(claim: ResumeEvidenceClaim | undefined, fallbackRisk: string, evidenceBindingVersion?: number) {
+  if (normalizeSuggestionRisk(claim?.risk || fallbackRisk) !== 'safe') return false;
+  if (!evidenceBindingVersion) return true;
+  return Boolean(claim?.sourceVerified || claim?.evidenceIds?.length);
+}
+
 function defaultSelectedSuggestionIds(suggestion: ResumeSuggestionResponse | null) {
   const items = parseSuggestionItems(suggestion?.content || '');
   const evidenceById = new Map((suggestion?.evidenceMap || []).map((claim) => [claim.claimId, claim]));
   return new Set(
     items
-      .filter((item) => normalizeSuggestionRisk(evidenceById.get(item.id)?.risk || item.risk) === 'safe')
+      .filter((item) => isEligibleForDraft(evidenceById.get(item.id), item.risk, suggestion?.evidenceBindingVersion))
       .map((item) => item.id),
   );
 }
@@ -107,6 +113,7 @@ function matchesResumeTarget(item: ResumeItem, target: ResumeNavigationTarget) {
 
 export function Resume({
   items,
+  evidenceOverview,
   draftingKeys,
   onRefresh,
   onLoadSuggestion,
@@ -118,6 +125,7 @@ export function Resume({
   onTargetApplied,
 }: {
   items: ResumeItem[];
+  evidenceOverview: EvidenceOverviewResponse | null;
   draftingKeys: string[];
   onRefresh: () => void;
   onLoadSuggestion: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
@@ -147,7 +155,16 @@ export function Resume({
     () => new Map((suggestion?.evidenceMap || []).map((claim) => [claim.claimId, claim])),
     [suggestion?.evidenceMap],
   );
+  const globalEvidenceById = useMemo(
+    () => new Map((evidenceOverview?.evidenceItems || []).map((item) => [item.evidenceId, item])),
+    [evidenceOverview?.evidenceItems],
+  );
   const allSelected = parsedSuggestions.length > 0 && parsedSuggestions.every((item) => selectedSuggestionIds.has(item.id));
+  const draftEvidenceIds = useMemo(() => Array.from(new Set(
+    (draft?.evidenceMap || [])
+      .filter((claim) => claim.userDecision === 'approved')
+      .flatMap((claim) => claim.evidenceIds || []),
+  )), [draft?.evidenceMap]);
   const isDrafting = selectedItem ? draftingSet.has(selectedItem.sourceKey) : false;
   const hasNavigationTarget = Boolean(
     targetRequestId
@@ -287,9 +304,11 @@ export function Resume({
                       </button>
                     )}
                   </div>
-                  {parsedSuggestions.length > 0 && (
-                    <div className="border-b border-zinc-800/80 bg-zinc-950/40 px-4 py-2 text-[11px] leading-relaxed text-zinc-500">
-                      {t('resume.selectionPolicy')}
+                    {parsedSuggestions.length > 0 && (
+                      <div className="border-b border-zinc-800/80 bg-zinc-950/40 px-4 py-2 text-[11px] leading-relaxed text-zinc-500">
+                        {suggestion?.evidenceBindingVersion
+                          ? t('resume.selectionPolicyConfirmedEvidence')
+                          : t('resume.selectionPolicy')}
                     </div>
                   )}
                   <div className="p-4">
@@ -302,17 +321,29 @@ export function Resume({
                       <div className="space-y-2">
                         {parsedSuggestions.map((item) => {
                           const evidence = evidenceById.get(item.id);
+                          const eligibleForDraft = isEligibleForDraft(evidence, item.risk, suggestion?.evidenceBindingVersion);
+                          const linkedEvidence = (evidence?.evidenceIds || [])
+                            .map((evidenceId) => globalEvidenceById.get(evidenceId))
+                            .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
                           const sourceTypes = evidence
                             ? Array.from(new Set((evidence.sources || []).map((source) => evidenceSourceLabel(source.type, t))))
                             : [];
                           const sourceTitle = evidence?.sources?.length
                             ? evidence.sources.map((source) => `${evidenceSourceLabel(source.type, t)} · ${source.field || '-'}：${source.quote || '-'}`).join('\n')
                             : '';
+                          const linkedEvidenceTitle = linkedEvidence.length
+                            ? linkedEvidence.map((entry) => {
+                              const sourceRefs = (entry.sourceRefs || [])
+                                .map((source) => `${source.ref || source.type || '-'}：${source.quote || '-'}`)
+                                .join('\n');
+                              return `${entry.evidenceId} · ${entry.title}${sourceRefs ? `\n${sourceRefs}` : ''}`;
+                            }).join('\n\n')
+                            : '';
                           return (
                           <button
                             key={item.id}
                             onClick={() => toggleSuggestion(item.id)}
-                            className="flex w-full gap-3 rounded border border-zinc-800 bg-zinc-900/40 p-3 text-left hover:bg-zinc-900 transition-colors"
+                            className="flex w-full gap-3 rounded border border-zinc-800 bg-zinc-900/40 p-3 text-left transition-colors hover:bg-zinc-900"
                           >
                             <span className="mt-0.5 text-indigo-400">
                               {selectedSuggestionIds.has(item.id) ? <CheckSquare size={15} /> : <Square size={15} />}
@@ -325,10 +356,25 @@ export function Resume({
                                   <span className="rounded border border-zinc-800 px-1.5 py-0.5">
                                     {t('resume.riskLabel', { risk: riskLabel(evidence.risk || item.risk, t) })}
                                   </span>
-                                  <span className="rounded border border-zinc-800 px-1.5 py-0.5" title={sourceTitle}>
-                                    {t('resume.evidenceFrom', { sources: sourceTypes.join(' + ') || t('status.unknown') })}
-                                  </span>
-                                </span>
+                                   <span className="rounded border border-zinc-800 px-1.5 py-0.5" title={sourceTitle}>
+                                     {t('resume.evidenceFrom', { sources: sourceTypes.join(' + ') || t('status.unknown') })}
+                                   </span>
+                                   {evidence.sourceVerified && (
+                                     <span className="rounded border border-emerald-900/70 bg-emerald-950/30 px-1.5 py-0.5 text-emerald-300">
+                                       {t('resume.sourceVerified')}
+                                     </span>
+                                   )}
+                                   {linkedEvidence.map((entry) => (
+                                     <span key={entry.evidenceId} className="rounded border border-cyan-900/70 bg-cyan-950/30 px-1.5 py-0.5 text-cyan-300" title={linkedEvidenceTitle}>
+                                       {t('resume.evidenceId', { id: entry.evidenceId })}
+                                     </span>
+                                   ))}
+                                   {!eligibleForDraft && (
+                                     <span className="rounded border border-amber-900/70 bg-amber-950/20 px-1.5 py-0.5 text-amber-300">
+                                       {t('resume.supplementOnly')}
+                                     </span>
+                                   )}
+                                 </span>
                               )}
                             </span>
                           </button>
@@ -384,6 +430,24 @@ export function Resume({
                 <div className="break-all rounded border border-zinc-800 bg-zinc-950 p-3 text-[10px] text-zinc-500">
                   {draft.draftPath}
                 </div>
+                {draftEvidenceIds.length > 0 && (
+                  <div className="rounded border border-cyan-900/60 bg-cyan-950/15 p-3 text-xs text-zinc-300">
+                    <div className="mb-2 font-medium text-cyan-200">{t('resume.draftEvidence')}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {draftEvidenceIds.map((evidenceId) => {
+                        const evidence = globalEvidenceById.get(evidenceId);
+                        const sourceRefs = (evidence?.sourceRefs || [])
+                          .map((source) => `${source.ref || source.type || '-'}：${source.quote || '-'}`)
+                          .join('\n');
+                        return (
+                          <span key={evidenceId} className="rounded border border-cyan-900/70 px-1.5 py-0.5 text-[10px] text-cyan-200" title={`${evidence?.title || evidenceId}${sourceRefs ? `\n${sourceRefs}` : ''}`}>
+                            {t('resume.evidenceId', { id: evidenceId })}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <article className={markdownArticleClass('emerald')}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.content}</ReactMarkdown>
                 </article>

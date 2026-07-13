@@ -403,6 +403,7 @@ export default function App() {
               {activeTab === 'Resume' && (
                 <Resume
                   items={boss.resumeItems}
+                  evidenceOverview={boss.evidenceOverview}
                   draftingKeys={boss.resumeDraftingKeys}
                   onRefresh={() => { void boss.refreshResumeItems(); }}
                   onLoadSuggestion={boss.loadResumeSuggestion}

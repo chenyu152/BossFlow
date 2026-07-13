@@ -17,6 +17,7 @@ from backend.services.llm_evaluation_service import (
     _slug,
 )
 from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
+from backend.services.evidence_service import read_evidence_overview
 from backend.storage.paths import BASE_DIR
 
 RESUME_OUTPUT_DIR = BASE_DIR / "output" / "resumes"
@@ -82,7 +83,88 @@ def _safe_resume_draft_path(path_value: str) -> Path:
     return resolved
 
 
-def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list[dict[str, str]]:
+def _resume_evidence_context(source_key: str) -> dict[str, list[dict[str, Any]]]:
+    overview = read_evidence_overview()
+    requirements = [
+        item
+        for item in overview.get("requirements", [])
+        if item.get("sourceKey") == source_key and item.get("active") is not False
+    ]
+    requirement_ids = {str(item.get("requirementId") or "") for item in requirements}
+    coverages_by_requirement = {
+        str(item.get("requirementId") or ""): item
+        for item in overview.get("coverages", [])
+        if str(item.get("requirementId") or "") in requirement_ids
+    }
+    evidence_by_id = {
+        str(item.get("evidenceId") or ""): item
+        for item in overview.get("evidenceItems", [])
+        if item.get("status") == "confirmed"
+    }
+    confirmed_ids = {
+        str(evidence_id)
+        for coverage in coverages_by_requirement.values()
+        if coverage.get("coverageStatus") == "supported"
+        for evidence_id in coverage.get("evidenceIds") or []
+        if str(evidence_id) in evidence_by_id
+    }
+    source_verified_requirements = [
+        {
+            "requirementId": requirement.get("requirementId", ""),
+            "label": requirement.get("label", ""),
+            "jdQuote": requirement.get("jdQuote", ""),
+            "candidateEvidenceRefs": coverages_by_requirement.get(str(requirement.get("requirementId") or ""), {}).get("candidateEvidenceRefs", []),
+        }
+        for requirement in requirements
+        if (
+            coverages_by_requirement.get(str(requirement.get("requirementId") or ""), {}).get("coverageStatus") == "supported"
+            and coverages_by_requirement.get(str(requirement.get("requirementId") or ""), {}).get("verificationStatus") == "source_verified"
+        )
+    ]
+    return {
+        "confirmedEvidence": [
+            {
+                "evidenceId": evidence_id,
+                "title": evidence_by_id[evidence_id].get("title", ""),
+                "summary": evidence_by_id[evidence_id].get("summary", ""),
+                "userRole": evidence_by_id[evidence_id].get("userRole", ""),
+                "actions": evidence_by_id[evidence_id].get("actions", []),
+                "results": evidence_by_id[evidence_id].get("results", []),
+                "sourceRefs": evidence_by_id[evidence_id].get("sourceRefs", []),
+            }
+            for evidence_id in sorted(confirmed_ids)
+        ],
+        "sourceVerifiedRequirements": source_verified_requirements,
+    }
+
+
+def _bind_evidence_map(
+    evidence_map: list[dict[str, Any]],
+    evidence_context: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    allowed_ids = {
+        str(item.get("evidenceId") or "")
+        for item in evidence_context.get("confirmedEvidence", [])
+    }
+    has_source_verified = bool(evidence_context.get("sourceVerifiedRequirements"))
+    result = []
+    for raw_claim in evidence_map:
+        claim = _clean_evidence_claim(raw_claim)
+        claim["evidenceIds"] = [
+            evidence_id for evidence_id in claim["evidenceIds"]
+            if evidence_id in allowed_ids
+        ]
+        claim["sourceVerified"] = bool(claim["sourceVerified"] and has_source_verified)
+        result.append(claim)
+    return result
+
+
+def _prompt(
+    job: dict[str, Any],
+    item: dict[str, Any],
+    report_text: str,
+    evidence_context: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, str]]:
     cv_text = _read_text(CV_PATH, 16000)
     profile_text = _read_text(PROFILE_PATH, 6000)
     evidence_map_example = json.dumps(
@@ -91,6 +173,8 @@ def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list
                 "claimId": "S1",
                 "claim": "建议动作摘要",
                 "risk": "safe",
+                "evidenceIds": ["ev-已确认职业证据ID"],
+                "sourceVerified": False,
                 "sources": [
                     {"type": "cv", "field": "涉及 CV 内容", "quote": "cv.md 中可对应的原文或摘要"},
                     {"type": "jd", "field": "为什么匹配 JD", "quote": "JD 需求或匹配理由"},
@@ -149,6 +233,9 @@ def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list
 - evidence map 中的 `claimId` 必须和 C 节建议编号一一对应。
 - `risk` 只能是 safe、needs_confirmation、avoid_fabrication。
 - `sources.quote` 必须来自输入材料或对输入材料的短摘要；不能编造新事实。
+- 每条 risk=safe 的建议必须绑定下方“已确认职业证据”中的一个或多个 `evidenceIds`，或将 `sourceVerified` 设为 true（仅限下方“已从个人简历直接核验”的事实）。
+- needs_confirmation 和 avoid_fabrication 不得填写 `evidenceIds`，且 `sourceVerified` 必须为 false。
+- 不能编造、猜测或引用未列出的 evidenceId。
 
 岗位信息：
 ```text
@@ -171,6 +258,16 @@ def _prompt(job: dict[str, Any], item: dict[str, Any], report_text: str) -> list
 profile.yml：
 ```yaml
 {profile_text or "profile.yml not found"}
+```
+
+已确认职业证据（仅这些 evidenceId 可用于 safe 建议）：
+```json
+{json.dumps(evidence_context.get("confirmedEvidence", []), ensure_ascii=False, indent=2)}
+```
+
+已从个人简历直接核验的事实（可用 sourceVerified=true，不需要伪造 evidenceId）：
+```json
+{json.dumps(evidence_context.get("sourceVerifiedRequirements", []), ensure_ascii=False, indent=2)}
 ```
 """
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -268,6 +365,12 @@ def _clean_evidence_claim(item: dict[str, Any]) -> dict[str, Any]:
         "claimId": str(item.get("claimId") or "").strip().upper(),
         "claim": str(item.get("claim") or "").strip(),
         "risk": _normalize_risk(str(item.get("risk") or "")),
+        "evidenceIds": list(dict.fromkeys([
+            str(evidence_id).strip()
+            for evidence_id in (item.get("evidenceIds") if isinstance(item.get("evidenceIds"), list) else [])
+            if str(evidence_id).strip()
+        ])),
+        "sourceVerified": bool(item.get("sourceVerified")),
         "sources": clean_sources,
         "userDecision": str(item.get("userDecision") or "pending").strip() or "pending",
         "usedIn": item.get("usedIn") if isinstance(item.get("usedIn"), list) else [],
@@ -285,7 +388,18 @@ def _load_resume_json(path: Path) -> dict[str, Any]:
         return {}
 
 
-def _decisioned_evidence_map(evidence_map: list[dict[str, Any]], approved_ids: list[str]) -> list[dict[str, Any]]:
+def _claim_is_confirmed_for_draft(claim: dict[str, Any], require_evidence_binding: bool) -> bool:
+    if claim.get("risk") != "safe":
+        return False
+    if not require_evidence_binding:
+        return True
+    return bool(claim.get("evidenceIds") or claim.get("sourceVerified"))
+
+
+def _decisioned_evidence_map(
+    evidence_map: list[dict[str, Any]],
+    approved_ids: list[str],
+) -> list[dict[str, Any]]:
     approved = {item.upper() for item in approved_ids}
     result = []
     for raw_claim in evidence_map:
@@ -301,6 +415,7 @@ def _draft_prompt(
     suggestion_text: str,
     approved_suggestion_ids: list[str],
     approved_evidence_map: list[dict[str, Any]],
+    pending_evidence_map: list[dict[str, Any]],
     user_notes: str,
     report_text: str,
 ) -> list[dict[str, str]]:
@@ -313,8 +428,9 @@ def _draft_prompt(
 硬性规则：
 - 只能改写、重排、提炼 cv.md 中已有事实，不能编造经历、指标、项目、公司、学历、年限、薪资或成果。
 - 用户备注可以作为方向，但如果备注包含未经证实的新事实，只能标记为待确认，不要写成确定事实。
-- 优先使用 approvedEvidenceMap 中 userDecision=approved 且 risk=safe 或 needs_confirmation 的建议。
-- risk=avoid_fabrication 的建议只能放入“待用户确认后可补充”，不能写成确定事实。
+- 只有 approvedEvidenceMap 中的内容可以写入求职目标、核心匹配摘要、技能栈、项目经历、工作经历和教育背景等事实性章节。
+- pendingEvidenceMap 是用户本次主动选择但尚未完成证据确认的建议；只能转写到“待用户确认后可补充”章节，不能作为既有事实、指标、技能或经历写入主简历。
+- risk=avoid_fabrication 的建议即使被用户选择，也只能以“如有真实经历可补充”的提示出现，不能写成确定事实。
 - 不覆盖 cv.md，只输出一份新的 Markdown 草稿。
 - 输出必须适合用户继续人工编辑。
 - 不要输出 PDF、HTML 或解释性废话。"""
@@ -355,6 +471,11 @@ def _draft_prompt(
 已确认 evidence map：
 ```json
 {json.dumps(approved_evidence_map, ensure_ascii=False, indent=2)}
+```
+
+本次选择、但仅能作为待确认补充的建议：
+```json
+{json.dumps(pending_evidence_map, ensure_ascii=False, indent=2)}
 ```
 
 用户确认的建议编号：
@@ -407,8 +528,9 @@ def _resume_item_from_pipeline_item(item: dict[str, Any]) -> dict[str, Any]:
 def generate_resume_suggestions(source_key: str) -> dict[str, Any]:
     item, job = _load_pipeline_job(source_key)
     report_text = _safe_read_report(item)
-    raw_content = _call_llm(_prompt(job, item, report_text))
-    evidence_map = _parse_evidence_map(raw_content)
+    evidence_context = _resume_evidence_context(source_key)
+    raw_content = _call_llm(_prompt(job, item, report_text, evidence_context))
+    evidence_map = _bind_evidence_map(_parse_evidence_map(raw_content), evidence_context)
     content = _strip_evidence_map_block(raw_content)
     resume_id = _next_resume_id()
     now = dt.datetime.now()
@@ -428,6 +550,7 @@ def generate_resume_suggestions(source_key: str) -> dict[str, Any]:
         "pipelineItem": item,
         "suggestionPath": str(suggestion_path),
         "sourceReportPath": item.get("reportPath", ""),
+        "evidenceBindingVersion": 1,
         "evidenceMap": evidence_map,
     }
     json_path = suggestion_path.with_suffix(".json")
@@ -450,6 +573,7 @@ def generate_resume_suggestions(source_key: str) -> dict[str, Any]:
         "suggestionPath": str(suggestion_path),
         "jsonPath": str(json_path),
         "content": content,
+        "evidenceBindingVersion": 1,
         "evidenceMap": evidence_map,
         "pipeline": read_pipeline(),
     }
@@ -480,6 +604,7 @@ def read_resume_suggestion(source_key: str) -> dict[str, Any]:
         "suggestionPath": str(path),
         "jsonPath": str(path.with_suffix(".json")),
         "content": content,
+        "evidenceBindingVersion": int(meta.get("evidenceBindingVersion") or 0),
         "evidenceMap": evidence_map,
     }
 
@@ -490,13 +615,32 @@ def generate_resume_draft(source_key: str, approved_suggestion_ids: list[str], u
     suggestion_text = suggestion_path.read_text(encoding="utf-8")
     suggestion_meta = _load_resume_json(suggestion_path)
     evidence_map = suggestion_meta.get("evidenceMap") if isinstance(suggestion_meta.get("evidenceMap"), list) else _parse_evidence_map(suggestion_text)
-    decisioned_evidence_map = _decisioned_evidence_map(evidence_map, approved_suggestion_ids)
+    require_evidence_binding = bool(suggestion_meta.get("evidenceBindingVersion"))
+    if require_evidence_binding:
+        evidence_map = _bind_evidence_map(evidence_map, _resume_evidence_context(source_key))
+    selected_suggestion_ids = list(dict.fromkeys(item.upper() for item in approved_suggestion_ids))
+    decisioned_evidence_map = _decisioned_evidence_map(evidence_map, selected_suggestion_ids)
     approved_evidence_map = [
         claim for claim in decisioned_evidence_map
-        if claim.get("userDecision") == "approved" and claim.get("risk") != "avoid_fabrication"
+        if claim.get("userDecision") == "approved"
+        and _claim_is_confirmed_for_draft(claim, require_evidence_binding)
     ]
+    pending_evidence_map = [
+        claim for claim in decisioned_evidence_map
+        if claim.get("userDecision") == "approved" and claim not in approved_evidence_map
+    ]
+    approved_suggestion_ids = [claim["claimId"] for claim in approved_evidence_map]
     report_text = _safe_read_report(item)
-    content = _call_llm(_draft_prompt(job, item, suggestion_text, approved_suggestion_ids, approved_evidence_map, user_notes, report_text))
+    content = _call_llm(_draft_prompt(
+        job,
+        item,
+        suggestion_text,
+        approved_suggestion_ids,
+        approved_evidence_map,
+        pending_evidence_map,
+        user_notes,
+        report_text,
+    ))
 
     draft_id = _next_resume_id()
     now = dt.datetime.now()
@@ -516,9 +660,12 @@ def generate_resume_draft(source_key: str, approved_suggestion_ids: list[str], u
         "pipelineItem": item,
         "draftPath": str(draft_path),
         "suggestionPath": str(suggestion_path),
+        "selectedSuggestionIds": selected_suggestion_ids,
         "approvedSuggestionIds": approved_suggestion_ids,
+        "pendingSuggestionIds": [claim["claimId"] for claim in pending_evidence_map],
         "evidenceMap": decisioned_evidence_map,
         "approvedEvidenceMap": approved_evidence_map,
+        "pendingEvidenceMap": pending_evidence_map,
         "userNotes": user_notes,
     }
     json_path = draft_path.with_suffix(".json")

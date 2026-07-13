@@ -298,6 +298,7 @@ export type ResumeSuggestionResponse = {
   suggestionPath: string;
   jsonPath?: string;
   content: string;
+  evidenceBindingVersion?: number;
   evidenceMap?: ResumeEvidenceClaim[];
   pipeline?: PipelineResponse;
 };
@@ -312,6 +313,8 @@ export type ResumeEvidenceClaim = {
   claimId: string;
   claim: string;
   risk: string;
+  evidenceIds: string[];
+  sourceVerified: boolean;
   sources: ResumeEvidenceSource[];
   userDecision: string;
   usedIn: string[];
