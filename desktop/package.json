@@ -1,0 +1,53 @@
+{
+  "name": "bossflow-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "BossFlow Electron desktop shell",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "dev": "node ./scripts/run-desktop-dev.mjs",
+    "build:frontend": "npm --prefix ../bossspider-web run build",
+    "build:sidecar": "node ./scripts/build-sidecar.mjs",
+    "prepare:release": "node ./scripts/prepare-release.mjs",
+    "dist:win": "npm run prepare:release && electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.bossflow.desktop",
+    "productName": "BossFlow",
+    "asar": true,
+    "directories": {
+      "output": "../release/installer",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.mjs",
+      "preload.mjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../release/sidecar/BossFlowBackend",
+        "to": "backend"
+      },
+      {
+        "from": "../bossspider-web/dist",
+        "to": "web"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  }
+}

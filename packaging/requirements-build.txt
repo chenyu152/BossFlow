@@ -1,0 +1,2 @@
+# Packaging-only dependency. Runtime dependencies remain in requirements.txt.
+PyInstaller>=6.0,<7

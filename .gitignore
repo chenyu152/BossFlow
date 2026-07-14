@@ -46,3 +46,6 @@ projects/**/crawl_partial.json
 projects/**/cookies*
 projects/**/local_state*
 projects/*/workspace/
+release/
+desktop/node_modules/
+.venv-release/

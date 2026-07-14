@@ -69,6 +69,37 @@ npm run dev -- --host 127.0.0.1 --port 5173
 | `http://127.0.0.1:5173/` | BossFlow Web 工作台 |
 | `http://127.0.0.1:8000/docs` | FastAPI 接口文档 |
 
+### Windows 桌面版（Electron + Python sidecar）
+
+日常功能开发仍使用上面的 Vite + Uvicorn 两个终端，不需要运行 Electron 或 PyInstaller。需要联调桌面窗口时，在后端和前端开发服务均已启动后另开终端运行：
+
+```bash
+cd desktop
+npm ci
+npm run dev
+```
+
+首次准备 Windows 发布包时，安装打包依赖并执行：
+
+```bash
+pip install -r packaging/requirements-build.txt
+cd desktop
+npm ci
+npm run dist:win
+```
+
+产物位于 `release/installer/`。发布模式下 Electron 会启动 PyInstaller 打包的 FastAPI sidecar，并让它同源提供 React 静态文件；用户数据默认保存在“文档/BossFlow”，不会写入安装目录。首次启动桌面版前，请确保系统已安装 Chrome（岗位采集与登录 Cookie 仍使用它）。
+
+建议在干净虚拟环境中生成正式发布包，避免 Anaconda 等开发环境把无关的预装包带入 sidecar：
+
+```powershell
+python -m venv .venv-release
+.\.venv-release\Scripts\python -m pip install -r requirements.txt -r packaging\requirements-build.txt
+$env:PYTHON = (Resolve-Path .\.venv-release\Scripts\python.exe)
+cd desktop
+npm run dist:win
+```
+
 ### 3. 配置 LLM（可稍后完成）
 
 岗位采集与手动配置不依赖 LLM。需要生成入库规则、评分词库、匹配报告或材料时：

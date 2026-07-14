@@ -1,10 +1,12 @@
 import asyncio
 import json
+import os
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.schemas.cv import CvSaveRequest
@@ -74,19 +76,44 @@ from backend.services.workspace_service import project_from_source_key, project_
 from crawler.boss import load_config
 
 app = FastAPI(title="BossSpider Web Backend", version="0.1.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_desktop_mode = os.environ.get("BOSSFLOW_DESKTOP") == "1"
+_runtime_token = os.environ.get("BOSSFLOW_RUNTIME_TOKEN", "")
+
+# The regular browser development server is the only cross-origin caller.  A
+# packaged Electron app is same-origin and should not advertise its loopback
+# API to arbitrary web pages.
+if not _desktop_mode:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+@app.middleware("http")
+async def require_desktop_runtime_token(request: Request, call_next):
+    """Reject cross-site state changes against the packaged loopback API."""
+    if (
+        _runtime_token
+        and request.url.path.startswith("/api/")
+        and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.headers.get("X-BossFlow-Token") != _runtime_token
+    ):
+        return JSONResponse(status_code=403, content={"detail": "Invalid desktop runtime token"})
+    return await call_next(request)
 
 task_manager = TaskManager()
 
 
 def _workspace_project(project: Optional[str] = None, source_key: str = "") -> str:
     return project_from_source_key(source_key) if source_key else (project or default_project_name())
+
+
+@app.get("/api/health")
+def health_check():
+    return {"ok": True, "desktop": _desktop_mode}
 
 
 @app.get("/api/projects")
@@ -472,3 +499,31 @@ async def stream_logs():
             await asyncio.sleep(0.5)
 
     return StreamingResponse(events(), media_type="text/event-stream")
+
+
+def _desktop_web_dir() -> Optional[Path]:
+    value = os.environ.get("BOSSFLOW_WEB_DIR", "")
+    if not value:
+        return None
+    directory = Path(value).resolve()
+    index = directory / "index.html"
+    return directory if index.is_file() else None
+
+
+_web_dir = _desktop_web_dir()
+if _web_dir:
+    _web_index = _web_dir / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    def desktop_index():
+        return FileResponse(_web_index)
+
+    @app.get("/{resource_path:path}", include_in_schema=False)
+    def desktop_assets(resource_path: str):
+        # Keep unknown API requests as API 404s instead of returning the SPA.
+        if resource_path == "api" or resource_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = (_web_dir / resource_path).resolve()
+        if _web_dir not in candidate.parents or not candidate.is_file():
+            return FileResponse(_web_index)
+        return FileResponse(candidate)

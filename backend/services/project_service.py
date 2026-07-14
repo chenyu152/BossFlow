@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from backend.schemas.config import ConfigUpdate
 from backend.services.scoring_config import DEFAULT_SCORING_CONFIG, normalize_scoring_config
-from backend.storage.paths import BASE_DIR, PROJECTS_DIR
+from backend.storage.paths import PROJECTS_DIR, RESOURCE_DIR
 from crawler.boss import DEFAULT_PROFILE_DIR, load_config
 from crawler.config import DEFAULT_SCRAPE_LIMITS, save_config
 from crawler.pipeline import MIN_AVG_SALARY_K
@@ -59,7 +59,7 @@ def default_project_name() -> str:
         return names[0]
     default_dir = PROJECTS_DIR / "default"
     default_dir.mkdir(parents=True, exist_ok=True)
-    source = BASE_DIR / "crawler" / "config" / "keywords.json"
+    source = RESOURCE_DIR / "crawler" / "config" / "keywords.json"
     target = default_dir / "config.json"
     if source.exists() and not target.exists():
         target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
