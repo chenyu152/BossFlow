@@ -1,33 +1,120 @@
 """DeepSeek LLM call — OCR text → structured JSON (Pydantic Resume model)."""
 
 import json
-import os
 import re
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
+from pydantic import ValidationError
 
+from backend.services.system_settings_service import llm_settings_status, reveal_llm_api_key
 from .schema import Resume
+
+
+class ResumeExtractionError(RuntimeError):
+    """Raised when the LLM response cannot be converted into a usable resume."""
+
+
+_LIST_FIELDS = {
+    "skills",
+    "languages",
+    "frameworks",
+    "databases",
+    "ai_llm",
+    "tools",
+}
+_NESTED_LIST_FIELDS = {
+    "work_experience": ("responsibilities", "achievements"),
+    "projects": ("highlights",),
+    "education": (),
+}
+
+
+def _text(value: Any) -> str:
+    """Safely turn common LLM scalar output into the schema's string fields."""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _string_list(value: Any) -> list[str]:
+    """Accept an omitted value, a single string, or a JSON list from the LLM."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        # Models often emit a line-separated list even when asked for JSON arrays.
+        return [item.strip() for item in re.split(r"[\r\n]+", value) if item.strip()]
+    if isinstance(value, (list, tuple, set)):
+        return [_text(item) for item in value if _text(item)]
+    return [_text(value)]
+
+
+def _number_or_none(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    match = re.search(r"\d+(?:\.\d+)?", _text(value))
+    return float(match.group()) if match else None
+
+
+def _normalise_resume_payload(data: Any) -> dict[str, Any]:
+    """Normalise common, harmless LLM shape variations before Pydantic validation."""
+    if not isinstance(data, dict):
+        raise ResumeExtractionError("LLM 返回的顶层内容不是简历对象")
+
+    normalized = dict(data)
+    candidate = normalized.get("candidate")
+    candidate = dict(candidate) if isinstance(candidate, dict) else {}
+    for key in ("name", "phone", "email", "highest_education"):
+        candidate[key] = _text(candidate.get(key))
+    for key in ("target_cities", "target_roles"):
+        candidate[key] = _string_list(candidate.get(key))
+    candidate["years_of_experience"] = _number_or_none(candidate.get("years_of_experience"))
+    normalized["candidate"] = candidate
+
+    for key in _LIST_FIELDS:
+        normalized[key] = _string_list(normalized.get(key))
+
+    for key, child_list_fields in _NESTED_LIST_FIELDS.items():
+        records = normalized.get(key)
+        if records is None or records == "":
+            normalized[key] = []
+            continue
+        if isinstance(records, dict):
+            records = [records]
+        if not isinstance(records, list):
+            raise ResumeExtractionError(f"LLM 返回的 {key} 不是列表")
+        normalized_records: list[dict[str, Any]] = []
+        for record in records:
+            if not isinstance(record, dict):
+                raise ResumeExtractionError(f"LLM 返回的 {key} 包含非对象条目")
+            normalized_record = {field: _text(value) for field, value in record.items() if field not in child_list_fields}
+            for field in child_list_fields:
+                normalized_record[field] = _string_list(record.get(field))
+            normalized_records.append(normalized_record)
+        normalized[key] = normalized_records
+
+    normalized["extraction_confidence"] = _text(normalized.get("extraction_confidence"))
+    return normalized
+
+
+def _validation_message(error: ValidationError) -> str:
+    fields = []
+    for item in error.errors()[:3]:
+        location = ".".join(str(part) for part in item["loc"])
+        fields.append(location)
+    suffix = "、".join(fields) if fields else "未知字段"
+    return f"LLM 返回的简历结构不符合要求（{suffix}）"
 
 # ── config ──────────────────────────────────────────────
 
 def _load_api_config(env_path: str | None = None) -> tuple[str, str, str]:
-    """加载 API 配置。先找当前目录 .env，找不到则找项目根目录。"""
-    candidates = [
-        env_path,
-        os.path.join(os.path.dirname(__file__), ".env"),
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"),
-    ]
-    for path in candidates:
-        if path and os.path.exists(path):
-            load_dotenv(path)
-            break
-
-    api_key = os.getenv("DEEPSEEK_API_KEY", "")
-    api_base = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-    return api_key, api_base, model
+    """Read the system-wide LLM settings used by the BossFlow UI."""
+    settings = llm_settings_status()
+    return reveal_llm_api_key(), str(settings["apiBase"]), str(settings["model"])
 
 
 def _call_llm(messages: list[dict[str, str]], response_json: bool = True) -> str:
@@ -164,13 +251,15 @@ def extract_resume(ocr_text: str) -> Resume:
             try:
                 data = json.loads(match.group(1))
             except json.JSONDecodeError:
-                return Resume(raw_text=ocr_text, extraction_confidence="JSON 解析失败")
+                raise ResumeExtractionError("LLM 未返回可解析的 JSON") from None
         else:
-            return Resume(raw_text=ocr_text, extraction_confidence="JSON 解析失败")
+            raise ResumeExtractionError("LLM 未返回可解析的 JSON") from None
 
     try:
-        resume = Resume(**data)
+        resume = Resume.model_validate(_normalise_resume_payload(data))
         resume.raw_text = ocr_text
         return resume
-    except Exception:
-        return Resume(raw_text=ocr_text, extraction_confidence="Pydantic 校验失败")
+    except ResumeExtractionError:
+        raise
+    except ValidationError as error:
+        raise ResumeExtractionError(_validation_message(error)) from error

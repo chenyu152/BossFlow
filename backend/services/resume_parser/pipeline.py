@@ -9,8 +9,8 @@ from pathlib import Path
 
 from paddleocr import PaddleOCR
 
-from .pdf_to_images import pdf_to_images
 from .llm_extract import extract_resume
+from .pdf_to_images import pdf_to_images
 from .to_cv import to_cv_markdown
 
 
@@ -45,6 +45,9 @@ def run_pipeline(
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
         use_textline_orientation=True,
+        # Windows CPU 上 oneDNN 与当前 Paddle PIR 执行器存在兼容性问题；
+        # 禁用 oneDNN，使用默认 CPU 执行路径完成 OCR。
+        enable_mkldnn=False,
     )
 
     all_lines: list[str] = []
