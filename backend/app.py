@@ -204,18 +204,21 @@ def get_jobs(
     limit: int = Query(default=20000, ge=1, le=20000),
     offset: int = Query(default=0, ge=0),
 ):
-    return query_jobs(resolve_project(project), q.strip(), limit, offset)
+    with project_workspace(_workspace_project(project)):
+        return query_jobs(resolve_project(project), q.strip(), limit, offset)
 
 
 @app.get("/api/jobs/export")
 def export_jobs(project: Optional[str] = None, q: str = ""):
-    rows = query_jobs(resolve_project(project), q.strip(), limit=50000, offset=0)["items"]
-    return export_jobs_response(rows)
+    with project_workspace(_workspace_project(project)):
+        rows = query_jobs(resolve_project(project), q.strip(), limit=50000, offset=0)["items"]
+        return export_jobs_response(rows)
 
 
 @app.get("/api/jobs/item")
 def get_job_item(project: str, jobId: int):
-    return get_job_by_id(resolve_project(project), jobId)
+    with project_workspace(_workspace_project(project)):
+        return get_job_by_id(resolve_project(project), jobId)
 
 
 @app.post("/api/jobs/score")
