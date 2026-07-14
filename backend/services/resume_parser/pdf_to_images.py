@@ -43,5 +43,5 @@ if __name__ == "__main__":
 
     paths = pdf_to_images(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ".")
     for p in paths:
-        print(f"  → {p}")
+        print(f"  输出: {p}")
     print(f"Done: {len(paths)} pages")

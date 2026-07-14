@@ -32,7 +32,7 @@ def run_pipeline(
     pdf_name = Path(pdf_path).stem
 
     # ── Step 1: PDF → Images ──
-    print(f"[1/4] PDF → 图片 (DPI={dpi}) ...")
+    print(f"[1/4] PDF 转图片 (DPI={dpi}) ...")
     image_dir = out / "images" if save_images else out
     images = pdf_to_images(pdf_path, str(image_dir), dpi=dpi)
     print(f"  生成 {len(images)} 页: {', '.join(images)}")
@@ -83,7 +83,7 @@ def run_pipeline(
     cv_content = to_cv_markdown(resume)
     cv_path = out / f"{pdf_name}_cv.md"
     cv_path.write_text(cv_content, encoding="utf-8")
-    print(f"  → {cv_path}")
+    print(f"  输出: {cv_path}")
 
     # 可选：保存 JSON
     if save_json:
@@ -92,14 +92,14 @@ def run_pipeline(
             resume.model_dump_json(indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
-        print(f"  → {json_path}")
+        print(f"  输出: {json_path}")
 
     # 可选：保存 OCR 原文
     ocr_path = out / f"{pdf_name}_ocr.txt"
     ocr_path.write_text(ocr_text, encoding="utf-8")
-    print(f"  → {ocr_path}")
+    print(f"  输出: {ocr_path}")
 
-    print("\n✅ 完成!")
+    print("\n完成!")
     return cv_content
 
 

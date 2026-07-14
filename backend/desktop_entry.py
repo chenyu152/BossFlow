@@ -11,6 +11,13 @@ import os
 import sys
 
 
+def _configure_standard_streams() -> None:
+    """Use UTF-8 for Electron's sidecar pipes on Windows."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def _port() -> int:
     value = os.environ.get("BOSSFLOW_PORT", "")
     try:
@@ -23,6 +30,7 @@ def _port() -> int:
 
 
 def main() -> None:
+    _configure_standard_streams()
     if not os.environ.get("BOSSFLOW_HOME"):
         raise RuntimeError("BOSSFLOW_HOME is required for the desktop sidecar")
     os.environ.setdefault("BOSSFLOW_DESKTOP", "1")
