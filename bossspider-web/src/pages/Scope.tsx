@@ -5,7 +5,9 @@ import { hasCity, toggleCity } from '../utils';
 import type { ConfigPatch, ConfigPayload } from '../types';
 import { OptionToggle } from '../components/OptionToggle';
 import { StrategyCard } from '../components/StrategyCard';
-import { PlayCircle, RefreshCw } from 'lucide-react';
+import { CircleHelp, PlayCircle, RefreshCw } from 'lucide-react';
+import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
+import { useEffect, useMemo, useState } from 'react';
 
 export function Scope({
   config,
@@ -14,6 +16,8 @@ export function Scope({
   onReload,
   onLogin,
   onProcessPartial,
+  autoStartGuide,
+  onAutoStartGuideHandled,
 }: {
   config: ConfigPayload;
   updateConfig: (patch: ConfigPatch) => void;
@@ -21,15 +25,34 @@ export function Scope({
   onReload: () => void;
   onLogin: () => void;
   onProcessPartial: () => void;
+  autoStartGuide: boolean;
+  onAutoStartGuideHandled: () => void;
 }) {
   const { t } = useAppTranslation();
+  const [guideStep, setGuideStep] = useState<number | null>(null);
+  const guideSteps = useMemo<GuidedTourStep[]>(() => [
+    { target: 'scope-keywords', title: t('scope.tour.keywordsTitle'), body: t('scope.tour.keywordsBody') },
+    { target: 'scope-cities', title: t('scope.tour.citiesTitle'), body: t('scope.tour.citiesBody') },
+    { target: 'scope-save', title: t('scope.tour.saveTitle'), body: t('scope.tour.saveBody') },
+  ], [t]);
+
+  useEffect(() => {
+    if (!autoStartGuide) return;
+    setGuideStep(0);
+    onAutoStartGuideHandled();
+  }, [autoStartGuide, onAutoStartGuideHandled]);
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg font-semibold text-zinc-100">{t('scope.title')}</h1>
         <div className="flex gap-3">
+          <button onClick={() => setGuideStep(0)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 rounded transition-colors">
+            <CircleHelp size={15} />
+            {t('scope.help')}
+          </button>
           <button onClick={onReload} className="px-4 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 rounded transition-colors">{t('scope.reloadConfig')}</button>
-          <button onClick={() => void onSave()} className="px-4 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors">{t('scope.saveConfig')}</button>
+          <button data-guide-target="scope-save" onClick={() => void onSave()} className="px-4 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors">{t('scope.saveConfig')}</button>
         </div>
       </div>
 
@@ -79,7 +102,7 @@ export function Scope({
             </div>
           </section>
 
-          <div>
+          <div data-guide-target="scope-keywords">
             <label className="block text-sm font-medium text-zinc-300 mb-2 flex items-center justify-between">
               {t('scope.keywords')}
               <span className="text-xs text-zinc-500 font-normal">{t('scope.onePerLine')}</span>
@@ -103,7 +126,7 @@ export function Scope({
             </div>
           </div>
 
-          <div className="border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
+          <div data-guide-target="scope-cities" className="border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
             <h3 className="text-sm font-semibold text-zinc-100 mb-5 border-b border-zinc-800 pb-3">{t('scope.cityConfig')}</h3>
             <label className="block text-sm font-medium text-zinc-300 mb-2">{t('scope.citiesQuickSelect')}</label>
             <div className="flex flex-wrap gap-2 mb-4">
@@ -132,6 +155,19 @@ export function Scope({
           </div>
         </div>
       </div>
+      {guideStep !== null && (
+        <GuidedTour
+          steps={guideSteps}
+          activeStep={guideStep}
+          onStepChange={setGuideStep}
+          onClose={() => setGuideStep(null)}
+          nextLabel={t('scope.tour.next')}
+          previousLabel={t('scope.tour.previous')}
+          finishLabel={t('scope.tour.finish')}
+          skipLabel={t('scope.tour.skip')}
+          progressLabel={(current, total) => t('scope.tour.progress', { current, total })}
+        />
+      )}
     </div>
   );
 }

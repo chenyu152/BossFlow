@@ -65,6 +65,13 @@ export const bossApi = {
     return request<ProjectListResponse>('/api/projects');
   },
 
+  createProject(name: string) {
+    return request<ConfigPayload>('/api/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+
   getConfig(project: string) {
     return request<ConfigPayload>(`/api/config?project=${encodeURIComponent(project)}`);
   },

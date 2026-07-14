@@ -21,12 +21,39 @@
     }
   },
   "header": {
-    "project": "项目",
+    "project": "求职方向",
     "noDatabase": "无数据库",
     "noDatabaseLoaded": "未加载数据库",
     "viewLogs": "查看日志",
     "startCrawl": "启动采集",
     "stopCrawl": "终止采集"
+  },
+  "directions": {
+    "newButton": "新建方向",
+    "none": "尚未建立方向",
+    "createTitle": "新建求职方向",
+    "createDescription": "每个求职方向都有独立的岗位库、入库规则、基础简历、证据和故事，不会与其他方向混用。",
+    "nameLabel": "方向名称",
+    "namePlaceholder": "例如：AI Agent 应用开发",
+    "nameRequired": "请填写求职方向名称。",
+    "cancel": "取消",
+    "createAction": "创建并开始设置",
+    "creating": "正在创建…",
+    "onboardingEyebrow": "首次设置",
+    "onboardingTitle": "开始建立「{{name}}」",
+    "onboardingDescription": "先定义要找什么岗位，再决定如何筛选，最后准备该方向专用的基础简历。完成后再开始采集岗位。",
+    "steps": {
+      "1": { "title": "设置岗位关键词和城市", "description": "填写你想投递的岗位名称，并选择要搜索的城市。这两项是开始采集前的必填信息。" },
+      "2": { "title": "使用 LLM 生成并确认入库规则", "description": "保存求职目标后，点击“入库匹配规则”里的“LLM 生成配置”，查看草稿并确认保存；规则只影响当前求职方向。" },
+      "3": { "title": "准备该方向的基础简历", "description": "从模板创建后填写真实经历。它只用于当前方向的评分、材料与面试准备。" }
+    },
+    "later": "稍后设置",
+    "startSetup": "设置求职目标"
+  },
+  "scoringGuide": {
+    "title": "岗位库已有数据，生成评分词库",
+    "body": "当前求职方向已有 {{count}} 条岗位，但评分技能词库仍为空。现在可让 LLM 从岗位库中提炼建议词，再由你确认应用。",
+    "action": "去生成词库建议"
   },
   "status": {
     "ready": "就绪",
@@ -684,6 +711,20 @@
   },
   "scope": {
     "title": "采集配置",
+    "help": "帮助引导",
+    "tour": {
+      "keywordsTitle": "填写采集关键词",
+      "keywordsBody": "每行填写一个想搜索的岗位名称。新方向会自动带入方向名称，你可以补充同类岗位称呼。",
+      "citiesTitle": "选择采集城市",
+      "citiesBody": "点击城市快捷选择，系统会自动填入对应城市代码。城市由你决定，避免系统替你猜测求职地点。",
+      "saveTitle": "保存后开始下一步",
+      "saveBody": "保存配置后即可开始采集。需要筛选入库岗位时，再前往“入库匹配规则”生成并确认 LLM 草稿。",
+      "progress": "{{current}}/{{total}} 设置引导",
+      "previous": "上一步",
+      "next": "下一步",
+      "finish": "完成",
+      "skip": "跳过引导"
+    },
     "reloadConfig": "重新加载",
     "saveConfig": "保存配置",
     "runConfig": "当前运行配置",
@@ -765,7 +806,7 @@
     "customPresetFallbackName": "我的评分预设",
     "customPresetDefaultBase": "自定义预设",
     "saveCustomPresetDialogTitle": "保存当前配置为预设",
-    "customPresetHint": "自定义预设只保存权重、阈值、风险封顶和薪资线；评分技能词库始终使用当前项目词库。",
+    "customPresetHint": "自定义预设只保存权重、阈值、风险封顶和薪资线；评分技能词库始终使用当前求职方向词库。",
     "customPresetSavedAt": "保存于 {{time}}",
     "deleteCustomPreset": "删除自定义预设",
     "noCustomPresets": "还没有自定义预设。调好一组参数后，可以保存下来反复使用。",
@@ -798,7 +839,7 @@
     "scoringKeywordHints": "评分技能词库",
     "scoringKeywordHintsDesc": "粗评分会从 JD 中抽取这些词，再看 cv.md 是否覆盖。",
     "aiKeywordSuggestions": "AI 生成词库建议",
-    "aiKeywordSuggestionsDesc": "从当前项目岗位库抽样，让 LLM 生成技能词建议；只展示建议，需你手动追加或覆盖。",
+    "aiKeywordSuggestionsDesc": "从当前求职方向的岗位库抽样，让 LLM 生成技能词建议；只展示建议，需你手动追加或覆盖。",
     "generateKeywords": "生成词库建议",
     "generatingKeywords": "生成中...",
     "keywordSuggestionMeta": "已参考 {{count}} 个岗位。",
@@ -807,7 +848,7 @@
     "generateMatchingRules": "LLM 生成配置",
     "generatingMatchingRules": "正在生成...",
     "matchingSuggestionTitle": "查看 LLM 生成的入库规则草稿",
-    "matchingSuggestionHint": "草稿仅参考求职关键词和已有入库规则；不会参考简历或城市，也不会自动修改或保存当前项目配置。",
+    "matchingSuggestionHint": "草稿仅参考求职关键词和已有入库规则；不会参考简历或城市，也不会自动修改或保存当前求职方向配置。",
     "matchingSuggestionBasedOn": "本次草稿仅参考：{{sources}}",
     "matchingSuggestionReplaceCount": "分类：{{before}} → {{after}}",
     "matchingSuggestionWarnings": "请确认这些假设",

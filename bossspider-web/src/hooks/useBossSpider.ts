@@ -96,6 +96,7 @@ export function useBossSpider() {
     updateConfig,
     requestBody,
     saveConfig,
+    createProject,
   } = useProjectsConfig({
     loadInitialResources,
     showNotice,
@@ -242,6 +243,7 @@ export function useBossSpider() {
     refreshInterviewItems,
     updateConfig,
     saveConfig,
+    createProject,
     startCrawl,
     startLogin,
     processPartial,

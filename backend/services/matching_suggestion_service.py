@@ -13,6 +13,18 @@ from backend.services.project_service import resolve_project
 
 
 KEYWORDS_ONLY_WARNING = "当前草稿仅基于目标岗位关键词生成；请确认分类边界，黑名单默认留空。"
+TECHNICAL_CATEGORY_NAMES = {
+    "编程语言",
+    "开发工具",
+    "操作系统",
+    "通信协议",
+    "硬件接口",
+    "技术栈",
+    "开发框架",
+    "数据库",
+    "云平台",
+    "测试工具",
+}
 
 
 def _clean_terms(value: Any, limit: int = 80) -> list[str]:
@@ -38,7 +50,7 @@ def _clean_categories(value: Any) -> dict[str, list[str]]:
     for raw_name, raw_terms in value.items():
         name = str(raw_name or "").strip()[:60]
         terms = _clean_terms(raw_terms, limit=20)
-        if name and terms:
+        if name and terms and name.casefold() not in TECHNICAL_CATEGORY_NAMES:
             result[name] = terms
         if len(result) >= 10:
             break
@@ -80,12 +92,15 @@ Return JSON only, with no Markdown or other text.
 Use only the supplied target job keywords and, when present, existing ingestion rules. Never use or infer anything from a candidate resume, city, or other personal profile data.
 
 Rules:
-- categoryRules maps a concise category name to title/description matching phrases.
-- relevanceKeywords are narrowly scoped fallback keep-words when no category matches.
+- categoryRules must group roles by job family, industry, business domain, or application track. For example, "嵌入式软件研发", "智能硬件/物联网", or "车载电子" are valid when supported by the target keywords.
+- Never use a technical dimension as a category: do not create categories such as programming languages, development tools, operating systems, protocols, hardware interfaces, frameworks, databases, or skills. Do not use skill lists as category matching phrases.
+- Each category phrase must be a role title, industry, business domain, product/application direction, or team/function phrase that can appear in a job title or description.
+- relevanceKeywords are narrowly scoped job-family or business-domain fallback keep-words when no category matches.
 - blacklistKeywords must only include clearly unrelated job terms; do not broaden exclusions. When there are no existing ingestion rules, return an empty blacklistKeywords array.
 - Do not use generic terms such as degree, experience, responsible, familiar, or job as matching phrases.
 - Return at most 6 categories, 12 phrases per category, and 40 terms in each keyword list.
 - When no existing rules are supplied, add a warning that the draft is based only on target job keywords and that the blacklist is intentionally empty.
+- Use the same language as the supplied target job keywords whenever possible. If the target keywords contain Chinese, category names, phrases, rationale, and warnings must be Chinese.
 
 Output shape:
 {

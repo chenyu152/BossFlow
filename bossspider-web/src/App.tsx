@@ -12,6 +12,7 @@ import {
   MessageSquareText,
   LayoutDashboard,
   Play,
+  Plus,
   SlidersHorizontal,
   Square,
   Tags,
@@ -94,6 +95,11 @@ export default function App() {
   const [selectedStoryDraftId, setSelectedStoryDraftId] = useState('');
   const [dashboardTargetRequestId, setDashboardTargetRequestId] = useState(0);
   const [personalResumeDirty, setPersonalResumeDirty] = useState(false);
+  const [createDirectionOpen, setCreateDirectionOpen] = useState(false);
+  const [directionName, setDirectionName] = useState('');
+  const [directionCreateError, setDirectionCreateError] = useState('');
+  const [creatingDirection, setCreatingDirection] = useState(false);
+  const [scopeGuideAutoStartPending, setScopeGuideAutoStartPending] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
     discovery: true,
     evaluation: true,
@@ -114,6 +120,12 @@ export default function App() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    if (!boss.loading && !boss.config && boss.projects.length === 0) {
+      setCreateDirectionOpen(true);
+    }
+  }, [boss.config, boss.loading, boss.projects.length]);
 
   const confirmUnsavedConfig = useCallback(() => (
     !hasUnsavedChanges || window.confirm(t('notices.unsavedChangesLeaveConfirm'))
@@ -162,6 +174,33 @@ export default function App() {
   const stopTask = async () => {
     if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
     if (await boss.stopTask()) setActiveTab('Logs');
+  };
+
+  const openCreateDirection = () => {
+    if (!confirmUnsavedConfig()) return;
+    setDirectionName('');
+    setDirectionCreateError('');
+    setCreateDirectionOpen(true);
+  };
+
+  const createDirection = async () => {
+    const name = directionName.trim();
+    if (!name) {
+      setDirectionCreateError(t('directions.nameRequired'));
+      return;
+    }
+    setCreatingDirection(true);
+    setDirectionCreateError('');
+    try {
+      await boss.createProject(name);
+      setCreateDirectionOpen(false);
+      setActiveTab('Scope');
+      setScopeGuideAutoStartPending(true);
+    } catch (error) {
+      setDirectionCreateError((error as Error).message);
+    } finally {
+      setCreatingDirection(false);
+    }
   };
 
   return (
@@ -243,10 +282,19 @@ export default function App() {
                 onChange={(event) => {
                   if (confirmUnsavedConfig()) void boss.loadConfig(event.target.value);
                 }}
+                disabled={boss.projects.length === 0}
                 className="bg-zinc-900 border border-zinc-800 text-sm rounded px-2 py-1 outline-none focus:border-indigo-500"
               >
+                {boss.projects.length === 0 && <option value="">{t('directions.none')}</option>}
                 {boss.projects.map((name) => <option value={name} key={name}>{name}</option>)}
               </select>
+              <button
+                onClick={openCreateDirection}
+                className="inline-flex items-center gap-1 rounded border border-zinc-800 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-indigo-700 hover:bg-indigo-950/30 hover:text-indigo-200"
+              >
+                <Plus size={13} />
+                {t('directions.newButton')}
+              </button>
             </div>
 
             <div className="h-4 w-[1px] bg-zinc-800" />
@@ -305,6 +353,38 @@ export default function App() {
           </div>
         )}
 
+        {createDirectionOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
+              <div className="border-b border-zinc-800 p-5">
+                <h2 className="text-lg font-semibold text-zinc-100">{t('directions.createTitle')}</h2>
+                <p className="mt-2 text-sm leading-6 text-zinc-400">{t('directions.createDescription')}</p>
+              </div>
+              <div className="space-y-3 p-5">
+                <label className="block text-sm font-medium text-zinc-200" htmlFor="direction-name">{t('directions.nameLabel')}</label>
+                <input
+                  id="direction-name"
+                  autoFocus
+                  value={directionName}
+                  onChange={(event) => setDirectionName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void createDirection();
+                  }}
+                  placeholder={t('directions.namePlaceholder')}
+                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-indigo-500"
+                />
+                {directionCreateError && <p className="text-sm text-red-300">{directionCreateError}</p>}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-zinc-800 p-4">
+                {boss.projects.length > 0 && <button onClick={() => setCreateDirectionOpen(false)} disabled={creatingDirection} className="rounded border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900 disabled:opacity-50">{t('directions.cancel')}</button>}
+                <button onClick={() => void createDirection()} disabled={creatingDirection} className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
+                  {creatingDirection ? t('directions.creating') : t('directions.createAction')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <main className="flex-1 overflow-auto bg-zinc-950 p-5">
           <div className={isWideWorkspace ? 'h-full w-full min-w-0' : 'max-w-6xl mx-auto h-full'}>
             <Suspense fallback={<PageLoading label={currentLanguage.startsWith('zh') ? '加载页面...' : 'Loading page...'} />}>
@@ -330,6 +410,8 @@ export default function App() {
                   }}
                   onLogin={startLogin}
                   onProcessPartial={processPartial}
+                  autoStartGuide={scopeGuideAutoStartPending}
+                  onAutoStartGuideHandled={() => setScopeGuideAutoStartPending(false)}
                 />
               )}
               {activeTab === 'MatchingRules' && boss.config && (

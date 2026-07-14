@@ -22,6 +22,7 @@ from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest
 from backend.schemas.jobs import JobLiveStatusUpdateRequest
 from backend.schemas.matching import MatchingRulesSuggestionRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
+from backend.schemas.project import ProjectCreateRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, ResumeSuggestionRequest
 from backend.schemas.scoring import ScoringKeywordSuggestionRequest
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
@@ -57,6 +58,7 @@ from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
 from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
 from backend.services.project_service import (
     config_payload,
+    create_project,
     default_project_name,
     project_names,
     resolve_project,
@@ -87,7 +89,13 @@ def _workspace_project(project: Optional[str] = None, source_key: str = "") -> s
 
 @app.get("/api/projects")
 def list_projects():
-    return {"projects": project_names(), "defaultProject": default_project_name()}
+    names = project_names()
+    return {"projects": names, "defaultProject": default_project_name() if names else ""}
+
+
+@app.post("/api/projects")
+def create_new_project(payload: ProjectCreateRequest):
+    return config_payload(create_project(payload.name))
 
 
 @app.get("/api/config")

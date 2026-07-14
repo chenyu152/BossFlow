@@ -195,6 +195,14 @@ export function Dashboard({
   const [cvStatus, setCvStatus] = useState<CvStatusResponse | null>(null);
   const [cvLoading, setCvLoading] = useState(false);
   const [cvError, setCvError] = useState('');
+  const scoringKeywordCount = useMemo(() => {
+    try {
+      const scoring = JSON.parse(config.scoringRulesText || '{}');
+      return Array.isArray(scoring.keywordHints) ? scoring.keywordHints.filter((item: unknown) => String(item || '').trim()).length : 0;
+    } catch {
+      return 0;
+    }
+  }, [config.scoringRulesText]);
 
   const evidenceTasks = useMemo(() => {
     const activeTasks = (evidenceOverview?.tasks || []).filter(
@@ -579,6 +587,19 @@ export function Dashboard({
         </div>
 
         <aside className="space-y-5">
+          {jobs.length > 0 && scoringKeywordCount === 0 && (
+            <section className="rounded-md border border-cyan-900/60 bg-cyan-950/20 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-cyan-100">
+                <Sparkles size={14} />
+                {t('scoringGuide.title')}
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-cyan-100/75">{t('scoringGuide.body', { count: jobs.length })}</p>
+              <button onClick={() => setActiveTab('ScoringRules')} className="mt-3 inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950/40 px-3 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-900/40">
+                {t('scoringGuide.action')}
+                <ArrowRight size={13} />
+              </button>
+            </section>
+          )}
           <section className={`rounded-md border bg-zinc-950 ${
             cvStatus?.readyForScoring && cvStatus?.readyForMaterials
               ? 'border-emerald-900/60'

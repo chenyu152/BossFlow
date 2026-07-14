@@ -7,6 +7,22 @@ from backend.services import matching_suggestion_service
 
 
 class MatchingSuggestionServiceTest(unittest.TestCase):
+    def test_discards_technical_dimension_categories(self):
+        parsed = matching_suggestion_service._parse_suggestion(json.dumps({
+            "categoryRules": {
+                "嵌入式软件研发": ["嵌入式软件工程师"],
+                "编程语言": ["C", "C++"],
+                "开发工具": ["GDB"],
+                "通信协议": ["CAN"],
+            },
+            "relevanceKeywords": [],
+            "blacklistKeywords": [],
+            "rationale": "",
+            "warnings": [],
+        }, ensure_ascii=False))
+
+        self.assertEqual(parsed["categoryRules"], {"嵌入式软件研发": ["嵌入式软件工程师"]})
+
     def test_blank_rules_only_use_target_keywords_and_keep_blacklist_empty(self):
         captured_messages = []
         llm_response = json.dumps({

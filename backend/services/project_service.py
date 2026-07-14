@@ -14,6 +14,21 @@ from crawler.config import DEFAULT_SCRAPE_LIMITS, save_config
 from crawler.pipeline import MIN_AVG_SALARY_K
 
 
+INVALID_PROJECT_NAME_CHARS = set('<>:"/\\|?*')
+
+
+def _validated_project_name(value: str) -> str:
+    name = str(value or "").strip()
+    if not name or len(name) > 60:
+        raise HTTPException(status_code=400, detail="Project name must be between 1 and 60 characters")
+    if any(char in INVALID_PROJECT_NAME_CHARS or ord(char) < 32 for char in name):
+        raise HTTPException(status_code=400, detail="Project name contains unsupported characters")
+    path = Path(name)
+    if path.is_absolute() or len(path.parts) != 1 or name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid project name")
+    return name
+
+
 def find_free_port(start_port: int = 9222) -> int:
     port = start_port
     while port < 9500:
@@ -52,15 +67,57 @@ def default_project_name() -> str:
 
 
 def resolve_project(project: Optional[str]) -> Path:
-    name = project or default_project_name()
-    if not name or Path(name).is_absolute() or any(part == ".." for part in Path(name).parts):
-        raise HTTPException(status_code=400, detail="Invalid project name")
+    name = _validated_project_name(project or default_project_name())
     path = (PROJECTS_DIR / name).resolve()
     if PROJECTS_DIR.resolve() not in path.parents and path != PROJECTS_DIR.resolve():
         raise HTTPException(status_code=400, detail="Project escapes workspace")
     if not (path / "config.json").exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {name}")
     return path
+
+
+def create_project(name: str) -> Path:
+    """Create an empty, isolated job-search direction."""
+    normalized_name = _validated_project_name(name)
+    project_dir = PROJECTS_DIR / normalized_name
+    if project_dir.exists():
+        raise HTTPException(status_code=409, detail=f"Project already exists: {normalized_name}")
+
+    config = {
+        "keywords": [normalized_name],
+        "cities": {},
+        "scrape_limits": DEFAULT_SCRAPE_LIMITS.copy(),
+        "min_salary": MIN_AVG_SALARY_K,
+        "strategy_index": 2,
+        "headless_mode": True,
+        "auto_sqlite": True,
+        "cat_rules": {},
+        "relevance_keywords": [],
+        "blacklist_keywords": [],
+        "scoring": normalize_scoring_config({"keywordHints": []}),
+        "direction_setup_version": 2,
+    }
+    project_dir.mkdir(parents=True, exist_ok=False)
+    save_config(config, str(project_dir))
+    return project_dir
+
+
+def _migrate_legacy_default_scoring_keywords(project_dir: Path, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Clear the old global default library from directions created before isolation."""
+    if config.get("direction_setup_version"):
+        return config
+    scoring = config.get("scoring")
+    if not isinstance(scoring, dict):
+        return config
+    current_hints = [str(item).strip() for item in scoring.get("keywordHints", []) if str(item).strip()]
+    default_hints = [str(item).strip() for item in DEFAULT_SCORING_CONFIG["keywordHints"]]
+    if current_hints != default_hints:
+        return config
+    migrated = dict(config)
+    migrated["scoring"] = normalize_scoring_config({**scoring, "keywordHints": []})
+    migrated["direction_setup_version"] = 2
+    save_config(migrated, str(project_dir))
+    return migrated
 
 
 def paths_for_project(project_dir: Path) -> Dict[str, str]:
@@ -120,7 +177,7 @@ def stats_for_project(project_dir: Path, config: Dict[str, Any]) -> Dict[str, An
 
 
 def config_payload(project_dir: Path) -> Dict[str, Any]:
-    config = load_config(str(project_dir))
+    config = _migrate_legacy_default_scoring_keywords(project_dir, load_config(str(project_dir)))
     limits = DEFAULT_SCRAPE_LIMITS.copy()
     limits.update(config.get("scrape_limits") or {})
     paths = paths_for_project(project_dir)

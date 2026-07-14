@@ -21,12 +21,39 @@
     }
   },
   "header": {
-    "project": "Project",
+    "project": "Job-search direction",
     "noDatabase": "No database",
     "noDatabaseLoaded": "No database loaded",
     "viewLogs": "View Logs",
     "startCrawl": "Start Crawl",
     "stopCrawl": "Stop Crawl"
+  },
+  "directions": {
+    "newButton": "New direction",
+    "none": "No direction yet",
+    "createTitle": "New job-search direction",
+    "createDescription": "Each direction keeps its job database, ingestion rules, base resume, evidence, and stories separate from every other direction.",
+    "nameLabel": "Direction name",
+    "namePlaceholder": "For example: AI Agent Application Development",
+    "nameRequired": "Enter a job-search direction name.",
+    "cancel": "Cancel",
+    "createAction": "Create and start setup",
+    "creating": "Creating…",
+    "onboardingEyebrow": "First-time setup",
+    "onboardingTitle": "Build {{name}}",
+    "onboardingDescription": "Define the roles to look for, decide how to filter them, then prepare a base resume for this direction before you start collecting jobs.",
+    "steps": {
+      "1": { "title": "Set role keywords and cities", "description": "Enter the roles you want to apply for and choose the cities to search. Both are required before collection." },
+      "2": { "title": "Generate and confirm ingestion rules with LLM", "description": "After saving your target, open Ingestion Rules and choose Generate with LLM to review and save a draft for this direction." },
+      "3": { "title": "Prepare a direction-specific base resume", "description": "Create from the template and add real experience. It is used only for this direction's scoring, materials, and interview prep." }
+    },
+    "later": "Set up later",
+    "startSetup": "Set job target"
+  },
+  "scoringGuide": {
+    "title": "Your job database is ready for a scoring keyword library",
+    "body": "This direction has {{count}} jobs, but its scoring keyword library is empty. Let LLM derive suggestions from the database, then review and apply them.",
+    "action": "Generate keyword suggestions"
   },
   "status": {
     "ready": "Ready",
@@ -683,6 +710,20 @@
   },
   "scope": {
     "title": "Crawl Config",
+    "help": "Help tour",
+    "tour": {
+      "keywordsTitle": "Enter crawl keywords",
+      "keywordsBody": "Use one job title per line. A new direction starts with its name as the first keyword; add equivalent target titles as needed.",
+      "citiesTitle": "Choose crawl cities",
+      "citiesBody": "Choose cities from the shortcuts to fill their codes automatically. Cities stay your decision, so the system never guesses where you want to work.",
+      "saveTitle": "Save, then continue",
+      "saveBody": "Save this configuration before crawling. When you need to filter incoming jobs, open Ingestion Rules to generate and confirm an LLM draft.",
+      "progress": "Setup tour {{current}}/{{total}}",
+      "previous": "Back",
+      "next": "Next",
+      "finish": "Done",
+      "skip": "Skip tour"
+    },
     "reloadConfig": "Reload Config",
     "saveConfig": "Save Config",
     "runConfig": "Current Run Configuration",
@@ -764,7 +805,7 @@
     "customPresetFallbackName": "My scoring preset",
     "customPresetDefaultBase": "Custom preset",
     "saveCustomPresetDialogTitle": "Save current setup as preset",
-    "customPresetHint": "Custom presets only save weights, thresholds, risk caps, and salary lines. Skill keywords always use the current project keyword library.",
+    "customPresetHint": "Custom presets only save weights, thresholds, risk caps, and salary lines. Skill keywords always use the current job-search direction keyword library.",
     "customPresetSavedAt": "Saved at {{time}}",
     "deleteCustomPreset": "Delete custom preset",
     "noCustomPresets": "No custom presets yet. Tune a setup, then save it for reuse.",
@@ -806,7 +847,7 @@
     "generateMatchingRules": "Generate with LLM",
     "generatingMatchingRules": "Generating...",
     "matchingSuggestionTitle": "Review generated ingestion rules",
-    "matchingSuggestionHint": "This draft uses only target job keywords and existing ingestion rules. It never uses a resume or city, and it does not change or save the current project automatically.",
+    "matchingSuggestionHint": "This draft uses only target job keywords and existing ingestion rules. It never uses a resume or city, and it does not change or save the current job-search direction automatically.",
     "matchingSuggestionBasedOn": "This draft only uses: {{sources}}",
     "matchingSuggestionReplaceCount": "Categories: {{before}} → {{after}}",
     "matchingSuggestionWarnings": "Assumptions to confirm",

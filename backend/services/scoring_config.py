@@ -68,12 +68,12 @@ def _deep_merge(defaults: dict[str, Any], override: dict[str, Any]) -> dict[str,
 
 
 def normalize_scoring_config(value: Any) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        value = {}
-    config = _deep_merge(DEFAULT_SCORING_CONFIG, value)
+    raw_config = value if isinstance(value, dict) else {}
+    has_keyword_hints = "keywordHints" in raw_config
+    config = _deep_merge(DEFAULT_SCORING_CONFIG, raw_config)
 
     keyword_hints = config.get("keywordHints")
-    if not isinstance(keyword_hints, list):
+    if not has_keyword_hints or not isinstance(keyword_hints, list):
         config["keywordHints"] = DEFAULT_SCORING_CONFIG["keywordHints"]
     else:
         config["keywordHints"] = [str(item).strip() for item in keyword_hints if str(item).strip()]
