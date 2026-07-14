@@ -57,7 +57,7 @@ def _llm_config() -> tuple[str, str, str]:
         or _env("DEEPSEEK_API_BASE")
         or _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     )
-    model = _env("BOSSSPIDER_LLM_MODEL") or _env("DEEPSEEK_MODEL", "deepseek-chat")
+    model = _env("BOSSSPIDER_LLM_MODEL") or _env("DEEPSEEK_MODEL", "deepseek-v4-flash")
     if not api_key:
         raise HTTPException(
             status_code=400,

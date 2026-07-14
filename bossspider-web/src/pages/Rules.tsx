@@ -126,6 +126,7 @@ export function Rules({
   autoStartGuide = false,
   onAutoStartGuideHandled,
   onGuideComplete,
+  onGuidedLlmSetupRequired,
 }: {
   mode: RulesTab;
   config: ConfigPayload;
@@ -134,6 +135,7 @@ export function Rules({
   autoStartGuide?: boolean;
   onAutoStartGuideHandled?: () => void;
   onGuideComplete?: () => void;
+  onGuidedLlmSetupRequired?: () => void;
 }) {
   const { t } = useAppTranslation();
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -360,7 +362,8 @@ export function Rules({
   };
 
   const generateMatchingSuggestion = async () => {
-    if (guideStep === 0) {
+    const startedFromGuide = guideStep === 0;
+    if (startedFromGuide) {
       setGuideError('');
       setGuideStep(null);
       setResumeGuideAfterSuggestion(true);
@@ -375,8 +378,10 @@ export function Rules({
         blacklistText: config.blacklistText,
       }));
     } catch (error) {
-      setMatchingSuggestionError((error as Error).message);
+      const message = (error as Error).message;
+      setMatchingSuggestionError(message);
       setResumeGuideAfterSuggestion(false);
+      if (startedFromGuide && message.includes('Missing LLM API key')) onGuidedLlmSetupRequired?.();
     } finally {
       setMatchingSuggestionLoading(false);
     }

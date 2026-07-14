@@ -1,10 +1,19 @@
 import { Eye, EyeOff, KeyRound, PlugZap, Save, Settings2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { bossApi } from '../api';
+import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { useAppTranslation } from '../i18n';
 import type { LlmSettingsStatus } from '../types';
 
-export function Settings({ onUpdated }: { onUpdated: (settings: LlmSettingsStatus) => void }) {
+export function Settings({
+  onUpdated,
+  returnToMatchingGuideAfterTest = false,
+  onReturnToMatchingGuide,
+}: {
+  onUpdated: (settings: LlmSettingsStatus) => void;
+  returnToMatchingGuideAfterTest?: boolean;
+  onReturnToMatchingGuide?: () => void;
+}) {
   const { t } = useAppTranslation();
   const [settings, setSettings] = useState<LlmSettingsStatus | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -15,6 +24,15 @@ export function Settings({ onUpdated }: { onUpdated: (settings: LlmSettingsStatu
   const [keyVisible, setKeyVisible] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [setupGuideOpen, setSetupGuideOpen] = useState(false);
+  const [setupGuideError, setSetupGuideError] = useState('');
+  const setupGuideSteps = useMemo<GuidedTourStep[]>(() => [
+    {
+      target: 'settings-test-api',
+      title: t('settings.llm.setupTour.title'),
+      body: t('settings.llm.setupTour.body'),
+    },
+  ], [t]);
 
   const load = async () => {
     setError('');
@@ -41,8 +59,10 @@ export function Settings({ onUpdated }: { onUpdated: (settings: LlmSettingsStatu
       setKeyVisible(false);
       onUpdated(saved);
       setMessage(t('settings.llm.saved'));
+      return true;
     } catch (saveError) {
       setError((saveError as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -73,11 +93,25 @@ export function Settings({ onUpdated }: { onUpdated: (settings: LlmSettingsStatu
     try {
       await bossApi.testLlmSettings({ apiKey, apiBase, model });
       setMessage(t('settings.llm.testSuccess'));
+      if (returnToMatchingGuideAfterTest) {
+        setSetupGuideError('');
+        setSetupGuideOpen(true);
+      }
     } catch (testError) {
       setError((testError as Error).message);
     } finally {
       setTesting(false);
     }
+  };
+
+  const finishSetupGuide = async () => {
+    setSetupGuideError('');
+    if (!await save()) {
+      setSetupGuideError(t('settings.llm.setupTour.saveFailed'));
+      return;
+    }
+    setSetupGuideOpen(false);
+    onReturnToMatchingGuide?.();
   };
 
   return (
@@ -112,16 +146,32 @@ export function Settings({ onUpdated }: { onUpdated: (settings: LlmSettingsStatu
           </label>
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-zinc-200">{t('settings.llm.model')}</span>
-            <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="deepseek-chat" className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500" />
+            <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="deepseek-v4-flash" className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500" />
           </label>
           {error && <p className="rounded border border-red-900/60 bg-red-950/20 px-3 py-2 text-sm text-red-200">{error}</p>}
           {message && <p className="rounded border border-emerald-900/60 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-200">{message}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={() => void testConnection()} disabled={testing || saving} className="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950/20 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-950/40 disabled:cursor-not-allowed disabled:opacity-60"><PlugZap size={15} />{testing ? t('settings.llm.testing') : t('settings.llm.test')}</button>
+            <button data-guide-target="settings-test-api" onClick={() => void testConnection()} disabled={testing || saving} className="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950/20 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-950/40 disabled:cursor-not-allowed disabled:opacity-60"><PlugZap size={15} />{testing ? t('settings.llm.testing') : t('settings.llm.test')}</button>
             <button onClick={() => void save()} disabled={saving} className="inline-flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"><Save size={15} />{saving ? t('settings.saving') : t('settings.save')}</button>
           </div>
         </div>
       </section>
+      {setupGuideOpen && (
+        <GuidedTour
+          steps={setupGuideSteps}
+          activeStep={0}
+          onStepChange={() => undefined}
+          onClose={() => { setSetupGuideError(''); setSetupGuideOpen(false); }}
+          onFinish={() => { void finishSetupGuide(); }}
+          finishing={saving}
+          error={setupGuideError}
+          nextLabel={t('settings.llm.setupTour.finish')}
+          previousLabel={t('settings.llm.setupTour.finish')}
+          finishLabel={saving ? t('settings.saving') : t('settings.llm.setupTour.finish')}
+          skipLabel={t('settings.llm.setupTour.skip')}
+          progressLabel={(current, total) => t('settings.llm.setupTour.progress', { current, total })}
+        />
+      )}
     </div>
   );
 }

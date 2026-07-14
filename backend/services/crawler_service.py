@@ -31,6 +31,7 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager) -> dict:
                 partial_file=paths["partialPath"],
                 scroll_max_scrolls=int(limits.get("scroll_max_scrolls", payload.scrollMax)),
             )
+            crawler.set_crawl_started_callback(task_manager.mark_crawl_authenticated)
             task_manager.current_crawler = crawler
             raw_jobs = crawler.run(
                 keywords=keywords,

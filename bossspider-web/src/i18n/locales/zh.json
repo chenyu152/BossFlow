@@ -52,7 +52,7 @@
     "startSetup": "设置求职目标",
     "crawlTour": {
       "title": "启动首次采集",
-      "body": "配置已保存。点击这里开始采集岗位；采集启动后，我们会带你填写或导入这个求职方向专用的基础简历。",
+      "body": "配置已保存。点击这里开始采集岗位；登录完成并开始采集后，我们会带你填写或导入这个求职方向专用的基础简历。",
       "progress": "{{current}}/{{total}} 设置引导",
       "finish": "知道了",
       "skip": "跳过引导"
@@ -84,7 +84,15 @@
       "saved": "系统 LLM 设置已保存。",
       "test": "测试 API",
       "testing": "测试中…",
-      "testSuccess": "API 连接成功，当前模型可以调用。"
+      "testSuccess": "API 连接成功，当前模型可以调用。",
+      "setupTour": {
+        "title": "API 测试成功",
+        "body": "已确认当前模型可以调用。保存设置后返回“入库匹配规则”，继续点击 LLM 生成草稿。",
+        "finish": "保存并返回入库规则",
+        "skip": "暂留在设置页",
+        "progress": "LLM 设置 {{current}}/{{total}}",
+        "saveFailed": "保存设置失败，请检查配置后重试。"
+      }
     }
   },
   "status": {

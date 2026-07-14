@@ -42,7 +42,7 @@ def _resolved_llm_values() -> tuple[str, str, str, bool]:
         or _env_or_file("DEEPSEEK_API_BASE", values)
         or _env_or_file("DEEPSEEK_BASE_URL", values, "https://api.deepseek.com/v1")
     )
-    model = _env_or_file("BOSSSPIDER_LLM_MODEL", values) or _env_or_file("DEEPSEEK_MODEL", values, "deepseek-chat")
+    model = _env_or_file("BOSSSPIDER_LLM_MODEL", values) or _env_or_file("DEEPSEEK_MODEL", values, "deepseek-v4-flash")
     return api_key, api_base, model, environment_configured
 
 

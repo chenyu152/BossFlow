@@ -19,6 +19,7 @@ export function useTasks({
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const [status, setStatus] = useState<Status>('ready');
+  const [crawlAuthenticated, setCrawlAuthenticated] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const firstStatusLoad = useRef(true);
   const wasRunningRef = useRef(false);
@@ -32,6 +33,7 @@ export function useTasks({
       try {
         const data = await bossApi.getTaskStatus();
         setStatus(data.status || (data.running ? 'crawling' : 'ready'));
+        setCrawlAuthenticated(Boolean(data.crawlAuthenticated));
         setLogs(data.logs || []);
         if (!firstStatusLoad.current && wasRunningRef.current && !data.running) await refreshJobs();
         wasRunningRef.current = data.running;
@@ -50,6 +52,7 @@ export function useTasks({
       await bossApi.startCrawl(requestBody());
       wasRunningRef.current = true;
       setStatus('crawling');
+      setCrawlAuthenticated(false);
       return true;
     } catch (error) {
       showNotice(t('notices.startFailed', { error: (error as Error).message }));
@@ -106,6 +109,7 @@ export function useTasks({
 
   return {
     status,
+    crawlAuthenticated,
     logs,
     parsedLogs,
     recentLogs,

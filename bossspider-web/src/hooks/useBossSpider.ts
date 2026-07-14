@@ -109,6 +109,7 @@ export function useBossSpider() {
 
   const {
     status,
+    crawlAuthenticated,
     logs,
     parsedLogs,
     recentLogs,
@@ -210,6 +211,7 @@ export function useBossSpider() {
 
   return {
     status,
+    crawlAuthenticated,
     projects,
     project,
     config,

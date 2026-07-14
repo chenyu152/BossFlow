@@ -304,6 +304,7 @@ class BossCrawler:
         self._processed_keys = set()
         self._progress_cb = None
         self._keyword_done_cb = None
+        self._crawl_started_cb = None
         self._headless_requested = False
         self._partial_file = Path(partial_file) if partial_file else Path('crawl_partial.json')
         self._partial_results = []  # 已完成关键词的标准化结果
@@ -800,6 +801,12 @@ class BossCrawler:
             co = self._build_options(headless=True)
             self.page = ChromiumPage(addr_or_opts=co)
 
+        if self._crawl_started_cb:
+            try:
+                self._crawl_started_cb()
+            except Exception:
+                pass
+
         self._processed_keys = set()
         mode_label = f'滚动(目标{scroll_target}条)'
         total_kws = len(keywords)
@@ -868,6 +875,10 @@ class BossCrawler:
     def set_keyword_done_callback(self, cb):
         """关键词完成回调: cb(keyword, total_jobs_so_far, kw_idx, total_kws)"""
         self._keyword_done_cb = cb
+
+    def set_crawl_started_callback(self, cb):
+        """登录完成并准备开始采集时的回调。"""
+        self._crawl_started_cb = cb
 
 
 # ==================== CLI ====================

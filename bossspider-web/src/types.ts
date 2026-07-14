@@ -646,6 +646,7 @@ export type GreetingDraftResponse = {
 export type TaskStatusResponse = {
   running: boolean;
   status: Status;
+  crawlAuthenticated: boolean;
   logs: string[];
 };
 

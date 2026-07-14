@@ -104,6 +104,7 @@ export default function App() {
   const [creatingDirection, setCreatingDirection] = useState(false);
   const [scopeGuideAutoStartPending, setScopeGuideAutoStartPending] = useState(false);
   const [matchingGuideAutoStartPending, setMatchingGuideAutoStartPending] = useState(false);
+  const [returnToMatchingGuideAfterApiTest, setReturnToMatchingGuideAfterApiTest] = useState(false);
   const [crawlGuideOpen, setCrawlGuideOpen] = useState(false);
   const [resumeGuideAutoStartPending, setResumeGuideAutoStartPending] = useState(false);
   const [resumeGuideAfterCrawl, setResumeGuideAfterCrawl] = useState(false);
@@ -175,15 +176,16 @@ export default function App() {
   const startCrawl = async () => {
     if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
     if (await boss.startCrawl()) {
-      if (resumeGuideAfterCrawl) {
-        setResumeGuideAfterCrawl(false);
-        setResumeGuideAutoStartPending(true);
-        setActiveTab('PersonalResume');
-      } else {
-        setActiveTab('Logs');
-      }
+      setActiveTab('Logs');
     }
   };
+
+  useEffect(() => {
+    if (!resumeGuideAfterCrawl || !boss.crawlAuthenticated) return;
+    setResumeGuideAfterCrawl(false);
+    setResumeGuideAutoStartPending(true);
+    setActiveTab('PersonalResume');
+  }, [boss.crawlAuthenticated, resumeGuideAfterCrawl]);
 
   const startLogin = async () => {
     if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
@@ -473,13 +475,22 @@ export default function App() {
                     setResumeGuideAfterCrawl(true);
                     setCrawlGuideOpen(true);
                   }}
+                  onGuidedLlmSetupRequired={() => setReturnToMatchingGuideAfterApiTest(true)}
                 />
               )}
               {activeTab === 'ScoringRules' && boss.config && (
                 <Rules mode="scoring" config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
               )}
               {activeTab === 'Settings' && (
-                <Settings onUpdated={() => undefined} />
+                <Settings
+                  onUpdated={() => undefined}
+                  returnToMatchingGuideAfterTest={returnToMatchingGuideAfterApiTest}
+                  onReturnToMatchingGuide={() => {
+                    setReturnToMatchingGuideAfterApiTest(false);
+                    setMatchingGuideAutoStartPending(true);
+                    setActiveTab('MatchingRules');
+                  }}
+                />
               )}
               {activeTab === 'Jobs' && (
                 <Jobs

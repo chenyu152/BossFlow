@@ -52,7 +52,7 @@
     "startSetup": "Set job target",
     "crawlTour": {
       "title": "Start your first crawl",
-      "body": "Your configuration is saved. Start collecting jobs here; once it starts, we will take you to import or write the base resume for this direction.",
+      "body": "Your configuration is saved. Start collecting jobs here; after sign-in succeeds and collection begins, we will take you to import or write the base resume for this direction.",
       "progress": "Setup tour {{current}}/{{total}}",
       "finish": "Got it",
       "skip": "Skip tour"
@@ -84,7 +84,15 @@
       "saved": "System LLM settings saved.",
       "test": "Test API",
       "testing": "Testing…",
-      "testSuccess": "API connection succeeded and the selected model is callable."
+      "testSuccess": "API connection succeeded and the selected model is callable.",
+      "setupTour": {
+        "title": "API test succeeded",
+        "body": "The selected model is ready. Save these settings, then return to Ingestion Rules and generate the LLM draft.",
+        "finish": "Save and return to rules",
+        "skip": "Stay in settings",
+        "progress": "LLM setup {{current}}/{{total}}",
+        "saveFailed": "Could not save the settings. Check the configuration and try again."
+      }
     }
   },
   "status": {

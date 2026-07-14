@@ -51,6 +51,7 @@ class TaskManager:
         self.current_stop: Optional[Callable[[], None]] = None
         self.status = "ready"
         self.running = False
+        self.crawl_authenticated = False
         self.logs: List[str] = []
 
     def append_log(self, message: str):
@@ -64,6 +65,7 @@ class TaskManager:
             return {
                 "running": self.running,
                 "status": self.status,
+                "crawlAuthenticated": self.crawl_authenticated,
                 "logCount": len(self.logs),
                 "logs": list(self.logs),
             }
@@ -74,6 +76,7 @@ class TaskManager:
                 raise HTTPException(status_code=409, detail="已有任务正在运行")
             self.status = label
             self.running = True
+            self.crawl_authenticated = False
             self.current_stop = stop_handler
             self.logs.clear()
         self.append_log("任务已启动")
@@ -97,6 +100,11 @@ class TaskManager:
 
         self.worker = threading.Thread(target=runner, daemon=True)
         self.worker.start()
+
+    def mark_crawl_authenticated(self):
+        with self.lock:
+            self.crawl_authenticated = True
+        self.append_log("[OK] 登录成功，Cookie 已生效，开始采集岗位")
 
     def stop(self):
         stop_handler = self.current_stop
