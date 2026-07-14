@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from paddleocr import PaddleOCR
+from rapidocr_onnxruntime import RapidOCR
 
 from .llm_extract import extract_resume
 from .pdf_to_images import pdf_to_images
@@ -38,32 +38,28 @@ def run_pipeline(
     print(f"  生成 {len(images)} 页: {', '.join(images)}")
 
     # ── Step 2: OCR ──
-    print("[2/4] PaddleOCR 识别中 ...")
-    ocr = PaddleOCR(
-        text_detection_model_name="PP-OCRv6_medium_det",
-        text_recognition_model_name="PP-OCRv6_medium_rec",
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        use_textline_orientation=True,
-        # Windows CPU 上 oneDNN 与当前 Paddle PIR 执行器存在兼容性问题；
-        # 禁用 oneDNN，使用默认 CPU 执行路径完成 OCR。
-        enable_mkldnn=False,
+    print("[2/4] RapidOCR v6 (ONNX) 识别中 ...")
+    models_dir = Path(__file__).parent / "models"
+    ocr = RapidOCR(
+        det_model_path=str(models_dir / "v6_det.onnx"),
+        rec_model_path=str(models_dir / "v6_rec.onnx"),
+        rec_keys_path=str(models_dir / "v6_charset.txt"),
+        use_cls=False,
     )
 
     all_lines: list[str] = []
     for img_path in images:
-        result = ocr.predict(img_path)
-        for res in result:
-            page_lines: list[str] = []
-            rec_texts = res.json["res"]["rec_texts"]
-            for text in rec_texts:
+        result, _ = ocr(img_path)
+        page_lines: list[str] = []
+        if result:
+            for box, text, score in result:
                 text = text.strip()
                 if text:
                     page_lines.append(text)
 
-            page_text = "\n".join(page_lines)
-            all_lines.append(f"--- 第 {len(all_lines) + 1} 页 ---\n{page_text}")
-            print(f"  {img_path}: {len(page_lines)} 行文本")
+        page_text = "\n".join(page_lines)
+        all_lines.append(f"--- 第 {len(all_lines) + 1} 页 ---\n{page_text}")
+        print(f"  {img_path}: {len(page_lines)} 行文本")
 
     ocr_text = "\n\n".join(all_lines)
     print(f"  共识别 {len(ocr_text)} 字符")

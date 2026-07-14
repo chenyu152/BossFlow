@@ -7,7 +7,6 @@ requests>=2.31.0
 python-dotenv>=1.0
 python-multipart>=0.0.32
 
-# PDF 简历解析
-paddleocr>=3.7
-paddlepaddle>=3.3
+# PDF 简历解析（ONNX Runtime 推理，无需 GPU）
+rapidocr-onnxruntime>=1.4
 pymupdf>=1.28
