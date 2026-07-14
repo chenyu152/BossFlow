@@ -1,111 +1,28 @@
 # BossFlow
 
-本地优先的 AI 求职工作台。从 Boss 直聘发现岗位、AI 评估匹配度、定制简历、准备面试——全流程在本地完成，数据归你所有。
+BossFlow 是一个**本地优先的求职工作台**。它把岗位采集、筛选评估、材料准备和面试准备组织为一条可回溯的工作流；LLM 负责分析与草稿生成，是否采用、如何修改，始终由用户决定。
 
-## 设计原则
+> 当前数据按“求职方向”隔离。例如“Agent 应用开发”和“游戏策划”应分别创建方向，各自维护岗位库、基础简历、证据和故事，不会互相复用。
 
-- **本地优先** — 简历、报告、面试材料全部存为可读 Markdown/JSON 文件，不绑定任何云服务
-- **人在回路** — 打招呼、简历覆盖、故事沉淀等关键动作必须用户确认，AI 只做建议不做决定
-- **可审计** — AI 生成内容应逐步沉淀结构化证据来源（JD / 简历 / 用户确认），不凭空编造
-- **Web + Agent 同源** — Web 控制台和未来的 Claude Code Agent skill 共享同一套后端服务和数据文件
-- **分层限速** — Boss 直聘请求串行限速，AI 分析可并行
+## 当前能力
 
-## 核心工作流
+- 从 Boss 直聘按关键词和城市采集岗位。
+- 为每个求职方向保存独立的采集配置、SQLite 岗位库、浏览器配置和工作区材料。
+- 通过分类、兜底关键词、黑名单和最低薪资进行入库筛选；可让 LLM 生成**待确认**的入库规则草稿。
+- 在岗位库中进行搜索、浏览、导出和粗评分；有岗位样本后可让 LLM 生成评分技能词库建议。
+- 在候选岗位（Pipeline）中管理状态，生成 LLM 匹配报告，并在岗位档案内推进简历、沟通和面试准备。
+- 根据职位要求建立证据覆盖：区分已有简历线索、待确认的证据和缺口，避免把 AI 推测当作个人事实。
+- 生成简历修改建议、定制简历草稿、沟通草稿和面试准备；用户确认的证据才会用于后续材料。
+- 维护自由故事草稿与故事库，供面试准备复用。
+- 提供首次使用引导：采集配置 → 入库规则 → 开始采集 → 导入或编写基础简历。
+- 在系统设置中配置、显示/隐藏、测试 OpenAI 兼容的 LLM API；配置只保存在本机 `.env`，不属于任一求职方向。
 
-```
-发现岗位 → 筛选去重 → Pipeline 队列 → 粗筛打分 → LLM 精评 → 定制简历 → 面试准备
-  ↑                                                              ↓
-爬虫采集                                                    故事库沉淀
-```
+## 设计边界
 
-1. **岗位发现** — 从 Boss 直聘按关键词+城市采集，支持标准/贪婪/滚动三种抓取模式
-2. **粗筛过滤** — 按分类规则、黑名单、最低薪资、相关性关键词自动过滤
-3. **Pipeline 管理** — 待处理队列，状态流转围绕候选推进，不与招聘核验状态混用
-4. **AI 评估** — 规则引擎粗筛（薪资/经验/学历信号）+ LLM 精评（岗位匹配报告）
-5. **简历定制** — LLM 生成修改建议 → 用户逐条确认 → 生成岗位定制 Markdown 简历草稿
-6. **面试准备** — 生成公司岗位面试文档 + 故事库维护 + 故事草稿提取，故事库优先支持自由素材沉淀，再结构化为 STAR+R
-
-## 技术栈
-
-| 层 | 技术 |
-|---|---|
-| **后端** | Python 3 / FastAPI / Uvicorn / Pydantic |
-| **爬虫** | DrissionPage（Chrome CDP 协议，API 拦截模式） |
-| **前端** | React 18 / TypeScript / Tailwind CSS v4 / Vite |
-| **AI** | DeepSeek API（可替换为其他 OpenAI 兼容模型） |
-| **数据** | SQLite（岗位索引） + Markdown/JSON（报告、简历、配置） |
-| **国际化** | i18next + react-i18next（中/英切换，默认跟随浏览器语言） |
-
-## 目录结构
-
-```
-BossFlow/
-├── backend/                 # FastAPI 后端
-│   ├── app.py               # 路由入口（~45 个 API 端点）
-│   ├── services/            # 业务逻辑
-│   │   ├── crawler_service.py   # 爬虫任务管理
-│   │   ├── job_service.py       # 岗位查询/导出
-│   │   ├── pipeline_service.py  # Pipeline 队列 CRUD
-│   │   ├── evaluation_service.py    # 规则引擎粗筛
-│   │   ├── llm_evaluation_service.py # LLM 精评
-│   │   ├── resume_service.py    # 简历建议/定制
-│   │   ├── interview_service.py # 面试准备/故事库
-│   │   ├── project_service.py   # 多项目配置
-│   │   └── task_service.py      # 长任务状态
-│   ├── schemas/             # Pydantic 数据模型
-│   └── storage/             # 文件路径管理
-│
-├── bossspider-web/          # React 前端
-│   ├── src/
-│   │   ├── App.tsx              # 主布局 + 语言切换器
-│   │   ├── main.tsx             # 入口
-│   │   ├── api.ts               # API 客户端
-│   │   ├── types.ts             # TypeScript 类型
-│   │   ├── constants.ts         # 城市/策略配置
-│   │   ├── i18n/                # 国际化（中/英）
-│   │   ├── hooks/               # useBossSpider 核心 Hook
-│   │   ├── pages/               # 9 个页面
-│   │   │   ├── Dashboard.tsx    # 仪表盘
-│   │   │   ├── Scope.tsx        # 采集范围
-│   │   │   ├── Rules.tsx        # 清洗规则
-│   │   │   ├── Jobs.tsx         # 数据浏览
-│   │   │   ├── Pipeline.tsx     # Pipeline 队列
-│   │   │   ├── Resume.tsx       # 简历工作台
-│   │   │   ├── Interview.tsx    # 面试准备
-│   │   │   ├── Story.tsx        # STAR+R 故事库
-│   │   │   └── Logs.tsx         # 运行日志
-│   │   ├── components/          # 通用组件
-│   │   └── styles/              # 样式
-│   └── package.json
-│
-├── crawler/                  # Boss 直聘爬虫核心
-│   ├── boss.py               # BossCrawler 类（Chrome 自动化）
-│   ├── pipeline.py           # 数据清洗/去重/分类
-│   ├── db.py                 # SQLite 读写
-│   ├── config.py             # 配置加载
-│   └── config/keywords.json  # 默认关键词
-│
-├── projects/                 # 多项目实例
-│   └── {project_name}/
-│       ├── config.json       # 项目配置
-│       ├── jobs_data.db      # 岗位 SQLite
-│       └── crawl_partial.json# 中断恢复
-│
-├── data/                     # 共享数据
-│   └── pipeline.md           # Pipeline 队列（Markdown + 元数据注释）
-│
-├── reports/jobs/             # LLM 岗位评估报告
-├── output/resumes/           # 定制简历输出
-├── output/interview-prep/    # 面试准备文档
-├── data/interview-prep/      # 故事库/题库
-├── cv.md                     # 基础简历（需自行创建，参考 cv.example.md）
-├── profile.yml               # 求职偏好配置
-├── .env                      # API Key 等环境变量
-├── requirements.txt          # Python 依赖
-├── ARCHITECTURE.md           # 架构设计文档
-├── HANDOFF.md                # 开发交接文档
-└── DESIGN_PROMPT.md          # 设计需求文档
-```
+- **本地优先**：岗位库与工作材料存放在本机；不会把简历或证据上传到本项目自己的服务端。
+- **用户在回路**：LLM 生成的入库规则、评分词库、简历建议、定制简历和故事都需要用户查看、编辑或确认。
+- **不编造经历**：没有来自简历、用户输入或用户确认事实的内容，不应进入简历或面试材料。
+- **方向间完全隔离**：切换求职方向时，不共享基础简历、证据、故事、岗位库或生成材料。
 
 ## 快速开始
 
@@ -113,142 +30,170 @@ BossFlow/
 
 - Python 3.10+
 - Node.js 18+
-- Chrome 浏览器
+- Chrome 浏览器（用于岗位采集和登录 Cookie）
 
-### 1. 克隆项目
+### 1. 获取代码并安装依赖
 
 ```bash
-git clone git@github.com:chenyu152/BossFlow.git
+git clone https://github.com/chenyu152/BossFlow.git
 cd BossFlow
-```
 
-### 2. 配置环境变量
-
-```bash
-cp .env.example .env
-```
-
-编辑 `.env`，填入 DeepSeek API Key（LLM 精评、简历定制、面试准备等功能依赖此 Key）：
-
-```env
-DEEPSEEK_API_KEY=sk-your-key-here
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
-```
-
-### 3. 创建基础简历（评分和材料生成推荐先完成）
-
-```bash
-cp cv.example.md cv.md
-# 编辑 cv.md，填入你的真实经历
-```
-
-`cv.md` 是粗评分、LLM 精评、定制简历和面试准备的基础事实源。Web 总览页会检查它是否存在，以及是否包含工作年限、学历、技能栈、项目经历等关键信息。
-
-### 4. 安装依赖
-
-```bash
-# Python
+# 后端依赖
 pip install -r requirements.txt
 
-# 前端
+# 前端依赖
 cd bossspider-web
 npm ci
 cd ..
 ```
 
-### 5. 启动服务
+### 2. 启动服务
+
+在两个终端分别运行：
 
 ```bash
 # 终端 1：后端
 python -m uvicorn backend.app:app --reload --port 8000
+```
 
+```bash
 # 终端 2：前端
 cd bossspider-web
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-打开浏览器：
+打开：
 
-| 地址 | 说明 |
-|------|------|
-| `http://127.0.0.1:5173/` | Web 控制台 |
-| `http://127.0.0.1:8000/docs` | API 文档（Swagger） |
+| 地址 | 用途 |
+| --- | --- |
+| `http://127.0.0.1:5173/` | BossFlow Web 工作台 |
+| `http://127.0.0.1:8000/docs` | FastAPI 接口文档 |
 
-## Web 控制台页面
+### 3. 配置 LLM（可稍后完成）
 
-| 页面 | 功能 |
-|------|------|
-| **Dashboard** | 岗位总览指标、爬虫启动/停止、策略选择、最近日志 |
-| **Scope** | 编辑关键词、城市、抓取上限 |
-| **Rules** | 编辑分类匹配规则、黑名单、最低薪资 |
-| **Jobs** | 浏览 SQLite 岗位数据、搜索筛选、批量评分、导出 Excel |
-| **Pipeline** | 候选岗位队列、粗筛打分、LLM 精评、推进状态流转、删除 |
-| **Resume** | 查看 LLM 简历修改建议、勾选确认、生成岗位定制简历草稿 |
-| **Interview** | 生成面试准备文档、查看故事库、提取故事草稿 |
-| **Story** | STAR+R 故事库编辑（草稿 ↔ 已确认）、标签/场景/任务/行动/结果/反思 |
-| **Logs** | 实时日志流、按级别筛选、自动滚动 |
+岗位采集与手动配置不依赖 LLM。需要生成入库规则、评分词库、匹配报告或材料时：
 
-## 爬虫使用
+1. 打开左侧底部的 **设置**；
+2. 填写 API Key、API Base URL 和模型名；
+3. 点击 **测试 API**，确认可用后保存。
 
-Web 控制台操作：**Dashboard** → 选择项目 → 配置 Scope/Rules → 点击 **Start Crawl**。
-
-也支持命令行独立运行：
+系统兼容 OpenAI 风格的 `chat/completions` 接口。也可先复制示例文件：
 
 ```bash
-# 标准模式
+cp .env.example .env
+```
+
+示例中的 `DEEPSEEK_*` 配置仍可使用；通过界面保存后会写入 BossFlow 的系统级 LLM 配置。请勿提交 `.env`。
+
+### 4. 创建第一个求职方向
+
+在顶部“求职方向”旁点击 **新建求职方向**。新方向默认是空的、互相隔离的工作区：
+
+- 采集关键词会自动填入方向名称，可自行补充同类职位称呼；
+- 必须选择至少一个采集城市；
+- 新建方向的滚动目标条数默认是 **20**；
+- 入库匹配规则、评分技能词库、基础简历、证据和故事均从空白开始。
+
+创建后，系统会自动打开“采集配置”引导。按引导完成采集配置后，可前往“入库匹配规则”使用 LLM 草稿或手动配置，然后启动采集。采集期间可进入“我的简历”导入或编写该方向的基础简历。
+
+## 推荐工作流
+
+1. **采集配置**：填写岗位关键词、城市、抓取策略和上限；必要时登录并保存 Cookie。
+2. **入库匹配规则**：按职位族、行业、业务方向或应用方向配置分类；再配置兜底与黑名单关键词。LLM 只生成草稿，不会自动替换当前规则。
+3. **开始采集**：在顶部点击“开始采集”，随后在“岗位库”和“运行日志”查看结果与进度。
+4. **评分规则**：岗位库已有数据后，使用 LLM 从当前岗位样本生成评分技能词库建议，再由用户确认应用。
+5. **候选岗位**：把值得进一步处理的岗位加入 Pipeline，按状态推进并生成匹配报告。
+6. **匹配评估与证据**：核对职位要求的覆盖情况；已有简历可直接支持的内容无需重复填写，模糊或缺失的内容再由用户确认或补充。
+7. **材料准备**：基于已确认事实生成简历建议、定制简历草稿和沟通草稿。
+8. **面试准备**：生成岗位面试准备，将真实经历整理为故事草稿或故事库。
+
+## 页面说明
+
+| 阶段 | 页面 | 用途 |
+| --- | --- | --- |
+| 总览 | 仪表盘 | 查看当前方向的进度、提示和快捷入口。 |
+| 岗位发现 | 采集配置 | 管理关键词、城市、采集策略、Cookie 和抓取上限。 |
+| 岗位发现 | 入库匹配规则 | 管理分类、兜底和黑名单规则，支持 LLM 草稿。 |
+| 岗位发现 | 评分规则 | 配置粗评分指标与技能词库，支持基于岗位样本的 LLM 建议。 |
+| 岗位发现 | 岗位库 | 搜索、浏览、导出采集到的岗位。 |
+| 岗位发现 | 运行日志 | 查看采集、登录和任务日志。 |
+| 候选评估 | 候选岗位 | 用主从布局浏览候选岗位，进入岗位档案、匹配评估与状态推进。 |
+| 材料准备 | 我的简历 | 维护当前方向的基础简历。 |
+| 材料准备 | 简历材料 | 查看简历建议、定制简历和沟通草稿。 |
+| 面试准备 | 面试准备 | 生成和查看职位面试准备材料。 |
+| 面试准备 | 故事库 | 管理自由故事草稿和已确认故事。 |
+| 系统 | 设置 | 配置与测试系统级 LLM API。 |
+
+## 数据存储与隔离
+
+每个求职方向位于 `projects/<方向名>/`：
+
+```text
+projects/<方向名>/
+├── config.json              # 采集、入库与评分配置
+├── jobs_data.db             # 当前方向的岗位库
+├── .chrome_profile/         # 当前方向的浏览器 Profile / Cookie（本地）
+└── workspace/
+    ├── cv.md                # 当前方向的基础简历
+    ├── data/                # Pipeline、证据、故事等数据
+    ├── reports/jobs/        # 匹配报告
+    └── output/              # 定制简历、面试准备等生成材料
+```
+
+旧版本存放在根目录的 `cv.md`、`data/`、`reports/` 与 `output/` 会在首次访问默认方向时复制为恢复用副本；之后新的请求以方向工作区为准。
+
+下列文件或目录包含个人数据、密钥、Cookie、数据库或生成材料，默认被 `.gitignore` 忽略：`.env`、`projects/**/.chrome_profile/`、`projects/**/*.db`、`projects/*/workspace/`、`reports/`、`output/` 等。
+
+## 命令行采集（可选）
+
+Web 工作台是推荐入口。也可以直接运行爬虫：
+
+```bash
+# 使用某一方向的配置
 python -m crawler.boss --config projects/agent
 
-# 快速模式（随机抽样关键词）
-python -m crawler.boss --config projects/agent --quick
-
-# 滚动模式（目标 200 条）
-python -m crawler.boss --config projects/agent --scroll 200
-
-# 贪婪模式（翻到底）
-python -m crawler.boss --config projects/agent --greedy --merge
-
-# 仅登录保存 Cookie
+# 仅登录并保存 Cookie
 python -m crawler.boss --config projects/agent --login
+
+# 滚动模式，目标抓取 20 条
+python -m crawler.boss --config projects/agent --scroll 20
 
 # 从中断文件恢复
 python -m crawler.boss --config projects/agent --process-partial
 ```
 
-## 多语言
+将示例中的 `agent` 替换为实际方向名称。命令行参数会覆盖对应的配置项；使用 Web 配置更适合日常操作。
 
-前端支持中/英文切换。Header 右侧点击 `中` / `EN` 按钮即可切换，偏好保存在浏览器 localStorage 中。默认跟随浏览器语言，中文兜底。
+## 开发与验证
 
-## 隐私与安全
+```bash
+# 后端测试
+python -m pytest backend/tests -q
 
-- `.env`、`cv.md`、`profile.yml`、`data/pipeline.md`、`reports/`、`output/` 均在 `.gitignore` 中，不会提交到 Git
-- Boss 直聘打招呼不会自动执行；系统只保留草稿、复制和人工确认记录
-- 岗位招聘状态只作为低频核验结果展示，不承诺实时同步；遇到登录、验证码或安全页时不做绕过
-- AI 不会凭空编造工作经历、指标、学历等事实
-- 项目源码审计默认跳过 `.env`、密钥、`node_modules` 等敏感文件
+# 前端构建检查
+cd bossspider-web
+npm run build
+```
 
-## 路线图
+主要目录：
 
-- [x] 爬虫 Web 控制台
-- [x] Pipeline 队列 + 粗筛打分
-- [x] LLM 精评 + 岗位匹配报告
-- [x] 简历修改建议 + 定制简历草稿
-- [x] 面试准备文档 + STAR+R 故事库
-- [x] 中英文切换
-- [x] Pipeline `schemaVersion` + 文件锁 + 迁移入口
-- [x] 拆分候选推进状态和岗位招聘核验状态
-- [ ] LLM 建议 evidence map：`claimId` / `risk` / `sources` / `userDecision`
-- [ ] 岗位档案 API 和右侧工作区聚合
-- [ ] 自由素材优先的故事库
-- [ ] 面试模拟练习
-- [ ] 面试复盘
-- [ ] Boss 沟通辅助（草稿、复制、人工使用记录；不做默认代发）
-- [ ] 题库管理
-- [ ] PDF 简历渲染
-- [ ] Claude Code Agent Skill 集成
+```text
+backend/             # FastAPI 接口、业务服务与测试
+bossspider-web/      # React + TypeScript + Vite 前端
+crawler/             # Boss 直聘采集与 SQLite 写入
+projects/            # 每个求职方向的本地配置和数据
+```
 
-## 参考文档
+## 技术栈
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — 目标架构和分阶段建设路线
-- [HANDOFF.md](HANDOFF.md) — 开发交接、已完成功能、建议下一步
-- [DESIGN_PROMPT.md](DESIGN_PROMPT.md) — Web 控制台设计需求
+- 后端：Python、FastAPI、Pydantic、Uvicorn
+- 前端：React 18、TypeScript、Vite、Tailwind CSS、i18next
+- 采集：DrissionPage、Chrome CDP
+- 存储：SQLite、Markdown、JSON
+- LLM：任意 OpenAI 兼容的 Chat Completions API
+
+## 相关文档
+
+- [产品方向与交接说明](HANDOFF.md)（本地开发文档，默认不提交）
+- [架构记录](ARCHITECTURE.md)（含历史设计与后续设想，可能不等同于当前实现）
+- [环境变量示例](.env.example)
