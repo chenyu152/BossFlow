@@ -23,11 +23,9 @@ export type ConfigPayload = {
   scoringRulesText: string;
   relevanceText: string;
   blacklistText: string;
-  maxPages: number;
   scrollTarget: number;
   scrollMax: number;
   minSalary: number;
-  strategyIndex: number;
   headlessMode: boolean;
   autoSqlite: boolean;
   jobCount: number;

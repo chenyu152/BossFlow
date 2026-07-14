@@ -17,7 +17,7 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager) -> dict:
         with capture_task_output(task_manager):
             keywords = list(config.get("keywords") or [])
             cities = dict(config.get("cities") or {})
-            mode = ["standard", "greedy", "scroll"][max(0, min(int(payload.strategyIndex), 2))]
+            mode = "scroll"
             limits = config.get("scrape_limits") or {}
             port = find_free_port(9222)
             print(f"[INFO] Project: {project_dir.name}")
@@ -29,19 +29,13 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager) -> dict:
                 chrome_port=port,
                 config_file=paths["configPath"],
                 partial_file=paths["partialPath"],
-                max_pages=int(limits.get("max_pages", payload.maxPages)),
-                max_scrolls_per_page=int(limits.get("max_scrolls_per_page", 2)),
                 scroll_max_scrolls=int(limits.get("scroll_max_scrolls", payload.scrollMax)),
-                greedy_max_pages=int(limits.get("greedy_max_pages", 0)),
-                max_jobs_per_city_round=int(limits.get("max_jobs_per_city_round", 0)),
             )
             task_manager.current_crawler = crawler
             raw_jobs = crawler.run(
                 keywords=keywords,
                 cities=cities,
                 headless=bool(payload.headlessMode),
-                greedy=mode == "greedy",
-                scroll=mode == "scroll",
                 scroll_target=int(payload.scrollTarget),
             )
             if payload.autoSqlite and raw_jobs:
@@ -84,11 +78,7 @@ def start_login_task(payload: ConfigUpdate, task_manager: TaskManager) -> dict:
                 chrome_port=port,
                 config_file=paths["configPath"],
                 partial_file=paths["partialPath"],
-                max_pages=int(limits.get("max_pages", payload.maxPages)),
-                max_scrolls_per_page=int(limits.get("max_scrolls_per_page", 2)),
                 scroll_max_scrolls=int(limits.get("scroll_max_scrolls", payload.scrollMax)),
-                greedy_max_pages=int(limits.get("greedy_max_pages", 0)),
-                max_jobs_per_city_round=int(limits.get("max_jobs_per_city_round", 0)),
             )
             task_manager.current_crawler = crawler
             crawler.start_browser(headless=False)

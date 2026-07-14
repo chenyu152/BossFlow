@@ -3,15 +3,14 @@
 BOSS直聘爬虫 - API拦截模式 + AI PM 强相关过滤
 
 基于 DrissionPage 的 API 拦截方案，速度快、数据完整。
-支持：关键词搜索、多城市、贪婪翻页、首页无限滚动、详情获取、人机模拟。
+支持：关键词搜索、多城市、首页无限滚动、详情获取、人机模拟。
 
 用法:
   python boss.py                          # 全量抓取
   python boss.py --quick                  # 快速模式（随机抽样关键词）
   python boss.py --city 杭州              # 只抓指定城市
-  python boss.py --greedy                 # 贪婪模式（翻到底）
-  python boss.py --scroll                 # 首页无限滚动模式（默认目标50条）
-  python boss.py --scroll 100             # 首页无限滚动模式（目标100条）
+  python boss.py                          # 首页无限滚动模式（默认目标20条）
+  python boss.py --target 100             # 首页无限滚动模式（目标100条）
   python boss.py --login                  # 仅登录保存Cookie
 """
 import sys
@@ -66,20 +65,13 @@ _TARGET_ROLE_TERMS = [
     '技术', 'TECH', '程序员', 'PROGRAMMER', 'CODING',
 ]
 
-# 翻页与滚动参数
-MAX_PAGES = 3
-MAX_SCROLLS_PER_PAGE = 2
-DEFAULT_SCROLL_TARGET = 50
+# 滚动采集参数
+DEFAULT_SCROLL_TARGET = 20
 DEFAULT_SCROLL_MAX_SCROLLS = 60
-DEFAULT_GREEDY_MAX_PAGES = 0
 
 DEFAULT_SCRAPE_LIMITS = {
-    'max_pages': MAX_PAGES,
-    'max_scrolls_per_page': MAX_SCROLLS_PER_PAGE,
     'scroll_target': DEFAULT_SCROLL_TARGET,
     'scroll_max_scrolls': DEFAULT_SCROLL_MAX_SCROLLS,
-    'greedy_max_pages': DEFAULT_GREEDY_MAX_PAGES,
-    'max_jobs_per_city_round': 0,
 }
 
 # 防封参数
@@ -160,10 +152,7 @@ def load_scrape_limits(config_file=None):
             value = int(raw.get(key, default))
         except (TypeError, ValueError):
             value = default
-        if key in {'greedy_max_pages', 'max_jobs_per_city_round'}:
-            limits[key] = max(0, value)
-        else:
-            limits[key] = max(1, value)
+        limits[key] = max(1, value)
     return limits
 
 
@@ -302,8 +291,7 @@ class BossCrawler:
     """BOSS直聘 API拦截模式爬虫 — AI PM 强相关岗位采集"""
 
     def __init__(self, profile_dir=None, chrome_port=None, config_file=None, partial_file=None,
-                 max_pages=None, max_scrolls_per_page=None, scroll_max_scrolls=None,
-                 greedy_max_pages=None, max_jobs_per_city_round=None):
+                 scroll_max_scrolls=None):
         """
         profile_dir: Chrome Profile 目录（持久化 Cookie）。默认 ./.chrome_profile
         chrome_port: Chrome 调试端口，默认 9222
@@ -325,15 +313,7 @@ class BossCrawler:
         self.chrome_port = int(os.environ.get('AI_PM_CHROME_PORT', str(chrome_port or DEFAULT_CHROME_PORT)))
         self.config_file = config_file or DEFAULT_CONFIG_FILE
         limits = load_scrape_limits(self.config_file)
-        self.max_pages = int(max_pages or limits['max_pages'])
-        self.max_scrolls_per_page = int(max_scrolls_per_page or limits['max_scrolls_per_page'])
         self.scroll_max_scrolls = int(scroll_max_scrolls or limits['scroll_max_scrolls'])
-        self.greedy_max_pages = int(greedy_max_pages if greedy_max_pages is not None else limits['greedy_max_pages'])
-        self.max_jobs_per_city_round = int(
-            max_jobs_per_city_round
-            if max_jobs_per_city_round is not None
-            else limits.get('max_jobs_per_city_round', 0)
-        )
 
     # ========== 浏览器管理 ==========
 
@@ -499,157 +479,6 @@ class BossCrawler:
                 new_count += 1
         return new_count, existing_count, relevant_count
 
-    def scrape_keyword(self, keyword: str, city_code: str, salary_code: str = '',
-                       salary_label: str = '', stop_on_no_new: bool = True) -> int:
-        """API拦截+翻页模式抓取一个关键词（最多 self.max_pages 页）"""
-        keyword_new = 0
-        no_new_pages = 0
-
-        for page_num in range(1, self.max_pages + 1):
-            if not self._safe_listen_start('wapi/zpgeek/search/joblist.json'):
-                break
-
-            if page_num == 1:
-                url = build_search_url(keyword, city_code, salary_code=salary_code)
-                self.page.get(url)
-            else:
-                try:
-                    next_btn = self.page.ele('css:.ui-icon-arrow-right', timeout=3)
-                    if next_btn:
-                        next_btn.click()
-                    else:
-                        url = build_search_url(keyword, city_code, page_num=page_num, salary_code=salary_code)
-                        self.page.get(url)
-                except Exception:
-                    url = build_search_url(keyword, city_code, page_num=page_num, salary_code=salary_code)
-                    self.page.get(url)
-
-            random_delay(0.8, 1.8)
-            if random.random() < 0.1:
-                simulate_human(self.page)
-
-            page_jobs = collect_api_responses(self.page, timeout=8)
-            page_new, _, _ = self._add_jobs(page_jobs)
-            keyword_new += page_new
-            if self.max_jobs_per_city_round and keyword_new >= self.max_jobs_per_city_round:
-                self._safe_listen_stop()
-                break
-
-            if len(page_jobs) == 0:
-                self._safe_listen_stop()
-                break
-
-            scroll_no_new = 0
-            for scroll_i in range(self.max_scrolls_per_page):
-                dist = random.randint(300, 700)
-                steps = random.randint(2, 3)
-                for _ in range(steps):
-                    self.page.scroll.down(dist // steps + random.randint(-30, 30))
-                    time.sleep(random.uniform(0.08, 0.25))
-                random_delay(0.8, 2.0)
-                if random.random() < 0.3:
-                    simulate_human(self.page)
-
-                scroll_jobs = collect_api_responses(self.page, timeout=2)
-                if scroll_jobs:
-                    sn, _, _ = self._add_jobs(scroll_jobs)
-                    keyword_new += sn
-                    scroll_no_new = 0 if sn > 0 else scroll_no_new + 1
-                    if self.max_jobs_per_city_round and keyword_new >= self.max_jobs_per_city_round:
-                        break
-                else:
-                    scroll_no_new += 1
-                if scroll_no_new >= 2:
-                    break
-
-            self._safe_listen_stop()
-
-            if stop_on_no_new and page_new == 0:
-                no_new_pages += 1
-                if no_new_pages >= 2:
-                    break
-            else:
-                no_new_pages = 0
-
-            random_delay(1.5, 3.5)
-
-        return keyword_new
-
-    def scrape_keyword_greedy(self, keyword: str, city_code: str, city_name: str = '',
-                              salary_code: str = '', salary_label: str = '',
-                              stop_on_no_new: bool = True) -> int:
-        """贪婪模式：翻到底为止（连续2页0新增停止）"""
-        keyword_new = 0
-        page_num = 0
-        consecutive_zero = 0
-
-        while True:
-            page_num += 1
-            if self.greedy_max_pages and page_num > self.greedy_max_pages:
-                logger.info(f'    达到贪婪模式页数上限 {self.greedy_max_pages}，停止')
-                break
-            if not self._safe_listen_start('wapi/zpgeek/search/joblist.json'):
-                break
-
-            if page_num == 1:
-                url = build_search_url(keyword, city_code, salary_code=salary_code)
-                self.page.get(url)
-            else:
-                try:
-                    next_btn = self.page.ele('css:.ui-icon-arrow-right', timeout=3)
-                    if next_btn:
-                        next_btn.click()
-                    else:
-                        url = build_search_url(keyword, city_code, page_num=page_num, salary_code=salary_code)
-                        self.page.get(url)
-                except Exception:
-                    url = build_search_url(keyword, city_code, page_num=page_num, salary_code=salary_code)
-                    self.page.get(url)
-
-            random_delay(1.5, 3.0)
-            if random.random() < 0.2:
-                simulate_human(self.page)
-
-            page_jobs = collect_api_responses(self.page, timeout=8)
-            if len(page_jobs) == 0:
-                self._safe_listen_stop()
-                logger.info(f'    第{page_num}页: API返回空，停止')
-                break
-
-            page_new, page_existing, page_relevant = self._add_jobs(page_jobs)
-            keyword_new += page_new
-            salary_part = f' [{salary_label}]' if salary_label else ''
-            logger.info(f'    第{page_num}页{salary_part}: +{page_new}新 / {page_relevant}相关 / {page_existing}重复 (原始{len(page_jobs)}条)')
-            if self.max_jobs_per_city_round and keyword_new >= self.max_jobs_per_city_round:
-                self._safe_listen_stop()
-                logger.info(f'    达到本轮岗位数量上限 {self.max_jobs_per_city_round}，停止')
-                break
-
-            if stop_on_no_new and page_new == 0:
-                consecutive_zero += 1
-                if consecutive_zero >= 2:
-                    self._safe_listen_stop()
-                    logger.info(f'    连续2页无新增，已翻到底（共{page_num}页）')
-                    break
-            else:
-                consecutive_zero = 0
-
-            for scroll_i in range(self.max_scrolls_per_page):
-                dist = random.randint(300, 600)
-                self.page.scroll.down(dist)
-                time.sleep(random.uniform(0.3, 0.8))
-                scroll_jobs = collect_api_responses(self.page, timeout=2)
-                if scroll_jobs:
-                    sn, _, _ = self._add_jobs(scroll_jobs)
-                    keyword_new += sn
-                    if self.max_jobs_per_city_round and keyword_new >= self.max_jobs_per_city_round:
-                        break
-
-            self._safe_listen_stop()
-            random_delay(0.8, 1.8)
-
-        return keyword_new
-
     def scrape_keyword_scroll(self, keyword: str, city_code: str, city_name: str = '',
                               salary_code: str = '', salary_label: str = '',
                               target_count: int = DEFAULT_SCROLL_TARGET, max_scrolls: int = None) -> int:
@@ -671,8 +500,7 @@ class BossCrawler:
             sn, _, _ = self._add_jobs(page_jobs)
             keyword_new += sn
 
-        round_limit = self.max_jobs_per_city_round or target_count
-        target_limit = min(target_count, round_limit) if round_limit else target_count
+        target_limit = target_count
         while keyword_new < target_limit and scroll_idx < max_scrolls:
             scroll_idx += 1
 
@@ -714,10 +542,8 @@ class BossCrawler:
         self._safe_listen_stop()
         return keyword_new
 
-    def run_keyword(self, keyword: str, cities: dict, greedy: bool = False,
-                    scroll: bool = False, scroll_target: int = DEFAULT_SCROLL_TARGET,
-                    salary_code: str = '', salary_label: str = '',
-                    stop_on_no_new: bool = True) -> list:
+    def run_keyword(self, keyword: str, cities: dict, scroll_target: int = DEFAULT_SCROLL_TARGET,
+                    salary_code: str = '', salary_label: str = '') -> list:
         """爬取单个关键词×所有城市，返回标准化结果"""
         if not self._browser_alive():
             logger.warning(f'浏览器已断连，跳过关键词 {keyword}')
@@ -732,21 +558,10 @@ class BossCrawler:
                 logger.warning(f'浏览器已断连，停止关键词 {keyword}')
                 break
 
-            if scroll:
-                n = self.scrape_keyword_scroll(keyword, city_code, city_name,
-                                               salary_code=salary_code,
-                                               salary_label=salary_label,
-                                               target_count=scroll_target)
-            elif greedy:
-                n = self.scrape_keyword_greedy(keyword, city_code, city_name,
-                                               salary_code=salary_code,
-                                               salary_label=salary_label,
-                                               stop_on_no_new=stop_on_no_new)
-            else:
-                n = self.scrape_keyword(keyword, city_code,
-                                        salary_code=salary_code,
-                                        salary_label=salary_label,
-                                        stop_on_no_new=stop_on_no_new)
+            n = self.scrape_keyword_scroll(keyword, city_code, city_name,
+                                           salary_code=salary_code,
+                                           salary_label=salary_label,
+                                           target_count=scroll_target)
 
             salary_part = f' [{salary_label}]' if salary_label else ''
             print(f'  → {keyword} @ {city_name}{salary_part}: +{n} | 累计 {len(self.all_jobs)} (过滤 {self.skipped})')
@@ -955,14 +770,13 @@ class BossCrawler:
 
     # ========== 完整流程 ==========
 
-    def run(self, keywords=None, cities=None, headless=False, greedy=False,
-            scroll=False, scroll_target=DEFAULT_SCROLL_TARGET):
+    def run(self, keywords=None, cities=None, headless=False,
+            scroll_target=DEFAULT_SCROLL_TARGET):
         """
         完整抓取流程。
         keywords: 关键词列表，默认从 config 加载
         cities: 城市字典 {城市名: 城市码}，默认从 config 加载
-        scroll: True 使用首页无限滚动模式
-        scroll_target: 滚动模式下每个关键词的目标采集数
+        scroll_target: 每个关键词、城市组合的目标采集数
         """
         if keywords is None:
             keywords = load_keywords(self.config_file)
@@ -986,12 +800,7 @@ class BossCrawler:
             self.page = ChromiumPage(addr_or_opts=co)
 
         self._processed_keys = set()
-        if scroll:
-            mode_label = f'滚动(目标{scroll_target}条)'
-        elif greedy:
-            mode_label = '贪婪'
-        else:
-            mode_label = '标准'
+        mode_label = f'滚动(目标{scroll_target}条)'
         total_kws = len(keywords)
         print(f'\n[STATS] [{mode_label}] {total_kws} 关键词 × {len(cities)} 城市')
 
@@ -1012,8 +821,7 @@ class BossCrawler:
             print(f'\n[{kw_idx}/{total_kws}] 关键词: {kw}  (已用{elapsed/60:.1f}分)')
 
             try:
-                kw_results = self.run_keyword(kw, cities, greedy=greedy,
-                                              scroll=scroll, scroll_target=scroll_target)
+                kw_results = self.run_keyword(kw, cities, scroll_target=scroll_target)
                 all_results.extend(kw_results)
                 self._partial_results = list(all_results)  # 同步
                 self._save_partial()  # 每个关键词完成后立即落盘
@@ -1068,9 +876,8 @@ def main():
     parser.add_argument('--gui', action='store_true', help='打开 Figma/QML 图形化界面')
     parser.add_argument('--city', type=str, help='只抓指定城市')
     parser.add_argument('--quick', action='store_true', help='快速模式（随机抽取关键词）')
-    parser.add_argument('--greedy', action='store_true', help='贪婪模式（翻到底）')
-    parser.add_argument('--scroll', type=int, nargs='?', const=DEFAULT_SCROLL_TARGET, default=None,
-                        metavar='N', help=f'首页无限滚动模式（可选指定目标条数，默认{DEFAULT_SCROLL_TARGET}）')
+    parser.add_argument('--target', type=int, default=None, metavar='N',
+                        help=f'每个关键词、城市组合的目标岗位数（默认{DEFAULT_SCROLL_TARGET}）')
     parser.add_argument('--merge', action='store_true', help='自动合并到已有数据')
     parser.add_argument('--login', action='store_true', help='仅登录保存Cookie')
     parser.add_argument('--headless', action='store_true', help='无头模式')
@@ -1080,11 +887,7 @@ def main():
     parser.add_argument('--data', type=str, default=None, help='兼容旧参数：SQLite 数据库文件路径')
     parser.add_argument('--history', type=str, default='history', help='快照保存目录')
     parser.add_argument('--partial-file', type=str, default='crawl_partial.json', help='中途保存路径（Ctrl+C 断点续爬）')
-    parser.add_argument('--max-pages', type=int, help='标准模式每个关键词×城市最多翻页数')
-    parser.add_argument('--max-scrolls-per-page', type=int, help='每页额外滚动监听次数')
     parser.add_argument('--scroll-max-scrolls', type=int, help='滚动模式最多滚动次数')
-    parser.add_argument('--greedy-max-pages', type=int, help='贪婪模式最大翻页数，0 表示翻到底')
-    parser.add_argument('--max-jobs-per-city-round', type=int, help='每个关键词×城市本轮最多新增岗位数，0 表示不限制')
     parser.add_argument('--process-partial', type=str, nargs='?', const='', default=None,
                         metavar='FILE', help='直接处理中断保存的 partial 文件（默认 crawl_partial.json），跳过爬虫')
     args = parser.parse_args()
@@ -1137,11 +940,7 @@ def main():
         profile_dir=args.profile,
         config_file=config_file,
         partial_file=partial_file,
-        max_pages=args.max_pages,
-        max_scrolls_per_page=args.max_scrolls_per_page,
         scroll_max_scrolls=args.scroll_max_scrolls,
-        greedy_max_pages=args.greedy_max_pages,
-        max_jobs_per_city_round=args.max_jobs_per_city_round,
     )
 
     if args.process_partial is not None:
@@ -1196,8 +995,8 @@ def main():
         crawler.page.quit()
         return
 
-    raw_jobs = crawler.run(keywords, cities, headless=args.headless, greedy=args.greedy,
-                           scroll=args.scroll is not None, scroll_target=args.scroll)
+    raw_jobs = crawler.run(keywords, cities, headless=args.headless,
+                           scroll_target=args.target)
 
     if args.merge and raw_jobs:
         from .pipeline import process_batch
@@ -1211,13 +1010,12 @@ def main():
         cleaned = process_batch(raw_jobs, cat_rules=cat_rules, min_salary=min_salary, relevance_keywords=relevance_keywords, blacklist_keywords=blacklist_keywords)
         print(f'清洗后: {len(cleaned)} 条 (过滤最低薪资: {min_salary}K)')
 
-        mode = 'scroll' if args.scroll is not None else ('greedy' if args.greedy else 'standard')
         stats = upsert_jobs(cleaned, db_file)
         save_run(
             db_file,
             keywords=keywords,
             cities=list(cities.keys()),
-            mode=mode,
+            mode='scroll',
             raw_count=len(raw_jobs),
             cleaned_count=len(cleaned),
             added_count=stats['inserted'],

@@ -6,12 +6,8 @@ from typing import Optional
 PACKAGE_DIR = Path(__file__).parent
 DEFAULT_CONFIG_FILE = PACKAGE_DIR / 'config' / 'keywords.json'
 DEFAULT_SCRAPE_LIMITS = {
-    'max_pages': 3,
-    'max_scrolls_per_page': 2,
-    'scroll_target': 50,
+    'scroll_target': 20,
     'scroll_max_scrolls': 60,
-    'greedy_max_pages': 0,
-    'max_jobs_per_city_round': 0,
 }
 
 _config_cache = None

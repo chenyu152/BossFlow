@@ -26,6 +26,7 @@ class ProjectServiceTest(unittest.TestCase):
                 self.assertEqual(config["scoring"]["keywordHints"], [])
                 self.assertEqual(config["direction_setup_version"], 2)
                 self.assertEqual(config["scrape_limits"]["scroll_target"], 20)
+                self.assertEqual(set(config["scrape_limits"]), {"scroll_target", "scroll_max_scrolls"})
                 self.assertFalse((created / "workspace" / "cv.md").exists())
 
                 with self.assertRaises(HTTPException) as error:

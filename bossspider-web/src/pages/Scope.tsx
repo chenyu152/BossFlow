@@ -1,10 +1,9 @@
-import { CITY_OPTIONS, STRATEGIES } from '../constants';
+import { CITY_OPTIONS } from '../constants';
 import { NumberField } from '../components/NumberField';
 import { useAppTranslation } from '../i18n';
 import { hasCity, toggleCity } from '../utils';
 import type { ConfigPatch, ConfigPayload } from '../types';
 import { OptionToggle } from '../components/OptionToggle';
-import { StrategyCard } from '../components/StrategyCard';
 import { CircleHelp, PlayCircle, RefreshCw } from 'lucide-react';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { useEffect, useMemo, useState } from 'react';
@@ -92,26 +91,6 @@ export function Scope({
             <h3 className="text-sm font-semibold text-zinc-100 mb-5 border-b border-zinc-800 pb-3">{t('scope.runConfig')}</h3>
             <div className="space-y-5">
               <div>
-                <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-zinc-500">{t('scope.strategy')}</label>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  {STRATEGIES.map((strategy, index) => {
-                    const disabled = index !== 2;
-                    return (
-                      <StrategyCard
-                        key={strategy.title}
-                        title={strategy.title}
-                        desc={t(strategy.descKey)}
-                        active={config.strategyIndex === index}
-                        disabled={disabled}
-                        disabledReason={disabled ? t('scope.strategyDisabledHint') : undefined}
-                        onClick={() => updateConfig({ strategyIndex: index })}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
                 <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-zinc-500">{t('scope.options')}</label>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                   <OptionToggle label={t('scope.headless')} active={config.headlessMode} onToggle={() => updateConfig({ headlessMode: !config.headlessMode })} />
@@ -150,7 +129,6 @@ export function Scope({
           <div className="border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
             <h3 className="text-sm font-semibold text-zinc-100 mb-5 border-b border-zinc-800 pb-3">{t('scope.scrapingLimits')}</h3>
             <div className="space-y-5">
-              <NumberField label={t('scope.standardPagination')} value={config.maxPages} onChange={(value) => updateConfig({ maxPages: value })} />
               <NumberField label={t('scope.scrollTargetCount')} value={config.scrollTarget} onChange={(value) => updateConfig({ scrollTarget: value })} />
               <NumberField label={t('scope.maxScrollAttempts')} value={config.scrollMax} onChange={(value) => updateConfig({ scrollMax: value })} />
             </div>

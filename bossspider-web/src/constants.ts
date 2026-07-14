@@ -20,9 +20,3 @@ export const CITY_OPTIONS = [
   { name: '青岛', code: '101120200' },
   { name: '大连', code: '101070200' },
 ];
-
-export const STRATEGIES = [
-  { title: 'Standard', descKey: 'strategy.desc.standard' },
-  { title: 'Greedy', descKey: 'strategy.desc.greedy' },
-  { title: 'Scroll', descKey: 'strategy.desc.scroll' },
-] as const;

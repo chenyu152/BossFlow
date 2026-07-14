@@ -88,7 +88,6 @@ def create_project(name: str) -> Path:
         "cities": {},
         "scrape_limits": {**DEFAULT_SCRAPE_LIMITS, "scroll_target": 20},
         "min_salary": MIN_AVG_SALARY_K,
-        "strategy_index": 2,
         "headless_mode": True,
         "auto_sqlite": True,
         "cat_rules": {},
@@ -195,14 +194,9 @@ def config_payload(project_dir: Path) -> Dict[str, Any]:
         ),
         "relevanceText": "\n".join(config.get("relevance_keywords") or []),
         "blacklistText": "\n".join(config.get("blacklist_keywords") or []),
-        "maxPages": int(limits.get("max_pages", 3)),
-        "maxScrollsPerPage": int(limits.get("max_scrolls_per_page", 2)),
-        "scrollTarget": int(limits.get("scroll_target", 50)),
+        "scrollTarget": int(limits.get("scroll_target", 20)),
         "scrollMax": int(limits.get("scroll_max_scrolls", 60)),
-        "greedyMaxPages": int(limits.get("greedy_max_pages", 0)),
-        "maxJobsPerCityRound": int(limits.get("max_jobs_per_city_round", 0)),
         "minSalary": float(config.get("min_salary", MIN_AVG_SALARY_K)),
-        "strategyIndex": 2,
         "headlessMode": bool(config.get("headless_mode", True)),
         "autoSqlite": bool(config.get("auto_sqlite", True)),
     }
@@ -236,21 +230,15 @@ def save_form_config(payload: ConfigUpdate) -> tuple[Path, Dict[str, Any], Dict[
         raise HTTPException(status_code=400, detail="评分规则必须是 JSON 对象")
 
     old_config = load_config(str(project_dir))
-    old_limits = DEFAULT_SCRAPE_LIMITS.copy()
-    old_limits.update(old_config.get("scrape_limits") or {})
     config = dict(old_config)
     config["keywords"] = keywords
     config["cities"] = cities
     config["scrape_limits"] = {
-        "max_pages": int(payload.maxPages or old_limits["max_pages"]),
-        "max_scrolls_per_page": int(old_limits.get("max_scrolls_per_page", 2)),
-        "scroll_target": int(payload.scrollTarget or old_limits["scroll_target"]),
-        "scroll_max_scrolls": int(payload.scrollMax or old_limits["scroll_max_scrolls"]),
-        "greedy_max_pages": int(old_limits.get("greedy_max_pages", 0)),
-        "max_jobs_per_city_round": int(old_limits.get("max_jobs_per_city_round", 0)),
+        "scroll_target": int(payload.scrollTarget or DEFAULT_SCRAPE_LIMITS["scroll_target"]),
+        "scroll_max_scrolls": int(payload.scrollMax or DEFAULT_SCRAPE_LIMITS["scroll_max_scrolls"]),
     }
     config["min_salary"] = float(payload.minSalary or MIN_AVG_SALARY_K)
-    config["strategy_index"] = 2
+    config.pop("strategy_index", None)
     config.pop("quick_mode", None)
     config["headless_mode"] = bool(payload.headlessMode)
     config["auto_sqlite"] = bool(payload.autoSqlite)
