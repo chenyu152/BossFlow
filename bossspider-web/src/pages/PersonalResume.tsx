@@ -5,6 +5,7 @@ import {
   CircleHelp,
   FileInput,
   FileText,
+  FileUp,
   Loader2,
   RefreshCw,
   Save,
@@ -58,6 +59,9 @@ export function PersonalResume({
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [guideStep, setGuideStep] = useState<number | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [parseStatus, setParseStatus] = useState<'idle' | 'processing' | 'done' | 'failed'>('idle');
+  const parsePollRef = useRef<ReturnType<typeof setInterval>>();
 
   const tailoredItems = useMemo(
     () => items.filter((item) => Boolean(item.resumeDraftPath)),
@@ -72,7 +76,62 @@ export function PersonalResume({
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
 
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+  useEffect(() => () => {
+    onDirtyChange(false);
+    if (parsePollRef.current) clearInterval(parsePollRef.current);
+  }, [onDirtyChange]);
+
+  useEffect(() => () => {
+    if (parsePollRef.current) clearInterval(parsePollRef.current);
+  }, []);
+
+  // 恢复解析状态（切换页面后回来继续轮询）
+  useEffect(() => {
+    let cancelled = false;
+    const checkAndPoll = async () => {
+      try {
+        const status = await bossApi.getParseStatus();
+        if (cancelled) return;
+        if (status.status === 'processing') {
+          setParseStatus('processing');
+          setMessage(t('personalResume.parsePdf.parsing'));
+          const poll = setInterval(async () => {
+            try {
+              const s = await bossApi.getParseStatus();
+              if (cancelled) { clearInterval(poll); return; }
+              if (s.status === 'done') {
+                clearInterval(poll);
+                parsePollRef.current = undefined;
+                setParseStatus('done');
+                setContent(s.result || '');
+                setMessage(t('personalResume.parsePdf.parseSuccess'));
+              } else if (s.status === 'failed') {
+                clearInterval(poll);
+                parsePollRef.current = undefined;
+                setParseStatus('failed');
+                setError(t('personalResume.parsePdf.parseFailed', { error: s.error || 'Unknown error' }));
+              }
+            } catch {
+              clearInterval(poll);
+              parsePollRef.current = undefined;
+            }
+          }, 2000);
+          parsePollRef.current = poll;
+        } else if (status.status === 'done') {
+          setParseStatus('done');
+          setContent(status.result || '');
+          setMessage(t('personalResume.parsePdf.parseSuccess'));
+        }
+      } catch {
+        // ignore — service not available
+      }
+    };
+    void checkAndPoll();
+    return () => {
+      cancelled = true;
+      if (parsePollRef.current) clearInterval(parsePollRef.current);
+    };
+  }, [t]);
 
   useEffect(() => {
     if (!autoStartGuide) return;
@@ -203,6 +262,45 @@ export function PersonalResume({
       setMessage(t('personalResume.importReady', { name: file.name }));
     } catch (importError) {
       setError(t('personalResume.importFailed', { error: (importError as Error).message }));
+    }
+  };
+
+  const handlePdfUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!confirmDiscard()) return;
+    setError('');
+    setMessage(t('personalResume.parsePdf.parsing'));
+    setParseStatus('processing');
+    try {
+      await bossApi.parsePdfResume(file);
+      const poll = setInterval(async () => {
+        try {
+          const status = await bossApi.getParseStatus();
+          if (status.status === 'done') {
+            clearInterval(poll);
+            parsePollRef.current = undefined;
+            setParseStatus('done');
+            setContent(status.result || '');
+            setMessage(t('personalResume.parsePdf.parseSuccess'));
+          } else if (status.status === 'failed') {
+            clearInterval(poll);
+            parsePollRef.current = undefined;
+            setParseStatus('failed');
+            setError(t('personalResume.parsePdf.parseFailed', { error: status.error || 'Unknown error' }));
+          }
+        } catch (pollError) {
+          clearInterval(poll);
+          parsePollRef.current = undefined;
+          setParseStatus('failed');
+          setError(t('personalResume.parsePdf.parseFailed', { error: (pollError as Error).message }));
+        }
+      }, 2000);
+      parsePollRef.current = poll;
+    } catch (uploadError) {
+      setParseStatus('failed');
+      setError(t('personalResume.parsePdf.parseFailed', { error: (uploadError as Error).message }));
     }
   };
 
@@ -337,6 +435,13 @@ export function PersonalResume({
                   onChange={(event) => void importTextFile(event)}
                   className="hidden"
                 />
+                <input
+                  ref={pdfInputRef}
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(event) => void handlePdfUpload(event)}
+                  className="hidden"
+                />
                 <button
                   data-guide-target="personal-resume-import"
                   onClick={() => importInputRef.current?.click()}
@@ -346,6 +451,17 @@ export function PersonalResume({
                   <FileInput size={13} />
                   {t('personalResume.import')}
                 </button>
+                <button
+                  onClick={() => pdfInputRef.current?.click()}
+                  disabled={loading || parseStatus === 'processing'}
+                  className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
+                >
+                  <FileUp size={13} />
+                  {t('personalResume.parsePdf.uploadPdf')}
+                </button>
+                {parseStatus === 'processing' && (
+                  <Loader2 size={14} className="animate-spin text-indigo-400" />
+                )}
                 {!cvDocument?.exists && cvDocument?.canCreateFromTemplate && (
                   <button
                     onClick={() => void createFromTemplate()}

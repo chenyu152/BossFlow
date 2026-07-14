@@ -131,6 +131,30 @@ export const bossApi = {
     });
   },
 
+  async parsePdfResume(file: File): Promise<{ ok: boolean; status: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/api/cv/parse-pdf`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      let message = `${response.status} ${response.statusText}`;
+      try {
+        const body = await response.json();
+        message = body.detail || message;
+      } catch {
+        // keep HTTP status text
+      }
+      throw new Error(message);
+    }
+    return response.json();
+  },
+
+  getParseStatus() {
+    return request<{ status: string; result: string; error: string }>('/api/cv/parse-status');
+  },
+
   getJobs(project: string, search = '', limit = 20000) {
     return request<JobsResponse>(
       `/api/jobs?project=${encodeURIComponent(project)}&q=${encodeURIComponent(search)}&limit=${limit}`,

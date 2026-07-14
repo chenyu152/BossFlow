@@ -212,6 +212,12 @@
       "hasSkills": "Skills",
       "hasProjects": "Projects",
       "hasExperience": "Work experience"
+    },
+    "parsePdf": {
+      "uploadPdf": "Upload PDF Resume",
+      "parsing": "Parsing PDF, please wait...",
+      "parseSuccess": "PDF parsing complete, content loaded into editor.",
+      "parseFailed": "PDF parsing failed: {{error}}"
     }
   },
   "markdownEditor": {

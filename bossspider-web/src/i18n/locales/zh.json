@@ -212,6 +212,12 @@
       "hasSkills": "技能栈",
       "hasProjects": "项目经历",
       "hasExperience": "工作经历"
+    },
+    "parsePdf": {
+      "uploadPdf": "上传 PDF 简历",
+      "parsing": "PDF 解析中，请稍候...",
+      "parseSuccess": "PDF 解析完成，内容已加载到编辑器。",
+      "parseFailed": "PDF 解析失败：{{error}}"
     }
   },
   "markdownEditor": {

@@ -4,7 +4,9 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+import tempfile
+
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
@@ -68,6 +70,7 @@ from backend.services.project_service import (
     save_form_config,
     stats_for_project,
 )
+from backend.services.resume_parser_service import get_parse_status, start_parse
 from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion, save_resume_draft
 from backend.services.scoring_suggestion_service import suggest_scoring_keywords
 from backend.services.task_service import TaskManager
@@ -195,6 +198,23 @@ def update_cv_document(payload: CvSaveRequest):
 def create_cv_template(project: Optional[str] = None):
     with project_workspace(_workspace_project(project)):
         return create_cv_from_template()
+
+
+@app.post("/api/cv/parse-pdf")
+async def parse_pdf_resume(file: UploadFile = File(...)):
+    temp_dir = Path(tempfile.mkdtemp(prefix="resume_parse_"))
+    pdf_path = temp_dir / (file.filename or "resume.pdf")
+    content = await file.read()
+    pdf_path.write_bytes(content)
+
+    output_dir = temp_dir / "output"
+    start_parse(str(pdf_path), str(output_dir))
+    return {"ok": True, "status": "processing"}
+
+
+@app.get("/api/cv/parse-status")
+def parse_status():
+    return get_parse_status()
 
 
 @app.get("/api/jobs")
