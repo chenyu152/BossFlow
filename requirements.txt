@@ -7,6 +7,7 @@ requests>=2.31.0
 python-dotenv>=1.0
 python-multipart>=0.0.32
 
-# PDF 简历解析（ONNX Runtime 推理，无需 GPU）
-rapidocr-onnxruntime>=1.4
+# PDF 简历解析（ONNX Runtime 推理，无需 GPU；支持 Python 3.13）
+rapidocr>=3.9.1,<4
+onnxruntime>=1.22,<2
 pymupdf>=1.28

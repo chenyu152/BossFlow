@@ -15,16 +15,19 @@ ROOT = Path(os.environ.get("BOSSFLOW_SOURCE_DIR", Path.cwd())).resolve()
 # MKL, IPython and Qt stacks) and can inflate the installer by hundreds of MB.
 drission_datas = collect_data_files("DrissionPage")
 drission_hiddenimports = collect_submodules("DrissionPage")
+rapidocr_datas = collect_data_files("rapidocr")
+rapidocr_hiddenimports = collect_submodules("rapidocr")
 
 a = Analysis(
     [str(ROOT / "backend" / "desktop_entry.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=drission_datas + [
+    datas=drission_datas + rapidocr_datas + [
         (str(ROOT / "cv.example.md"), "."),
         (str(ROOT / "crawler" / "config"), "crawler/config"),
+        (str(ROOT / "backend" / "services" / "resume_parser" / "models"), "backend/services/resume_parser/models"),
     ],
-    hiddenimports=drission_hiddenimports,
+    hiddenimports=drission_hiddenimports + rapidocr_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

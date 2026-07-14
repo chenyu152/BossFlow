@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from rapidocr_onnxruntime import RapidOCR
+from rapidocr import RapidOCR
 
 from .llm_extract import extract_resume
 from .pdf_to_images import pdf_to_images
@@ -40,19 +40,21 @@ def run_pipeline(
     # ── Step 2: OCR ──
     print("[2/4] RapidOCR v6 (ONNX) 识别中 ...")
     models_dir = Path(__file__).parent / "models"
-    ocr = RapidOCR(
-        det_model_path=str(models_dir / "v6_small_det.onnx"),
-        rec_model_path=str(models_dir / "v6_small_rec.onnx"),
-        rec_keys_path=str(models_dir / "v6_small_charset.txt"),
-        use_cls=False,
-    )
+    # RapidOCR 3 supports current Python releases.  Use the bundled v6 models
+    # so parsing remains offline and does not download models at first use.
+    ocr = RapidOCR(params={
+        "Global.use_cls": False,
+        "Det.model_path": str(models_dir / "v6_small_det.onnx"),
+        "Rec.model_path": str(models_dir / "v6_small_rec.onnx"),
+        "Rec.rec_keys_path": str(models_dir / "v6_small_charset.txt"),
+    })
 
     all_lines: list[str] = []
     for img_path in images:
-        result, _ = ocr(img_path)
+        result = ocr(img_path, use_cls=False)
         page_lines: list[str] = []
-        if result:
-            for box, text, score in result:
+        if result.txts:
+            for text in result.txts:
                 text = text.strip()
                 if text:
                     page_lines.append(text)
