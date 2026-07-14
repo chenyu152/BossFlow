@@ -597,6 +597,7 @@ class BossCrawler:
                     'edu': job.get('degree', ''),
                     'desc': desc,
                     'url': job.get('url', ''),
+                    'security_id': job.get('security_id', ''),
                     '_source': 'boss',
                 })
 

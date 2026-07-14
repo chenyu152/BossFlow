@@ -53,9 +53,13 @@ def init_db(conn: sqlite3.Connection):
             last_seen TEXT,
             crawled_at TEXT,
             is_new INTEGER DEFAULT 0,
+            security_id TEXT,
             raw_json TEXT
         )
     ''')
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "security_id" not in columns:
+        conn.execute("ALTER TABLE jobs ADD COLUMN security_id TEXT")
     conn.execute('CREATE INDEX IF NOT EXISTS idx_jobs_city ON jobs(city)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_jobs_title ON jobs(title)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_jobs_last_seen ON jobs(last_seen)')
@@ -120,6 +124,7 @@ def upsert_jobs(jobs: Iterable[dict], db_file=None) -> dict:
                 str(job.get('_source') or 'boss'),
                 str(job.get('_date') or today),
                 str(job.get('_crawled_at') or now),
+                str(job.get('security_id') or '').strip(),
                 _json_dumps(job),
             )
             if existing:
@@ -128,7 +133,7 @@ def upsert_jobs(jobs: Iterable[dict], db_file=None) -> dict:
                     SET title = ?, company = ?, city = ?, salary = ?, avg = ?,
                         tier = ?, exp = ?, edu = ?, cats_json = ?, kw_json = ?,
                         desc = ?, url = ?, source = ?, last_seen = ?,
-                        crawled_at = ?, is_new = 0, raw_json = ?
+                        crawled_at = ?, is_new = 0, security_id = ?, raw_json = ?
                     WHERE job_key = ?
                 ''', payload[1:] + (key,))
                 updated += 1
@@ -137,10 +142,10 @@ def upsert_jobs(jobs: Iterable[dict], db_file=None) -> dict:
                     INSERT INTO jobs (
                         job_key, title, company, city, salary, avg, tier, exp,
                         edu, cats_json, kw_json, desc, url, source, first_seen,
-                        last_seen, crawled_at, is_new, raw_json
+                        last_seen, crawled_at, is_new, security_id, raw_json
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                ''', payload[:15] + (payload[14], payload[15], payload[16]))
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ''', payload[:15] + (payload[14], payload[15], payload[16], payload[17]))
                 inserted += 1
 
         conn.commit()

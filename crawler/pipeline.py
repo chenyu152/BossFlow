@@ -155,6 +155,7 @@ def process_one(raw: dict, cat_rules: dict = None, min_salary: float = None, rel
         'kw': kw,
         'desc': desc,
         '_key': dedup_key({'title': title, 'company': company, 'city': city}),
+        'security_id': str(raw.get('security_id') or '').strip(),
         '_date': date.today().isoformat(),
         '_crawled_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
     }
