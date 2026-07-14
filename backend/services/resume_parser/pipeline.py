@@ -9,9 +9,9 @@ from pathlib import Path
 
 from paddleocr import PaddleOCR
 
-from pdf_to_images import pdf_to_images
-from llm_extract import extract_resume
-from to_cv import to_cv_markdown
+from .pdf_to_images import pdf_to_images
+from .llm_extract import extract_resume
+from .to_cv import to_cv_markdown
 
 
 def run_pipeline(

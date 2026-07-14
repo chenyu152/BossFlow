@@ -1,6 +1,6 @@
 """Resume JSON → cv.md Markdown 生成器."""
 
-from schema import Resume
+from .schema import Resume
 
 
 def to_cv_markdown(resume: Resume) -> str:

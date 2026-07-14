@@ -8,16 +8,16 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
-from schema import Resume
+from .schema import Resume
 
 # ── config ──────────────────────────────────────────────
 
 def _load_api_config(env_path: str | None = None) -> tuple[str, str, str]:
-    """加载 API 配置。先找 ppocrdemo/.env，再找 BossFlow/.env。"""
+    """加载 API 配置。先找当前目录 .env，找不到则找项目根目录。"""
     candidates = [
         env_path,
         os.path.join(os.path.dirname(__file__), ".env"),
-        os.path.join(os.path.dirname(__file__), "..", "BossFlow", ".env"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"),
     ]
     for path in candidates:
         if path and os.path.exists(path):
