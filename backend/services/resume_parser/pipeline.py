@@ -41,9 +41,9 @@ def run_pipeline(
     print("[2/4] RapidOCR v6 (ONNX) 识别中 ...")
     models_dir = Path(__file__).parent / "models"
     ocr = RapidOCR(
-        det_model_path=str(models_dir / "v6_det.onnx"),
-        rec_model_path=str(models_dir / "v6_rec.onnx"),
-        rec_keys_path=str(models_dir / "v6_charset.txt"),
+        det_model_path=str(models_dir / "v6_small_det.onnx"),
+        rec_model_path=str(models_dir / "v6_small_rec.onnx"),
+        rec_keys_path=str(models_dir / "v6_small_charset.txt"),
         use_cls=False,
     )
 
