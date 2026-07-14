@@ -175,8 +175,8 @@
     "save": "Save",
     "saving": "Saving",
     "unsaved": "Unsaved changes",
-    "import": "Import Markdown / Text",
-    "importHint": "Imported content is loaded into the editor first and is written only after you save. PDF and Word extraction can lose structure; convert to text or Markdown before importing for now.",
+    "import": "Import Resume",
+    "importHint": "Markdown, text, and PDF are supported. Text is loaded directly; PDFs are parsed automatically. Review the content, then save.",
     "createTemplate": "Create from Template",
     "editorPlaceholder": "Add your real experience, skills, education, and projects here.",
     "loading": "Loading resume...",
@@ -188,13 +188,13 @@
     "loadFailed": "Load resume failed: {{error}}",
     "saveFailed": "Save resume failed: {{error}}",
     "importReady": "{{name}} is loaded. Review it, then save.",
-    "importUnsupported": "Only .md and .txt files are supported right now.",
+    "importUnsupported": "Only .md, .txt, and .pdf files are supported.",
     "importFailed": "Read imported file failed: {{error}}",
     "unsavedSwitchConfirm": "This resume has unsaved changes. Switching will discard them. Continue?",
     "help": "Help tour",
     "tour": {
       "importTitle": "Import an existing base resume",
-      "importBody": "Import an existing Markdown or text resume here. It enters the editor first and is saved only after you review it.",
+      "importBody": "Choose a resume file here. Markdown and text load directly; PDFs are parsed automatically. In either case, review it in the editor before saving.",
       "editorTitle": "Or write your real experience",
       "editorBody": "You can also add your real work, projects, skills, and education in the editor. This base resume belongs only to the current direction.",
       "saveTitle": "Save the base resume",
@@ -214,7 +214,6 @@
       "hasExperience": "Work experience"
     },
     "parsePdf": {
-      "uploadPdf": "Upload PDF Resume",
       "parsing": "Parsing PDF, please wait...",
       "parseSuccess": "PDF parsing complete, content loaded into editor.",
       "parseFailed": "PDF parsing failed: {{error}}"

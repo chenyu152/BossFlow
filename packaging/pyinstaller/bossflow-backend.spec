@@ -43,12 +43,15 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
     name="BossFlowBackend",
     console=False,
+    # Keep large runtime libraries next to the executable.  Embedding them in
+    # the bootloader turns this into a one-file application that extracts on
+    # every launch; Paddle's OCR runtime can then exceed Electron's startup
+    # timeout.  The COLLECT step below produces the intended one-directory
+    # sidecar instead.
+    exclude_binaries=True,
     disable_windowed_traceback=False,
 )
 coll = COLLECT(exe, a.binaries, a.zipfiles, a.datas, name="BossFlowBackend")

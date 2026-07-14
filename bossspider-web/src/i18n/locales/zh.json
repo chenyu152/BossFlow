@@ -175,8 +175,8 @@
     "save": "保存",
     "saving": "保存中",
     "unsaved": "有未保存修改",
-    "import": "导入 Markdown / 文本",
-    "importHint": "导入的内容会先放入编辑器，确认后再保存。PDF、Word 提取容易丢失结构，当前请先复制为文本或转成 Markdown 后导入。",
+    "import": "导入简历",
+    "importHint": "支持 Markdown、文本和 PDF。文本会直接载入编辑器；PDF 会自动解析，完成后请检查内容并保存。",
     "createTemplate": "从模板创建",
     "editorPlaceholder": "在这里填写真实的个人经历、技能、教育和项目内容。",
     "loading": "正在加载简历...",
@@ -188,13 +188,13 @@
     "loadFailed": "加载简历失败：{{error}}",
     "saveFailed": "保存简历失败：{{error}}",
     "importReady": "已载入 {{name}}，检查内容后点击保存。",
-    "importUnsupported": "当前仅支持导入 .md 和 .txt 文件。",
+    "importUnsupported": "当前仅支持导入 .md、.txt 和 .pdf 文件。",
     "importFailed": "读取导入文件失败：{{error}}",
     "unsavedSwitchConfirm": "当前简历有未保存修改，切换后会丢失。确定继续吗？",
     "help": "帮助引导",
     "tour": {
       "importTitle": "导入已有基础简历",
-      "importBody": "已有 Markdown 或文本简历时可从这里导入；内容会先进入编辑器，确认无误后才保存。",
+      "importBody": "点击这里选择简历文件。Markdown 或文本会直接载入；PDF 会自动解析。无论哪种方式，内容都要先在编辑器检查后再保存。",
       "editorTitle": "或直接编写真实经历",
       "editorBody": "也可以在编辑器中补充真实的工作、项目、技能和教育经历。该基础简历仅属于当前求职方向。",
       "saveTitle": "保存基础简历",
@@ -214,7 +214,6 @@
       "hasExperience": "工作经历"
     },
     "parsePdf": {
-      "uploadPdf": "上传 PDF 简历",
       "parsing": "PDF 解析中，请稍候...",
       "parseSuccess": "PDF 解析完成，内容已加载到编辑器。",
       "parseFailed": "PDF 解析失败：{{error}}"

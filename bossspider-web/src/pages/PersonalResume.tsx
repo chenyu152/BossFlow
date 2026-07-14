@@ -5,7 +5,6 @@ import {
   CircleHelp,
   FileInput,
   FileText,
-  FileUp,
   Loader2,
   RefreshCw,
   Save,
@@ -59,7 +58,6 @@ export function PersonalResume({
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [guideStep, setGuideStep] = useState<number | null>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
   const [parseStatus, setParseStatus] = useState<'idle' | 'processing' | 'done' | 'failed'>('idle');
   const parsePollRef = useRef<ReturnType<typeof setInterval>>();
 
@@ -245,12 +243,16 @@ export function PersonalResume({
     }
   };
 
-  const importTextFile = async (event: ChangeEvent<HTMLInputElement>) => {
+  const importResumeFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
     if (!confirmDiscard()) return;
     const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension === 'pdf' || file.type === 'application/pdf') {
+      await parsePdfFile(file);
+      return;
+    }
     if (extension !== 'md' && extension !== 'txt') {
       setError(t('personalResume.importUnsupported'));
       return;
@@ -265,11 +267,7 @@ export function PersonalResume({
     }
   };
 
-  const handlePdfUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if (!confirmDiscard()) return;
+  const parsePdfFile = async (file: File) => {
     setError('');
     setMessage(t('personalResume.parsePdf.parsing'));
     setParseStatus('processing');
@@ -431,37 +429,19 @@ export function PersonalResume({
                 <input
                   ref={importInputRef}
                   type="file"
-                  accept=".md,.txt,text/markdown,text/plain"
-                  onChange={(event) => void importTextFile(event)}
-                  className="hidden"
-                />
-                <input
-                  ref={pdfInputRef}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={(event) => void handlePdfUpload(event)}
+                  accept=".md,.txt,.pdf,text/markdown,text/plain,application/pdf"
+                  onChange={(event) => void importResumeFile(event)}
                   className="hidden"
                 />
                 <button
                   data-guide-target="personal-resume-import"
                   onClick={() => importInputRef.current?.click()}
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
-                >
-                  <FileInput size={13} />
-                  {t('personalResume.import')}
-                </button>
-                <button
-                  onClick={() => pdfInputRef.current?.click()}
                   disabled={loading || parseStatus === 'processing'}
                   className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
                 >
-                  <FileUp size={13} />
-                  {t('personalResume.parsePdf.uploadPdf')}
+                  {parseStatus === 'processing' ? <Loader2 size={13} className="animate-spin" /> : <FileInput size={13} />}
+                  {parseStatus === 'processing' ? t('personalResume.parsePdf.parsing') : t('personalResume.import')}
                 </button>
-                {parseStatus === 'processing' && (
-                  <Loader2 size={14} className="animate-spin text-indigo-400" />
-                )}
                 {!cvDocument?.exists && cvDocument?.canCreateFromTemplate && (
                   <button
                     onClick={() => void createFromTemplate()}
