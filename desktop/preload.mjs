@@ -1,5 +1,2 @@
-import { contextBridge, ipcRenderer } from 'electron';
-
-contextBridge.exposeInMainWorld('bossflowDesktop', Object.freeze({
-  getRuntimeToken: () => ipcRenderer.invoke('bossflow:get-runtime-token'),
-}));
+// Intentionally empty. Desktop API credentials stay in Electron's main
+// process and are injected only into loopback sidecar requests.

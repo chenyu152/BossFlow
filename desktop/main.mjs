@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
 import { mkdir } from 'node:fs/promises';
@@ -57,6 +57,23 @@ function trustedUrl(url) {
   } catch {
     return false;
   }
+}
+
+function attachDesktopRuntimeToken() {
+  // Keep the capability token in the main process.  This protects the local
+  // API from cross-site writes without requiring the React renderer to fetch
+  // a token through preload/IPC on every request.
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: [`${backendUrl}/*`] },
+    (details, callback) => {
+      callback({
+        requestHeaders: {
+          ...details.requestHeaders,
+          'X-BossFlow-Token': runtimeToken,
+        },
+      });
+    },
+  );
 }
 
 async function startPackagedSidecar() {
@@ -151,11 +168,6 @@ async function stopPackagedSidecar() {
   }
 }
 
-ipcMain.handle('bossflow:get-runtime-token', (event) => {
-  if (!trustedUrl(event.senderFrame.url)) throw new Error('Untrusted renderer');
-  return runtimeToken;
-});
-
 app.whenReady().then(async () => {
   try {
     if (isDevelopment) {
@@ -165,6 +177,7 @@ app.whenReady().then(async () => {
       await waitForBackend(backendUrl, 12);
     } else {
       await startPackagedSidecar();
+      attachDesktopRuntimeToken();
     }
     await createWindow();
   } catch (error) {

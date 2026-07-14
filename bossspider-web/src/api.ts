@@ -41,20 +41,10 @@ import type {
 
 export const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-let desktopRuntimeToken: Promise<string> | undefined;
-
-function getDesktopRuntimeToken(): Promise<string> {
-  if (!window.bossflowDesktop) return Promise.resolve('');
-  desktopRuntimeToken ??= window.bossflowDesktop.getRuntimeToken().catch(() => '');
-  return desktopRuntimeToken;
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const runtimeToken = await getDesktopRuntimeToken();
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
-      ...(runtimeToken ? { 'X-BossFlow-Token': runtimeToken } : {}),
       ...(init?.headers || {}),
     },
     ...init,
