@@ -8,7 +8,14 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function run(command, args, cwd) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(command, args, { cwd, env: process.env, stdio: 'inherit' });
+    const child = spawn(command, args, {
+      cwd,
+      env: process.env,
+      stdio: 'inherit',
+      // Windows command shims such as npm.cmd require a shell on some Node
+      // runtimes; without it the release command can fail with spawn EINVAL.
+      shell: process.platform === 'win32',
+    });
     child.once('error', rejectRun);
     child.once('exit', (code) => (code === 0 ? resolveRun() : rejectRun(new Error(`${command} exited with ${code}`))));
   });

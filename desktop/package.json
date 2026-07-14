@@ -1,7 +1,7 @@
 {
   "name": "bossflow-desktop",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "BossFlow Electron desktop shell",
   "type": "module",
   "main": "main.mjs",
