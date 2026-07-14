@@ -86,7 +86,7 @@ def create_project(name: str) -> Path:
     config = {
         "keywords": [normalized_name],
         "cities": {},
-        "scrape_limits": DEFAULT_SCRAPE_LIMITS.copy(),
+        "scrape_limits": {**DEFAULT_SCRAPE_LIMITS, "scroll_target": 20},
         "min_salary": MIN_AVG_SALARY_K,
         "strategy_index": 2,
         "headless_mode": True,

@@ -1,4 +1,12 @@
-export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs';
+export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
+
+export type LlmSettingsStatus = {
+  configured: boolean;
+  apiKeyMasked: string;
+  apiBase: string;
+  model: string;
+  source: 'environment' | 'settings-file';
+};
 
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'failed';
 

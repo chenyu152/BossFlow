@@ -15,12 +15,14 @@ import {
   Plus,
   SlidersHorizontal,
   Square,
+  Settings as SettingsIcon,
   Tags,
   Terminal,
   UserRound,
 } from 'lucide-react';
 import { NavItem } from './components/NavItem';
 import { StatusBadge } from './components/StatusBadge';
+import { GuidedTour } from './components/GuidedTour';
 import { useBossSpider } from './hooks/useBossSpider';
 import type { DashboardTaskTarget } from './pages/Dashboard';
 import type { ResumeNavigationTarget, Tab } from './types';
@@ -36,6 +38,7 @@ const PersonalResume = lazy(() => import('./pages/PersonalResume').then((module)
 const Resume = lazy(() => import('./pages/Resume').then((module) => ({ default: module.Resume })));
 const Rules = lazy(() => import('./pages/Rules').then((module) => ({ default: module.Rules })));
 const Scope = lazy(() => import('./pages/Scope').then((module) => ({ default: module.Scope })));
+const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
 const Story = lazy(() => import('./pages/Story').then((module) => ({ default: module.Story })));
 
 function PageLoading({ label }: { label: string }) {
@@ -100,6 +103,10 @@ export default function App() {
   const [directionCreateError, setDirectionCreateError] = useState('');
   const [creatingDirection, setCreatingDirection] = useState(false);
   const [scopeGuideAutoStartPending, setScopeGuideAutoStartPending] = useState(false);
+  const [matchingGuideAutoStartPending, setMatchingGuideAutoStartPending] = useState(false);
+  const [crawlGuideOpen, setCrawlGuideOpen] = useState(false);
+  const [resumeGuideAutoStartPending, setResumeGuideAutoStartPending] = useState(false);
+  const [resumeGuideAfterCrawl, setResumeGuideAfterCrawl] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
     discovery: true,
     evaluation: true,
@@ -131,6 +138,15 @@ export default function App() {
     !hasUnsavedChanges || window.confirm(t('notices.unsavedChangesLeaveConfirm'))
   ), [hasUnsavedChanges, t]);
 
+  useEffect(() => {
+    const openSettings = () => {
+      if (!confirmUnsavedConfig()) return;
+      setActiveTab('Settings');
+    };
+    window.addEventListener('bossflow:llm-settings-required', openSettings);
+    return () => window.removeEventListener('bossflow:llm-settings-required', openSettings);
+  }, [confirmUnsavedConfig]);
+
   const navigateToTab = useCallback((tab: Tab) => {
     if (tab === activeTab || confirmUnsavedConfig()) setActiveTab(tab);
   }, [activeTab, confirmUnsavedConfig]);
@@ -158,7 +174,15 @@ export default function App() {
 
   const startCrawl = async () => {
     if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
-    if (await boss.startCrawl()) setActiveTab('Logs');
+    if (await boss.startCrawl()) {
+      if (resumeGuideAfterCrawl) {
+        setResumeGuideAfterCrawl(false);
+        setResumeGuideAutoStartPending(true);
+        setActiveTab('PersonalResume');
+      } else {
+        setActiveTab('Logs');
+      }
+    }
   };
 
   const startLogin = async () => {
@@ -267,8 +291,9 @@ export default function App() {
           </NavSection>
         </nav>
 
-        <div className="p-4 border-t border-zinc-800 text-xs text-zinc-600">
-          {t('nav.webConsole')}
+        <div className="space-y-2 border-t border-zinc-800 p-3">
+          <NavItem icon={<SettingsIcon size={16} />} label={t('nav.settings')} active={activeTab === 'Settings'} onClick={() => navigateToTab('Settings')} />
+          <div className="px-1 text-xs text-zinc-600">{t('nav.webConsole')}</div>
         </div>
       </aside>
 
@@ -334,7 +359,7 @@ export default function App() {
               {t('header.viewLogs')}
             </button>
             {!boss.isRunning ? (
-              <button onClick={startCrawl} disabled={!boss.config || boss.loading} className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors">
+              <button data-guide-target="start-crawl" onClick={startCrawl} disabled={!boss.config || boss.loading} className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors">
                 <Play size={14} />
                 {t('header.startCrawl')}
               </button>
@@ -385,6 +410,24 @@ export default function App() {
           </div>
         )}
 
+        {crawlGuideOpen && (
+          <GuidedTour
+            steps={[{
+              target: 'start-crawl',
+              title: t('directions.crawlTour.title'),
+              body: t('directions.crawlTour.body'),
+            }]}
+            activeStep={0}
+            onStepChange={() => undefined}
+            onClose={() => setCrawlGuideOpen(false)}
+            nextLabel={t('directions.crawlTour.finish')}
+            previousLabel={t('directions.crawlTour.finish')}
+            finishLabel={t('directions.crawlTour.finish')}
+            skipLabel={t('directions.crawlTour.skip')}
+            progressLabel={(current, total) => t('directions.crawlTour.progress', { current, total })}
+          />
+        )}
+
         <main className="flex-1 overflow-auto bg-zinc-950 p-5">
           <div className={isWideWorkspace ? 'h-full w-full min-w-0' : 'max-w-6xl mx-auto h-full'}>
             <Suspense fallback={<PageLoading label={currentLanguage.startsWith('zh') ? '加载页面...' : 'Loading page...'} />}>
@@ -412,13 +455,31 @@ export default function App() {
                   onProcessPartial={processPartial}
                   autoStartGuide={scopeGuideAutoStartPending}
                   onAutoStartGuideHandled={() => setScopeGuideAutoStartPending(false)}
+                  onGuideComplete={() => {
+                    setMatchingGuideAutoStartPending(true);
+                    setActiveTab('MatchingRules');
+                  }}
                 />
               )}
               {activeTab === 'MatchingRules' && boss.config && (
-                <Rules mode="matching" config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
+                <Rules
+                  mode="matching"
+                  config={boss.config}
+                  updateConfig={boss.updateConfig}
+                  onSave={boss.saveConfig}
+                  autoStartGuide={matchingGuideAutoStartPending}
+                  onAutoStartGuideHandled={() => setMatchingGuideAutoStartPending(false)}
+                  onGuideComplete={() => {
+                    setResumeGuideAfterCrawl(true);
+                    setCrawlGuideOpen(true);
+                  }}
+                />
               )}
               {activeTab === 'ScoringRules' && boss.config && (
                 <Rules mode="scoring" config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
+              )}
+              {activeTab === 'Settings' && (
+                <Settings onUpdated={() => undefined} />
               )}
               {activeTab === 'Jobs' && (
                 <Jobs
@@ -508,6 +569,8 @@ export default function App() {
                   onLoadDraft={boss.loadResumeDraft}
                   onSaveDraft={boss.saveResumeDraft}
                   onDirtyChange={setPersonalResumeDirty}
+                  autoStartGuide={resumeGuideAutoStartPending}
+                  onAutoStartGuideHandled={() => setResumeGuideAutoStartPending(false)}
                 />
               )}
               {activeTab === 'Story' && (

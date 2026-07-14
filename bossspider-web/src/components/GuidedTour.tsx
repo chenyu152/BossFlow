@@ -12,6 +12,9 @@ export function GuidedTour({
   activeStep,
   onStepChange,
   onClose,
+  onFinish,
+  finishing = false,
+  error,
   nextLabel,
   previousLabel,
   finishLabel,
@@ -22,6 +25,9 @@ export function GuidedTour({
   activeStep: number;
   onStepChange: (step: number) => void;
   onClose: () => void;
+  onFinish?: () => void;
+  finishing?: boolean;
+  error?: string;
   nextLabel: string;
   previousLabel: string;
   finishLabel: string;
@@ -67,7 +73,7 @@ export function GuidedTour({
   const bubbleLeft = rect ? Math.max(16, Math.min(rect.left, window.innerWidth - 420)) : 24;
 
   return (
-    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={step.title}>
+    <div className="pointer-events-none fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={step.title}>
       {rect ? (
         <>
           <div className="absolute inset-x-0 top-0 bg-black/75" style={{ height: Math.max(0, rect.top - 6) }} />
@@ -83,7 +89,7 @@ export function GuidedTour({
         />
       )}
       <section
-        className="absolute w-[min(400px,calc(100vw-32px))] rounded-lg border border-cyan-800 bg-zinc-950 p-4 shadow-2xl"
+        className="pointer-events-auto absolute w-[min(400px,calc(100vw-32px))] rounded-lg border border-cyan-800 bg-zinc-950 p-4 shadow-2xl"
         style={{ top: bubbleTop, left: bubbleLeft }}
       >
         <div className="flex items-start justify-between gap-4">
@@ -96,11 +102,16 @@ export function GuidedTour({
           </button>
         </div>
         <p className="mt-3 text-sm leading-6 text-zinc-400">{step.body}</p>
+        {error && <p className="mt-3 rounded border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs leading-5 text-red-200">{error}</p>}
         <div className="mt-5 flex items-center justify-between gap-3">
           <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-300">{skipLabel}</button>
           <div className="flex gap-2">
             {activeStep > 0 && <button onClick={() => onStepChange(activeStep - 1)} className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900">{previousLabel}</button>}
-            <button onClick={() => activeStep === steps.length - 1 ? onClose() : onStepChange(activeStep + 1)} className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">
+            <button
+              onClick={() => activeStep === steps.length - 1 ? (onFinish || onClose)() : onStepChange(activeStep + 1)}
+              disabled={finishing}
+              className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               {activeStep === steps.length - 1 ? finishLabel : nextLabel}
             </button>
           </div>

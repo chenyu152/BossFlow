@@ -1,6 +1,7 @@
-import { BrainCircuit, ChevronDown, Plus, Tags, Trash2, Wand2, X } from 'lucide-react';
-import { type ReactNode, useMemo, useState } from 'react';
+import { BrainCircuit, ChevronDown, CircleHelp, Plus, Tags, Trash2, Wand2, X } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { bossApi } from '../api';
+import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { useAppTranslation } from '../i18n';
 import type { MatchingRulesSuggestionResponse, ScoringKeywordSuggestionResponse } from '../types';
 import type { ConfigPatch, ConfigPayload } from '../types';
@@ -122,11 +123,17 @@ export function Rules({
   config,
   updateConfig,
   onSave,
+  autoStartGuide = false,
+  onAutoStartGuideHandled,
+  onGuideComplete,
 }: {
   mode: RulesTab;
   config: ConfigPayload;
   updateConfig: (patch: ConfigPatch) => void;
   onSave: (patch?: ConfigPatch) => void | Promise<unknown>;
+  autoStartGuide?: boolean;
+  onAutoStartGuideHandled?: () => void;
+  onGuideComplete?: () => void;
 }) {
   const { t } = useAppTranslation();
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -143,6 +150,10 @@ export function Rules({
   const [matchingSuggestion, setMatchingSuggestion] = useState<MatchingRulesSuggestionResponse | null>(null);
   const [matchingSuggestionLoading, setMatchingSuggestionLoading] = useState(false);
   const [matchingSuggestionError, setMatchingSuggestionError] = useState('');
+  const [guideStep, setGuideStep] = useState<number | null>(null);
+  const [guideSaving, setGuideSaving] = useState(false);
+  const [guideError, setGuideError] = useState('');
+  const [resumeGuideAfterSuggestion, setResumeGuideAfterSuggestion] = useState(false);
 
   const categoryRules = useMemo(
     () => parseObject<CategoryRules>(config.catRulesText, {}),
@@ -152,6 +163,34 @@ export function Rules({
     () => parseObject<ScoringRules>(config.scoringRulesText, {}),
     [config.scoringRulesText],
   );
+  const matchingGuideSteps = useMemo<GuidedTourStep[]>(() => [
+    { target: 'matching-generate-draft', title: t('rules.tour.draftTitle'), body: t('rules.tour.draftBody') },
+    { target: 'matching-category-rules', title: t('rules.tour.categoryTitle'), body: t('rules.tour.categoryBody') },
+    { target: 'matching-save-rules', title: t('rules.tour.saveTitle'), body: t('rules.tour.saveBody') },
+  ], [t]);
+
+  useEffect(() => {
+    if (mode !== 'matching' || !autoStartGuide) return;
+    setGuideError('');
+    setGuideStep(0);
+    onAutoStartGuideHandled?.();
+  }, [autoStartGuide, mode, onAutoStartGuideHandled]);
+
+  const finishMatchingGuide = async () => {
+    setGuideError('');
+    setGuideSaving(true);
+    try {
+      const saved = await onSave();
+      if (saved === null) {
+        setGuideError(t('rules.tour.saveFailed'));
+        return;
+      }
+      setGuideStep(null);
+      onGuideComplete?.();
+    } finally {
+      setGuideSaving(false);
+    }
+  };
 
   const updateCategoryRules = (next: CategoryRules) => {
     const cleaned = Object.fromEntries(
@@ -179,6 +218,7 @@ export function Rules({
 
   const fallbackKeywords = useMemo(() => cleanList(config.relevanceText.split(/\r?\n/)), [config.relevanceText]);
   const blacklistKeywords = useMemo(() => cleanList(config.blacklistText.split(/\r?\n/)), [config.blacklistText]);
+  const hasMatchingRules = Boolean(Object.keys(categoryRules).length || fallbackKeywords.length || blacklistKeywords.length);
   const scoringKeywords = Array.isArray(scoringRules.keywordHints) ? scoringRules.keywordHints.map(String) : [];
   const customScoringPresets: CustomScoringPreset[] = Array.isArray(scoringRules.customPresets)
     ? scoringRules.customPresets.filter((item: any) => item && typeof item === 'object' && item.settings && item.name)
@@ -320,6 +360,11 @@ export function Rules({
   };
 
   const generateMatchingSuggestion = async () => {
+    if (guideStep === 0) {
+      setGuideError('');
+      setGuideStep(null);
+      setResumeGuideAfterSuggestion(true);
+    }
     setMatchingSuggestionLoading(true);
     setMatchingSuggestionError('');
     try {
@@ -331,6 +376,7 @@ export function Rules({
       }));
     } catch (error) {
       setMatchingSuggestionError((error as Error).message);
+      setResumeGuideAfterSuggestion(false);
     } finally {
       setMatchingSuggestionLoading(false);
     }
@@ -344,6 +390,19 @@ export function Rules({
       blacklistText: matchingSuggestion.blacklistKeywords.join('\n'),
     });
     setMatchingSuggestion(null);
+    if (resumeGuideAfterSuggestion) {
+      setResumeGuideAfterSuggestion(false);
+      setGuideStep(1);
+    }
+  };
+
+  const moveMatchingGuideStep = (nextStep: number) => {
+    if (guideStep === 0 && nextStep > guideStep && !hasMatchingRules) {
+      setGuideError(t('rules.tour.generateRequired'));
+      return;
+    }
+    setGuideError('');
+    setGuideStep(nextStep);
   };
 
   return (
@@ -356,6 +415,16 @@ export function Rules({
         <div className="flex items-center gap-2">
           {mode === 'matching' && (
             <button
+              onClick={() => { setGuideError(''); setGuideStep(0); }}
+              className="inline-flex items-center gap-1.5 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-900"
+            >
+              <CircleHelp size={14} />
+              {t('rules.help')}
+            </button>
+          )}
+          {mode === 'matching' && (
+            <button
+              data-guide-target="matching-generate-draft"
               onClick={() => void generateMatchingSuggestion()}
               disabled={matchingSuggestionLoading}
               className="inline-flex items-center gap-2 rounded border border-cyan-900/70 bg-cyan-950/30 px-3 py-1.5 text-sm font-medium text-cyan-200 hover:bg-cyan-900/30 disabled:cursor-not-allowed disabled:opacity-50"
@@ -365,6 +434,7 @@ export function Rules({
             </button>
           )}
           <button
+            data-guide-target={mode === 'matching' ? 'matching-save-rules' : undefined}
             onClick={() => void onSave()}
             className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
           >
@@ -375,7 +445,7 @@ export function Rules({
 
       {mode === 'matching' ? (
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <section className="flex min-h-0 flex-col rounded-md border border-zinc-800 bg-zinc-950">
+          <section data-guide-target="matching-category-rules" className="flex min-h-0 flex-col rounded-md border border-zinc-800 bg-zinc-950">
             <SectionHeader icon={<Tags size={15} />} title={t('rules.categoryRules')} desc={t('rules.categoryRulesDesc')} />
             <div className="flex items-center gap-2 border-b border-zinc-800 p-3">
               <input
@@ -618,6 +688,23 @@ export function Rules({
         <div className="fixed bottom-5 right-5 z-50 max-w-md rounded border border-red-900/60 bg-red-950/95 px-4 py-3 text-sm text-red-200 shadow-xl">
           {matchingSuggestionError}
         </div>
+      )}
+
+      {mode === 'matching' && guideStep !== null && (
+        <GuidedTour
+          steps={matchingGuideSteps}
+          activeStep={guideStep}
+          onStepChange={moveMatchingGuideStep}
+          onClose={() => { setGuideError(''); setGuideStep(null); }}
+          onFinish={() => { void finishMatchingGuide(); }}
+          finishing={guideSaving}
+          error={guideError}
+          nextLabel={t('rules.tour.next')}
+          previousLabel={t('rules.tour.previous')}
+          finishLabel={guideSaving ? t('rules.tour.saving') : t('rules.tour.finish')}
+          skipLabel={t('rules.tour.skip')}
+          progressLabel={(current, total) => t('rules.tour.progress', { current, total })}
+        />
       )}
 
       {mode === 'matching' && matchingSuggestion && (

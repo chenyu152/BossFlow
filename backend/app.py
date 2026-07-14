@@ -25,6 +25,7 @@ from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineI
 from backend.schemas.project import ProjectCreateRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, ResumeSuggestionRequest
 from backend.schemas.scoring import ScoringKeywordSuggestionRequest
+from backend.schemas.system_settings import LlmSettingsUpdate
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.cv_service import create_cv_from_template, cv_status, read_cv_document, save_cv_document
 from backend.services.evidence_service import (
@@ -68,6 +69,7 @@ from backend.services.project_service import (
 from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion, save_resume_draft
 from backend.services.scoring_suggestion_service import suggest_scoring_keywords
 from backend.services.task_service import TaskManager
+from backend.services.system_settings_service import llm_settings_status, reveal_llm_api_key, save_llm_settings, test_llm_connection
 from backend.services.workspace_service import project_from_source_key, project_workspace
 from crawler.boss import load_config
 
@@ -96,6 +98,34 @@ def list_projects():
 @app.post("/api/projects")
 def create_new_project(payload: ProjectCreateRequest):
     return config_payload(create_project(payload.name))
+
+
+@app.get("/api/system/llm-settings")
+def get_llm_settings():
+    return llm_settings_status()
+
+
+@app.put("/api/system/llm-settings")
+def update_llm_settings(payload: LlmSettingsUpdate):
+    try:
+        return save_llm_settings(payload.apiKey, payload.apiBase, payload.model)
+    except ValueError as error:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/system/llm-settings/api-key")
+def get_llm_api_key():
+    return {"apiKey": reveal_llm_api_key()}
+
+
+@app.post("/api/system/llm-settings/test")
+def test_llm_settings(payload: LlmSettingsUpdate):
+    try:
+        return test_llm_connection(payload.apiKey, payload.apiBase, payload.model)
+    except ValueError as error:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/api/config")

@@ -18,6 +18,7 @@ export function Scope({
   onProcessPartial,
   autoStartGuide,
   onAutoStartGuideHandled,
+  onGuideComplete,
 }: {
   config: ConfigPayload;
   updateConfig: (patch: ConfigPatch) => void;
@@ -27,9 +28,12 @@ export function Scope({
   onProcessPartial: () => void;
   autoStartGuide: boolean;
   onAutoStartGuideHandled: () => void;
+  onGuideComplete: () => void;
 }) {
   const { t } = useAppTranslation();
   const [guideStep, setGuideStep] = useState<number | null>(null);
+  const [guideSaving, setGuideSaving] = useState(false);
+  const [guideError, setGuideError] = useState('');
   const guideSteps = useMemo<GuidedTourStep[]>(() => [
     { target: 'scope-keywords', title: t('scope.tour.keywordsTitle'), body: t('scope.tour.keywordsBody') },
     { target: 'scope-cities', title: t('scope.tour.citiesTitle'), body: t('scope.tour.citiesBody') },
@@ -38,16 +42,42 @@ export function Scope({
 
   useEffect(() => {
     if (!autoStartGuide) return;
+    setGuideError('');
     setGuideStep(0);
     onAutoStartGuideHandled();
   }, [autoStartGuide, onAutoStartGuideHandled]);
+
+  const finishGuide = async () => {
+    setGuideError('');
+    setGuideSaving(true);
+    try {
+      const saved = await onSave();
+      if (saved === null) {
+        setGuideError(t('scope.tour.saveFailed'));
+        return;
+      }
+      setGuideStep(null);
+      onGuideComplete();
+    } finally {
+      setGuideSaving(false);
+    }
+  };
+
+  const moveGuideStep = (nextStep: number) => {
+    if (guideStep === 1 && nextStep > guideStep && !config.citiesText.trim()) {
+      setGuideError(t('scope.tour.cityRequired'));
+      return;
+    }
+    setGuideError('');
+    setGuideStep(nextStep);
+  };
 
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg font-semibold text-zinc-100">{t('scope.title')}</h1>
         <div className="flex gap-3">
-          <button onClick={() => setGuideStep(0)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 rounded transition-colors">
+          <button onClick={() => { setGuideError(''); setGuideStep(0); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 rounded transition-colors">
             <CircleHelp size={15} />
             {t('scope.help')}
           </button>
@@ -159,11 +189,14 @@ export function Scope({
         <GuidedTour
           steps={guideSteps}
           activeStep={guideStep}
-          onStepChange={setGuideStep}
-          onClose={() => setGuideStep(null)}
+          onStepChange={moveGuideStep}
+          onClose={() => { setGuideError(''); setGuideStep(null); }}
+          onFinish={() => { void finishGuide(); }}
+          finishing={guideSaving}
+          error={guideError}
           nextLabel={t('scope.tour.next')}
           previousLabel={t('scope.tour.previous')}
-          finishLabel={t('scope.tour.finish')}
+          finishLabel={guideSaving ? t('scope.tour.saving') : t('scope.tour.finish')}
           skipLabel={t('scope.tour.skip')}
           progressLabel={(current, total) => t('scope.tour.progress', { current, total })}
         />

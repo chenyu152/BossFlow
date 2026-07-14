@@ -24,6 +24,7 @@ import type {
   JobLiveStatusUpdateRequest,
   JobsResponse,
   LlmEvaluatePipelineResponse,
+  LlmSettingsStatus,
   MatchingRulesSuggestionResponse,
   PipelineDeleteResponse,
   PipelineReportResponse,
@@ -54,6 +55,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Keep the HTTP status text when the body is not JSON.
     }
+    if (message.includes('Missing LLM API key')) {
+      window.dispatchEvent(new Event('bossflow:llm-settings-required'));
+    }
     throw new Error(message);
   }
 
@@ -61,6 +65,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const bossApi = {
+  getLlmSettings() {
+    return request<LlmSettingsStatus>('/api/system/llm-settings');
+  },
+
+  saveLlmSettings(body: { apiKey: string; apiBase: string; model: string }) {
+    return request<LlmSettingsStatus>('/api/system/llm-settings', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  },
+
+  revealLlmApiKey() {
+    return request<{ apiKey: string }>('/api/system/llm-settings/api-key');
+  },
+
+  testLlmSettings(body: { apiKey: string; apiBase: string; model: string }) {
+    return request<{ ok: string; model: string }>('/api/system/llm-settings/test', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
   getProjects() {
     return request<ProjectListResponse>('/api/projects');
   },

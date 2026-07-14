@@ -13,6 +13,7 @@
     "story": "Story Bank",
     "logs": "Logs",
     "webConsole": "Web Console",
+    "settings": "System Settings",
     "stages": {
       "discovery": "Discover Jobs",
       "evaluation": "Evaluate Roles",
@@ -48,12 +49,43 @@
       "3": { "title": "Prepare a direction-specific base resume", "description": "Create from the template and add real experience. It is used only for this direction's scoring, materials, and interview prep." }
     },
     "later": "Set up later",
-    "startSetup": "Set job target"
+    "startSetup": "Set job target",
+    "crawlTour": {
+      "title": "Start your first crawl",
+      "body": "Your configuration is saved. Start collecting jobs here; once it starts, we will take you to import or write the base resume for this direction.",
+      "progress": "Setup tour {{current}}/{{total}}",
+      "finish": "Got it",
+      "skip": "Skip tour"
+    }
   },
   "scoringGuide": {
     "title": "Your job database is ready for a scoring keyword library",
     "body": "This direction has {{count}} jobs, but its scoring keyword library is empty. Let LLM derive suggestions from the database, then review and apply them.",
     "action": "Generate keyword suggestions"
+  },
+  "settings": {
+    "title": "System Settings",
+    "subtitle": "These settings apply to all of BossFlow and do not change with the job-search direction.",
+    "save": "Save settings",
+    "saving": "Saving…",
+    "llm": {
+      "title": "LLM service",
+      "description": "Used for ingestion rules, scoring keywords, job evaluation, resumes, and interview materials. The API key stays in local system settings and is never stored in a job-search direction.",
+      "configured": "LLM is configured and ready to generate.",
+      "notConfigured": "LLM is not configured. Using any LLM feature will bring you here.",
+      "apiKey": "API Key",
+      "apiKeyKeep": "Configured; leave empty to keep the current key",
+      "apiKeyPlaceholder": "Enter API Key",
+      "apiKeyHint": "The key is masked by default; choose Show to view the current local key.",
+      "showKey": "Show",
+      "hideKey": "Hide",
+      "apiBase": "API Base URL",
+      "model": "Model name",
+      "saved": "System LLM settings saved.",
+      "test": "Test API",
+      "testing": "Testing…",
+      "testSuccess": "API connection succeeded and the selected model is callable."
+    }
   },
   "status": {
     "ready": "Ready",
@@ -152,6 +184,20 @@
     "importUnsupported": "Only .md and .txt files are supported right now.",
     "importFailed": "Read imported file failed: {{error}}",
     "unsavedSwitchConfirm": "This resume has unsaved changes. Switching will discard them. Continue?",
+    "help": "Help tour",
+    "tour": {
+      "importTitle": "Import an existing base resume",
+      "importBody": "Import an existing Markdown or text resume here. It enters the editor first and is saved only after you review it.",
+      "editorTitle": "Or write your real experience",
+      "editorBody": "You can also add your real work, projects, skills, and education in the editor. This base resume belongs only to the current direction.",
+      "saveTitle": "Save the base resume",
+      "saveBody": "After saving, it supports later scoring, evidence work, tailored resumes, and interview preparation.",
+      "progress": "Resume tour {{current}}/{{total}}",
+      "previous": "Back",
+      "next": "Next",
+      "finish": "Done",
+      "skip": "Skip tour"
+    },
     "checks": {
       "hasContent": "Content",
       "hasYears": "Years of experience",
@@ -721,7 +767,10 @@
       "progress": "Setup tour {{current}}/{{total}}",
       "previous": "Back",
       "next": "Next",
-      "finish": "Done",
+      "finish": "Save and open Ingestion Rules",
+      "saving": "Saving…",
+      "saveFailed": "Save failed. You are still on this page; check the configuration and try again.",
+      "cityRequired": "Choose at least one crawl city before continuing.",
       "skip": "Skip tour"
     },
     "reloadConfig": "Reload Config",
@@ -750,6 +799,23 @@
     "subtitle": "Ingestion matching affects cleaned job retention and categorization; the job scoring plan only runs when you click job scoring.",
     "matchingTitle": "Ingestion Matching Rules",
     "matchingSubtitle": "Configure post-crawl categorization, fallback retention terms, blacklist terms, and minimum salary.",
+    "help": "Help tour",
+    "tour": {
+      "draftTitle": "Generate a reviewable rule draft",
+      "draftBody": "LLM can draft rules from your crawl keywords. It is never saved automatically; review, apply, and confirm it yourself.",
+      "categoryTitle": "Classify by job and business direction",
+      "categoryBody": "Categories should describe job families, industries, or business domains—not technical dimensions such as languages or tools. You can also maintain everything manually.",
+      "saveTitle": "Save and start crawling",
+      "saveBody": "Save after confirming the rules. You can then start your first crawl and prepare a base resume while it runs.",
+      "progress": "Ingestion-rule tour {{current}}/{{total}}",
+      "previous": "Back",
+      "next": "Next",
+      "finish": "Save and continue",
+      "saving": "Saving…",
+      "saveFailed": "Save failed. You have not moved to the next step; check the configuration and try again.",
+      "generateRequired": "Your ingestion rules are empty. Choose Generate with LLM above, wait for the draft, and review it before continuing.",
+      "skip": "Skip tour"
+    },
     "scoringTitle": "Job Scoring Plan",
     "scoringSubtitle": "Configure weights, thresholds, skill keywords, and risk caps used by manual job scoring.",
     "saveRules": "Save Config",

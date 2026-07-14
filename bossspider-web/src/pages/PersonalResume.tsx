@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  CircleHelp,
   FileInput,
   FileText,
   Loader2,
@@ -11,6 +12,7 @@ import {
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { MarkdownEditor } from '../components/MarkdownEditor';
+import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { useAppTranslation } from '../i18n';
 import type { CvDocumentResponse, ResumeDraftResponse, ResumeItem } from '../types';
 
@@ -32,6 +34,8 @@ export function PersonalResume({
   onLoadDraft,
   onSaveDraft,
   onDirtyChange,
+  autoStartGuide = false,
+  onAutoStartGuideHandled,
 }: {
   project: string;
   items: ResumeItem[];
@@ -39,6 +43,8 @@ export function PersonalResume({
   onLoadDraft: (sourceKey: string) => Promise<ResumeDraftResponse | null>;
   onSaveDraft: (sourceKey: string, content: string) => Promise<ResumeDraftResponse | null>;
   onDirtyChange: (dirty: boolean) => void;
+  autoStartGuide?: boolean;
+  onAutoStartGuideHandled?: () => void;
 }) {
   const { t } = useAppTranslation();
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -51,6 +57,7 @@ export function PersonalResume({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [guideStep, setGuideStep] = useState<number | null>(null);
 
   const tailoredItems = useMemo(
     () => items.filter((item) => Boolean(item.resumeDraftPath)),
@@ -66,6 +73,18 @@ export function PersonalResume({
   }, [dirty, onDirtyChange]);
 
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  useEffect(() => {
+    if (!autoStartGuide) return;
+    setGuideStep(0);
+    onAutoStartGuideHandled?.();
+  }, [autoStartGuide, onAutoStartGuideHandled]);
+
+  const guideSteps = useMemo<GuidedTourStep[]>(() => [
+    { target: 'personal-resume-import', title: t('personalResume.tour.importTitle'), body: t('personalResume.tour.importBody') },
+    { target: 'personal-resume-editor', title: t('personalResume.tour.editorTitle'), body: t('personalResume.tour.editorBody') },
+    { target: 'personal-resume-save', title: t('personalResume.tour.saveTitle'), body: t('personalResume.tour.saveBody') },
+  ], [t]);
 
   const loadBaseResume = async () => {
     setLoading(true);
@@ -201,6 +220,13 @@ export function PersonalResume({
         <div className="flex items-center gap-2">
           {dirty && <span className="text-xs text-amber-300">{t('personalResume.unsaved')}</span>}
           <button
+            onClick={() => setGuideStep(0)}
+            className="inline-flex items-center gap-1.5 rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900"
+          >
+            <CircleHelp size={14} />
+            {t('personalResume.help')}
+          </button>
+          <button
             onClick={refreshCurrent}
             disabled={loading || saving}
             className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
@@ -209,6 +235,7 @@ export function PersonalResume({
             {t('personalResume.refresh')}
           </button>
           <button
+            data-guide-target="personal-resume-save"
             onClick={() => void saveCurrent()}
             disabled={!dirty || loading || saving}
             className="inline-flex items-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
@@ -311,6 +338,7 @@ export function PersonalResume({
                   className="hidden"
                 />
                 <button
+                  data-guide-target="personal-resume-import"
                   onClick={() => importInputRef.current?.click()}
                   disabled={loading}
                   className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
@@ -350,7 +378,7 @@ export function PersonalResume({
             </div>
           )}
 
-          <div className="min-h-0 flex-1 p-4">
+          <div data-guide-target="personal-resume-editor" className="min-h-0 flex-1 p-4">
             {loading ? (
               <div className="flex h-full items-center justify-center gap-2 text-sm text-zinc-500">
                 <Loader2 size={16} className="animate-spin" />
@@ -370,6 +398,19 @@ export function PersonalResume({
           </div>
         </section>
       </div>
+      {guideStep !== null && (
+        <GuidedTour
+          steps={guideSteps}
+          activeStep={guideStep}
+          onStepChange={setGuideStep}
+          onClose={() => setGuideStep(null)}
+          nextLabel={t('personalResume.tour.next')}
+          previousLabel={t('personalResume.tour.previous')}
+          finishLabel={t('personalResume.tour.finish')}
+          skipLabel={t('personalResume.tour.skip')}
+          progressLabel={(current, total) => t('personalResume.tour.progress', { current, total })}
+        />
+      )}
     </div>
   );
 }
