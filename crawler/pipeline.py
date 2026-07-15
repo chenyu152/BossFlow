@@ -57,13 +57,39 @@ def classify(text: str, cat_rules: dict = None) -> tuple:
     cats = []
     matched_kw = []
     text_lower = text.lower()
-    rules = cat_rules or DEFAULT_CAT_RULES
+    # An explicitly empty object means the direction has no category rules.
+    # Do not silently substitute the legacy global AI rules in that case.
+    rules = DEFAULT_CAT_RULES if cat_rules is None else cat_rules
     for cat_name, keywords in rules.items():
         hits = [k for k in keywords if k.lower() in text_lower]
         if hits:
             cats.append(cat_name)
             matched_kw.extend(hits)
     return cats, list(set(matched_kw))
+
+
+def matching_rules_are_enabled(
+    cat_rules: dict | None = None,
+    relevance_keywords: list | None = None,
+    blacklist_keywords: list | None = None,
+    min_salary: float | None = None,
+) -> bool:
+    """Return whether configured ingestion rules should filter jobs.
+
+    New directions intentionally have no matching rules.  Until rules are
+    saved, results returned for the user's collection keywords must be kept
+    instead of falling back to the historical AI-only defaults.
+    """
+    if cat_rules or relevance_keywords or blacklist_keywords:
+        return True
+    if min_salary is None:
+        return False
+    try:
+        # Old empty directions stored the former 17K default.  Treat that
+        # combination as unconfigured for backwards-compatible safety.
+        return float(min_salary) != MIN_AVG_SALARY_K
+    except (TypeError, ValueError):
+        return False
 
 
 def salary_tier(avg: float) -> str:
@@ -104,7 +130,13 @@ def dedup_key(job: dict) -> str:
     return hashlib.md5(raw.encode()).hexdigest()
 
 
-def process_one(raw: dict, cat_rules: dict = None, min_salary: float = None, relevance_keywords: list = None, blacklist_keywords: list = None) -> dict:
+def process_one(
+    raw: dict,
+    cat_rules: dict = None,
+    min_salary: float = None,
+    relevance_keywords: list = None,
+    blacklist_keywords: list = None,
+) -> dict:
     """
     清洗单条原始岗位数据。
     返回标准化 dict，不满足条件返回 None。
@@ -120,24 +152,34 @@ def process_one(raw: dict, cat_rules: dict = None, min_salary: float = None, rel
     if not title or not company:
         return None
 
-    # 黑名单过滤 (Blacklist keywords check in title)
-    if blacklist_keywords:
+    matching_enabled = matching_rules_are_enabled(
+        cat_rules,
+        relevance_keywords,
+        blacklist_keywords,
+        min_salary,
+    )
+
+    # Blacklist, relevance and salary are all admission rules.  When a new
+    # direction has not configured them yet, retain search results as-is.
+    if matching_enabled and blacklist_keywords:
         if any(w.lower() in title.lower() for w in blacklist_keywords):
             return None
 
     text = f'{company} {title} {desc}'
-    cats, kw = classify(text, cat_rules)
+    cats, kw = classify(text, cat_rules) if matching_enabled else ([], [])
 
     # 核心相关性过滤（若匹配到分类则直接保留；未匹配分类则标题中必须含有相关匹配词才予保留）
-    rel_kws = relevance_keywords if relevance_keywords is not None else ['AI', 'ai', 'AIGC', '大模型', '智能', '算法']
-    related = any(w.lower() in title.lower() for w in rel_kws) if rel_kws else False
-    if not cats and not related:
-        return None
+    if matching_enabled and (cat_rules or relevance_keywords):
+        rel_kws = relevance_keywords or []
+        related = any(w.lower() in title.lower() for w in rel_kws)
+        if not cats and not related:
+            return None
 
     avg = parse_salary(salary)
-    min_avg = min_salary if min_salary is not None else MIN_AVG_SALARY_K
-    if avg < min_avg:
-        return None
+    if matching_enabled:
+        min_avg = min_salary if min_salary is not None else MIN_AVG_SALARY_K
+        if avg < min_avg:
+            return None
     tier = salary_tier(avg)
 
     url = str(raw.get('url') or '').strip()
@@ -164,7 +206,13 @@ def process_one(raw: dict, cat_rules: dict = None, min_salary: float = None, rel
     return result
 
 
-def process_batch(raw_list: list, cat_rules: dict = None, min_salary: float = None, relevance_keywords: list = None, blacklist_keywords: list = None) -> list:
+def process_batch(
+    raw_list: list,
+    cat_rules: dict = None,
+    min_salary: float = None,
+    relevance_keywords: list = None,
+    blacklist_keywords: list = None,
+) -> list:
     """批量清洗，自动去重"""
     results = []
     seen = set()

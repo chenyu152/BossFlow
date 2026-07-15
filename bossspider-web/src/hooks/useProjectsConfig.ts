@@ -19,6 +19,7 @@ export function useProjectsConfig({
   const [loading, setLoading] = useState(true);
   const [isConfigDirty, setIsConfigDirty] = useState(false);
   const projectRef = useRef(project);
+  const savedConfigRef = useRef<ConfigPayload | null>(null);
   const loadEpochRef = useRef(0);
   const tRef = useRef(t);
 
@@ -37,6 +38,7 @@ export function useProjectsConfig({
       const data = await bossApi.getConfig(targetProject ?? projectRef.current);
       if (loadEpoch !== loadEpochRef.current) return;
       setConfig(data);
+      savedConfigRef.current = data;
       setIsConfigDirty(false);
       setProject(data.project);
       projectRef.current = data.project;
@@ -76,6 +78,14 @@ export function useProjectsConfig({
     setIsConfigDirty(true);
   }, []);
 
+  // Navigation can explicitly discard edits. Keep a local saved snapshot so a
+  // confirmed leave immediately restores the page state instead of repeatedly
+  // warning about the same abandoned edits.
+  const discardConfigChanges = useCallback(() => {
+    if (savedConfigRef.current) setConfig(savedConfigRef.current);
+    setIsConfigDirty(false);
+  }, []);
+
   const requestBody = useCallback((patch?: ConfigPatch) => {
     if (!config) throw new Error(t('notices.configNotLoaded'));
     const nextConfig = patch ? { ...config, ...patch } : config;
@@ -99,6 +109,7 @@ export function useProjectsConfig({
     try {
       const saved = await bossApi.saveConfig(requestBody(patch));
       setConfig(saved);
+      savedConfigRef.current = saved;
       setIsConfigDirty(false);
       showNotice(t('notices.configSaved'));
       return saved;
@@ -123,6 +134,7 @@ export function useProjectsConfig({
     isConfigDirty,
     loadConfig,
     updateConfig,
+    discardConfigChanges,
     requestBody,
     saveConfig,
     createProject,

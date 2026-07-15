@@ -139,25 +139,33 @@ export default function App() {
     !hasUnsavedChanges || window.confirm(t('notices.unsavedChangesLeaveConfirm'))
   ), [hasUnsavedChanges, t]);
 
+  const confirmDiscardUnsavedConfig = useCallback(() => {
+    if (!confirmUnsavedConfig()) return false;
+    // This path is used for navigation only.  Restore the last saved values so
+    // an abandoned draft neither triggers another warning nor gets saved later.
+    if (boss.isConfigDirty) boss.discardConfigChanges();
+    return true;
+  }, [boss.discardConfigChanges, boss.isConfigDirty, confirmUnsavedConfig]);
+
   useEffect(() => {
     const openSettings = () => {
-      if (!confirmUnsavedConfig()) return;
+      if (!confirmDiscardUnsavedConfig()) return;
       setActiveTab('Settings');
     };
     window.addEventListener('bossflow:llm-settings-required', openSettings);
     return () => window.removeEventListener('bossflow:llm-settings-required', openSettings);
-  }, [confirmUnsavedConfig]);
+  }, [confirmDiscardUnsavedConfig]);
 
   const navigateToTab = useCallback((tab: Tab) => {
-    if (tab === activeTab || confirmUnsavedConfig()) setActiveTab(tab);
-  }, [activeTab, confirmUnsavedConfig]);
+    if (tab === activeTab || confirmDiscardUnsavedConfig()) setActiveTab(tab);
+  }, [activeTab, confirmDiscardUnsavedConfig]);
 
   const setActiveTabStable = useCallback((tab: Tab) => {
     navigateToTab(tab);
   }, [navigateToTab]);
 
   const openDashboardTask = useCallback((tab: Tab, target?: DashboardTaskTarget) => {
-    if (tab !== activeTab && !confirmUnsavedConfig()) return;
+    if (tab !== activeTab && !confirmDiscardUnsavedConfig()) return;
     setDashboardTargetRequestId((value) => value + 1);
     setSelectedJobId(tab === 'Jobs' ? target?.jobId ?? null : null);
     setSelectedPipelineKey(tab === 'Pipeline' ? target?.sourceKey ?? '' : '');
@@ -167,7 +175,7 @@ export default function App() {
     setSelectedStoryDraftId(tab === 'Story' ? target?.draftId ?? '' : '');
     if (tab === 'Interview' && target?.sourceKey) setSelectedInterviewKey(target.sourceKey);
     setActiveTab(tab);
-  }, [activeTab, confirmUnsavedConfig]);
+  }, [activeTab, confirmDiscardUnsavedConfig]);
 
   const toggleStage = (stage: NavStage) => {
     setExpandedStages((current) => ({ ...current, [stage]: !current[stage] }));
@@ -203,7 +211,7 @@ export default function App() {
   };
 
   const openCreateDirection = () => {
-    if (!confirmUnsavedConfig()) return;
+    if (!confirmDiscardUnsavedConfig()) return;
     setDirectionName('');
     setDirectionCreateError('');
     setCreateDirectionOpen(true);
@@ -307,7 +315,7 @@ export default function App() {
               <select
                 value={boss.project}
                 onChange={(event) => {
-                  if (confirmUnsavedConfig()) void boss.loadConfig(event.target.value);
+                  if (confirmDiscardUnsavedConfig()) void boss.loadConfig(event.target.value);
                 }}
                 disabled={boss.projects.length === 0}
                 className="bg-zinc-900 border border-zinc-800 text-sm rounded px-2 py-1 outline-none focus:border-indigo-500"
@@ -451,7 +459,7 @@ export default function App() {
                   updateConfig={boss.updateConfig}
                   onSave={boss.saveConfig}
                   onReload={() => {
-                    if (boss.config && confirmUnsavedConfig()) void boss.loadConfig(boss.config.project);
+                    if (boss.config && confirmDiscardUnsavedConfig()) void boss.loadConfig(boss.config.project);
                   }}
                   onLogin={startLogin}
                   onProcessPartial={processPartial}

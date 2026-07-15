@@ -447,6 +447,16 @@ class BossCrawler:
             relevance_keywords = None
             blacklist_keywords = None
 
+        from .pipeline import classify, matching_rules_are_enabled
+
+        if not matching_rules_are_enabled(
+            cat_rules=cat_rules,
+            relevance_keywords=relevance_keywords,
+            blacklist_keywords=blacklist_keywords,
+            min_salary=config.get('min_salary') if 'config' in locals() else None,
+        ):
+            return True
+
         # 优先黑名单过滤
         if blacklist_keywords:
             if any(w.lower() in job_name.lower() for w in blacklist_keywords):
@@ -454,13 +464,14 @@ class BossCrawler:
 
         if cat_rules or relevance_keywords:
             text = f'{job_name} {skills}'
-            from .pipeline import classify
             cats, _ = classify(text, cat_rules)
             rel_kws = relevance_keywords if relevance_keywords is not None else ['AI', 'ai', 'AIGC', '大模型', '智能', '算法']
             related = any(w.lower() in job_name.lower() for w in rel_kws) if rel_kws else False
             return bool(cats or related)
 
-        return is_relevant(job_name, skills)
+        # A configured salary or blacklist alone is applied during the batch
+        # ingestion step. It must not activate the legacy AI-only crawl filter.
+        return True
 
     def _add_jobs(self, api_jobs):
         """添加岗位（带强相关过滤和去重）"""
