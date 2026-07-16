@@ -124,6 +124,7 @@
 :root:not(.dark) .app-shell .text-cyan-100,
 :root:not(.dark) .app-shell .text-cyan-200,
 :root:not(.dark) .app-shell .text-cyan-300 { color: var(--status-info) !important; }
+:root:not(.dark) .app-shell .text-cyan-100\/75 { color: var(--text-secondary) !important; }
 :root:not(.dark) .app-shell .text-emerald-100,
 :root:not(.dark) .app-shell .text-emerald-200,
 :root:not(.dark) .app-shell .text-emerald-300,
