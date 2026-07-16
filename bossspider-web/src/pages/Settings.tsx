@@ -2,6 +2,7 @@ import { Eye, EyeOff, KeyRound, PlugZap, Save, Settings2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { bossApi } from '../api';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
+import { ThemeOptions } from '../components/ThemePicker';
 import { useAppTranslation } from '../i18n';
 import type { LlmSettingsStatus } from '../types';
 
@@ -115,7 +116,7 @@ export function Settings({
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="settings-page mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-xl font-semibold text-zinc-100"><Settings2 size={20} />{t('settings.title')}</h1>
         <p className="mt-2 text-sm leading-6 text-zinc-500">{t('settings.subtitle')}</p>
@@ -126,7 +127,7 @@ export function Settings({
           <p className="mt-2 text-sm leading-6 text-zinc-500">{t('settings.llm.description')}</p>
         </div>
         <div className="space-y-5 p-5">
-          <div className={`rounded border px-3 py-2 text-sm ${settings?.configured ? 'border-emerald-900/60 bg-emerald-950/20 text-emerald-200' : 'border-amber-900/60 bg-amber-950/20 text-amber-200'}`}>
+          <div className={`settings-status rounded border px-3 py-2 text-sm ${settings?.configured ? 'settings-status--success border-emerald-900/60 bg-emerald-950/20 text-emerald-200' : 'settings-status--pending border-amber-900/60 bg-amber-950/20 text-amber-200'}`}>
             {settings?.configured ? t('settings.llm.configured') : t('settings.llm.notConfigured')}
           </div>
           <label className="block">
@@ -155,6 +156,13 @@ export function Settings({
             <button onClick={() => void save()} disabled={saving} className="inline-flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"><Save size={15} />{saving ? t('settings.saving') : t('settings.save')}</button>
           </div>
         </div>
+      </section>
+      <section className="rounded-lg border border-zinc-800 bg-zinc-950">
+        <div className="border-b border-zinc-800 p-5">
+          <h2 className="text-base font-semibold text-zinc-100">{t('theme.appearance')}</h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">{t('theme.appearanceDescription')}</p>
+        </div>
+        <div className="p-4 sm:p-5"><ThemeOptions /></div>
       </section>
       {setupGuideOpen && (
         <GuidedTour

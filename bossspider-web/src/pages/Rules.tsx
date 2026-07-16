@@ -411,7 +411,7 @@ export function Rules({
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="rules-page flex h-full flex-col">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold text-zinc-100">{t(mode === 'matching' ? 'rules.matchingTitle' : 'rules.scoringTitle')}</h1>

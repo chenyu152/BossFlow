@@ -8,9 +8,13 @@ import {
   FileCheck2,
   FileText,
   Inbox,
+  Layers3,
   ListChecks,
+  MessageSquareText,
+  Search,
   Sparkles,
   Terminal,
+  UserRound,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
@@ -59,29 +63,29 @@ const cvMissingLabels: Record<string, string> = {
 
 const toneClasses: Record<TaskTone, { border: string; icon: string; pill: string }> = {
   amber: {
-    border: 'border-amber-900/60 bg-amber-950/20',
-    icon: 'text-amber-300',
-    pill: 'border-amber-900/70 bg-amber-950/40 text-amber-300',
+    border: 'dashboard-task dashboard-task--pending border-amber-900/60 bg-amber-950/20',
+    icon: 'dashboard-task__icon text-amber-300',
+    pill: 'dashboard-task__pill border-amber-900/70 bg-amber-950/40 text-amber-300',
   },
   emerald: {
-    border: 'border-emerald-900/60 bg-emerald-950/20',
-    icon: 'text-emerald-300',
-    pill: 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300',
+    border: 'dashboard-task dashboard-task--success border-emerald-900/60 bg-emerald-950/20',
+    icon: 'dashboard-task__icon text-emerald-300',
+    pill: 'dashboard-task__pill border-emerald-900/70 bg-emerald-950/40 text-emerald-300',
   },
   indigo: {
-    border: 'border-indigo-900/60 bg-indigo-950/20',
-    icon: 'text-indigo-300',
-    pill: 'border-indigo-900/70 bg-indigo-950/40 text-indigo-300',
+    border: 'dashboard-task dashboard-task--info border-indigo-900/60 bg-indigo-950/20',
+    icon: 'dashboard-task__icon text-indigo-300',
+    pill: 'dashboard-task__pill border-indigo-900/70 bg-indigo-950/40 text-indigo-300',
   },
   cyan: {
-    border: 'border-cyan-900/60 bg-cyan-950/20',
-    icon: 'text-cyan-300',
-    pill: 'border-cyan-900/70 bg-cyan-950/40 text-cyan-300',
+    border: 'dashboard-task dashboard-task--info border-cyan-900/60 bg-cyan-950/20',
+    icon: 'dashboard-task__icon text-cyan-300',
+    pill: 'dashboard-task__pill border-cyan-900/70 bg-cyan-950/40 text-cyan-300',
   },
   zinc: {
-    border: 'border-zinc-800 bg-zinc-900/40',
-    icon: 'text-zinc-400',
-    pill: 'border-zinc-800 bg-zinc-900 text-zinc-400',
+    border: 'dashboard-task dashboard-task--neutral border-zinc-800 bg-zinc-900/40',
+    icon: 'dashboard-task__icon text-zinc-400',
+    pill: 'dashboard-task__pill border-zinc-800 bg-zinc-900 text-zinc-400',
   },
 };
 
@@ -167,6 +171,32 @@ function TaskSection({
   );
 }
 
+function LauncherTile({
+  icon,
+  title,
+  detail,
+  count,
+  onClick,
+}: {
+  icon: ReactNode;
+  title: string;
+  detail: string;
+  count?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} className="dashboard-launcher-tile">
+      <span className="dashboard-launcher-tile__icon">{icon}</span>
+      <span className="dashboard-launcher-tile__copy">
+        <span className="dashboard-launcher-tile__title">{title}</span>
+        <span className="dashboard-launcher-tile__detail">{detail}</span>
+      </span>
+      {typeof count === 'number' && <span className="dashboard-launcher-tile__count">{count}</span>}
+      <ArrowRight size={13} className="dashboard-launcher-tile__arrow" aria-hidden="true" />
+    </button>
+  );
+}
+
 export function Dashboard({
   config,
   jobs,
@@ -186,7 +216,8 @@ export function Dashboard({
   recentLogs: ParsedLog[];
   onLoadStoryDrafts: () => Promise<InterviewStoryDraftsResponse | null>;
 }) {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
+  const isZh = (i18n.resolvedLanguage || i18n.language).startsWith('zh');
   const pending = pipeline?.pending || [];
   const processed = pipeline?.processed || [];
   const allPipelineItems = useMemo(() => [...pending, ...processed], [pending, processed]);
@@ -442,55 +473,88 @@ export function Dashboard({
   const jobsToShow = todayJobs.length ? todayJobs : recentJobs;
   const jobSectionTitle = todayJobs.length ? t('dashboardTasks.todayJobs') : t('dashboardTasks.recentJobs');
   const jobSectionSubtitle = todayJobs.length ? t('dashboardTasks.todayJobsSubtitle') : t('dashboardTasks.recentJobsSubtitle');
+  const focusTask: DashboardTask | null = focusItems[0] ? {
+    id: `focus:${focusItems[0].sourceKey}`,
+    title: `${focusItems[0].company} · ${focusItems[0].title}`,
+    detail: focusItems[0].llmRecommendation || `${focusItems[0].city || '-'} · ${focusItems[0].salary || '-'}`,
+    meta: `${t('dashboardTasks.score')} ${itemScore(focusItems[0]).toFixed(1)}`,
+    tone: 'emerald',
+    tab: 'Pipeline',
+    action: t('dashboardTasks.openCandidate'),
+    target: { sourceKey: focusItems[0].sourceKey },
+  } : null;
+  const recentJobTask: DashboardTask | null = jobsToShow[0] ? {
+    id: `job:${jobsToShow[0].id}`,
+    title: `${jobsToShow[0].company} · ${jobsToShow[0].title}`,
+    detail: `${jobsToShow[0].city || '-'} · ${jobsToShow[0].salary || '-'} · ${jobsToShow[0].fitLevel || t('dashboardTasks.notScored')}`,
+    meta: jobsToShow[0].lastSeen || t('dashboardTasks.noTime'),
+    tone: 'zinc',
+    tab: 'Jobs',
+    action: t('dashboardTasks.openJobs'),
+    target: { jobId: jobsToShow[0].id },
+  } : null;
+  const primaryTask: DashboardTask | null = evidenceTasks[0] || waitingItems[0] || materialTasks[0] || focusTask || recentJobTask;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="dashboard-page dashboard-home space-y-5">
+      <div className="dashboard-home__heading">
         <div>
-          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-indigo-300">
-            <ListChecks size={14} />
-            {t('dashboardTasks.eyebrow')}
-          </div>
-          <h2 className="mt-2 text-2xl font-semibold text-zinc-100">{t('dashboardTasks.title')}</h2>
-          <p className="mt-1 text-sm text-zinc-500">{t('dashboardTasks.subtitle')}</p>
+          <div className="dashboard-home__eyebrow"><ListChecks size={14} />{t('dashboardTasks.eyebrow')}</div>
+          <h2>{t('dashboardTasks.title')}</h2>
+          <p>{t('dashboardTasks.subtitle')}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setActiveTab('Jobs')} className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-900 transition-colors">
-            <Briefcase size={14} />
-            {t('dashboard.openJobs')}
-          </button>
-          <button onClick={() => setActiveTab('Pipeline')} className="inline-flex items-center gap-2 rounded border border-indigo-900/70 bg-indigo-950/30 px-3 py-1.5 text-sm font-medium text-indigo-200 hover:bg-indigo-900/30 transition-colors">
-            <Inbox size={14} />
-            {t('dashboard.openPipeline')}
-          </button>
+        <div className="dashboard-home__summary" aria-label={isZh ? '今日摘要' : 'Today summary'}>
+          <span><strong>{todayCount}</strong>{isZh ? ' 新岗位' : ' new jobs'}</span>
+          <span><strong>{highValueCount}</strong>{isZh ? ' 高价值' : ' high value'}</span>
+          <span><strong>{evidenceTaskCount + waitingCount}</strong>{isZh ? ' 待处理' : ' to handle'}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">{t('dashboardTasks.todayNew')}</div>
-          <div className="mt-2 text-2xl font-semibold text-zinc-100">{todayCount}</div>
-        </div>
-        <div className="rounded border border-emerald-900/50 bg-emerald-950/20 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-emerald-500">{t('dashboardTasks.focusCount')}</div>
-          <div className="mt-2 text-2xl font-semibold text-emerald-200">{highValueCount}</div>
-        </div>
-        <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-amber-500">{t('dashboardTasks.waitingCount')}</div>
-          <div className="mt-2 text-2xl font-semibold text-amber-200">{waitingCount}</div>
-        </div>
-        <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-indigo-500">{t('dashboardTasks.materialCount')}</div>
-          <div className="mt-2 text-2xl font-semibold text-indigo-200">{materialCount}</div>
-        </div>
-        <div className="rounded border border-cyan-900/50 bg-cyan-950/20 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-cyan-500">{t('dashboardTasks.storyGapCount')}</div>
-          <div className="mt-2 text-2xl font-semibold text-cyan-200">{storyDraftsLoading ? '...' : storyGapCount}</div>
-        </div>
-        <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-amber-500">{t('dashboardTasks.evidenceTaskCount')}</div>
-          <div className="mt-2 text-2xl font-semibold text-amber-200">{evidenceTaskCount}</div>
-        </div>
+      <div className="dashboard-launch-grid">
+        <section className="dashboard-command-card">
+          <div className="dashboard-command-card__glow" aria-hidden="true" />
+          <div className="dashboard-command-card__header">
+            <span>{isZh ? '下一步' : 'Next action'}</span>
+            <span>{isZh ? '由价值与阻塞程度排序' : 'Ranked by value and blockers'}</span>
+          </div>
+          {primaryTask ? (
+            <div className="dashboard-command-card__body">
+              <div className="dashboard-command-card__mark"><Sparkles size={20} /></div>
+              <div className="min-w-0">
+                <h3>{primaryTask.title}</h3>
+                <p>{primaryTask.detail}</p>
+                <span className="dashboard-command-card__meta">{primaryTask.meta}</span>
+              </div>
+              <button type="button" onClick={() => onOpenTask(primaryTask.tab, primaryTask.target)}>
+                {primaryTask.action}<ArrowRight size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="dashboard-command-card__empty">
+              <CheckCircle2 size={20} />
+              <div><strong>{isZh ? '当前队列已清空' : 'Queue is clear'}</strong><span>{isZh ? '可以浏览新岗位或开始一次采集。' : 'Browse jobs or start a new crawl.'}</span></div>
+            </div>
+          )}
+          <div className="dashboard-command-card__metrics">
+            <span><i className="dashboard-dot dashboard-dot--green" />{pending.length} {isZh ? '候选中' : 'candidates'}</span>
+            <span><i className="dashboard-dot dashboard-dot--amber" />{waitingCount} {isZh ? '待确认' : 'pending review'}</span>
+            <span><i className="dashboard-dot dashboard-dot--blue" />{materialCount} {isZh ? '材料任务' : 'material tasks'}</span>
+          </div>
+        </section>
+
+        <section className="dashboard-launcher-panel">
+          <div className="dashboard-launcher-panel__header">
+            <div><strong>{isZh ? '工作区' : 'Workspace'}</strong><span>{isZh ? '直接进入高频任务' : 'Jump into frequent tasks'}</span></div>
+          </div>
+          <div className="dashboard-launcher-panel__grid">
+            <LauncherTile icon={<Search size={17} />} title={t('nav.jobs')} detail={isZh ? '筛选与评估新机会' : 'Filter and assess opportunities'} count={todayCount} onClick={() => setActiveTab('Jobs')} />
+            <LauncherTile icon={<Inbox size={17} />} title={t('nav.pipeline')} detail={isZh ? '推进候选与证据' : 'Advance candidates and evidence'} count={pending.length} onClick={() => setActiveTab('Pipeline')} />
+            <LauncherTile icon={<ListChecks size={17} />} title={isZh ? '证据任务' : 'Evidence tasks'} detail={isZh ? '处理能力缺口与确认' : 'Resolve gaps and confirmations'} count={evidenceTaskCount} onClick={() => primaryTask?.tab === 'Pipeline' ? onOpenTask(primaryTask.tab, primaryTask.target) : setActiveTab('Pipeline')} />
+            <LauncherTile icon={<UserRound size={17} />} title={t('nav.personalResume')} detail={isZh ? '维护可信基础档案' : 'Maintain your verified profile'} onClick={() => setActiveTab('PersonalResume')} />
+            <LauncherTile icon={<Layers3 size={17} />} title={t('nav.resume')} detail={isZh ? '查看岗位定制材料' : 'Review tailored materials'} count={materialCount} onClick={() => setActiveTab('Resume')} />
+            <LauncherTile icon={<MessageSquareText size={17} />} title={t('nav.interview')} detail={isZh ? '准备面试与故事' : 'Prepare interviews and stories'} count={storyGapCount} onClick={() => setActiveTab('Interview')} />
+          </div>
+        </section>
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">

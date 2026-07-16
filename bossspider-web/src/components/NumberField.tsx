@@ -1,6 +1,6 @@
 export function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
   return (
-    <div className="grid grid-cols-2 gap-4 items-center">
+    <div className="number-field grid grid-cols-2 gap-4 items-center">
       <label className="text-sm text-zinc-400">{label}</label>
       <input
         type="number"

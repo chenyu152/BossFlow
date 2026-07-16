@@ -35,6 +35,10 @@ export type ConfigPayload = {
   dbFilePath: string;
 };
 
+export type ProjectTemplateSeed = Pick<ConfigPayload, 'keywordsText' | 'citiesText' | 'catRulesText' | 'relevanceText' | 'blacklistText'> & {
+  scoringKeywords: string[];
+};
+
 export type Job = {
   id: number;
   title: string;

@@ -233,7 +233,7 @@ export function Interview({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="interview-page flex h-full min-h-0 flex-col">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-zinc-100">{t('interview.title')}</h2>

@@ -1,8 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bossApi } from '../api';
-import type { ConfigPatch, ConfigPayload } from '../types';
+import type { ConfigPatch, ConfigPayload, ProjectTemplateSeed } from '../types';
 
 const ACTIVE_DIRECTION_STORAGE_KEY = 'bossflow.active-direction';
+
+function toRequestBody(config: ConfigPayload) {
+  return {
+    project: config.project,
+    keywordsText: config.keywordsText,
+    citiesText: config.citiesText,
+    scrollTarget: config.scrollTarget,
+    scrollMax: config.scrollMax,
+    minSalary: config.minSalary,
+    headlessMode: config.headlessMode,
+    autoSqlite: config.autoSqlite,
+    catRulesText: config.catRulesText,
+    scoringRulesText: config.scoringRulesText,
+    relevanceText: config.relevanceText,
+    blacklistText: config.blacklistText,
+  };
+}
 
 export function useProjectsConfig({
   loadInitialResources,
@@ -89,20 +106,7 @@ export function useProjectsConfig({
   const requestBody = useCallback((patch?: ConfigPatch) => {
     if (!config) throw new Error(t('notices.configNotLoaded'));
     const nextConfig = patch ? { ...config, ...patch } : config;
-    return {
-      project: nextConfig.project,
-      keywordsText: nextConfig.keywordsText,
-      citiesText: nextConfig.citiesText,
-      scrollTarget: nextConfig.scrollTarget,
-      scrollMax: nextConfig.scrollMax,
-      minSalary: nextConfig.minSalary,
-      headlessMode: nextConfig.headlessMode,
-      autoSqlite: nextConfig.autoSqlite,
-      catRulesText: nextConfig.catRulesText,
-      scoringRulesText: nextConfig.scoringRulesText,
-      relevanceText: nextConfig.relevanceText,
-      blacklistText: nextConfig.blacklistText,
-    };
+    return toRequestBody(nextConfig);
   }, [config, t]);
 
   const saveConfig = useCallback(async (patch?: ConfigPatch) => {
@@ -119,9 +123,24 @@ export function useProjectsConfig({
     }
   }, [requestBody, showNotice, t]);
 
-  const createProject = useCallback(async (name: string) => {
+  const createProject = useCallback(async (name: string, seed?: ProjectTemplateSeed) => {
     const created = await bossApi.createProject(name);
     setProjects((current) => Array.from(new Set([...current, created.project])).sort());
+    if (seed) {
+      const base = await bossApi.getConfig(created.project);
+      let scoringRules: Record<string, unknown> = {};
+      try {
+        scoringRules = JSON.parse(base.scoringRulesText || '{}') as Record<string, unknown>;
+      } catch {
+        scoringRules = {};
+      }
+      const initialized: ConfigPayload = {
+        ...base,
+        ...seed,
+        scoringRulesText: JSON.stringify({ ...scoringRules, keywordHints: seed.scoringKeywords }, null, 2),
+      };
+      await bossApi.saveConfig(toRequestBody(initialized));
+    }
     await loadConfig(created.project);
     return created;
   }, [loadConfig]);

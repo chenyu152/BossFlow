@@ -94,47 +94,40 @@ type JobWorkspaceProps = {
   layout?: 'drawer' | 'embedded';
 };
 
-const MATERIAL_TONES = {
-  llm: 'border-emerald-900/60 bg-emerald-950/40 text-emerald-300',
-  resume: 'border-indigo-900/60 bg-indigo-950/40 text-indigo-300',
-  interview: 'border-cyan-900/60 bg-cyan-950/40 text-cyan-300',
-  missing: 'border-zinc-800 bg-zinc-900/50 text-zinc-500',
-};
-
 const STATUS_CLASSES: Record<DecisionStatus, { active: string; idle: string }> = {
   needs_llm: {
-    active: 'border-sky-700 bg-sky-950/50 text-sky-200',
-    idle: 'border-sky-950/70 text-sky-400 hover:bg-sky-950/30',
+    active: 'workspace-status-control workspace-status-control--info is-active',
+    idle: 'workspace-status-control workspace-status-control--info',
   },
   needs_review: {
-    active: 'border-amber-700 bg-amber-950/50 text-amber-200',
-    idle: 'border-amber-950/70 text-amber-400 hover:bg-amber-950/30',
+    active: 'workspace-status-control workspace-status-control--pending is-active',
+    idle: 'workspace-status-control workspace-status-control--pending',
   },
   ready_to_greet: {
-    active: 'border-emerald-700 bg-emerald-950/50 text-emerald-200',
-    idle: 'border-emerald-950/70 text-emerald-400 hover:bg-emerald-950/30',
+    active: 'workspace-status-control workspace-status-control--success is-active',
+    idle: 'workspace-status-control workspace-status-control--success',
   },
   greeted: {
-    active: 'border-blue-700 bg-blue-950/50 text-blue-200',
-    idle: 'border-blue-950/70 text-blue-400 hover:bg-blue-950/30',
+    active: 'workspace-status-control workspace-status-control--info is-active',
+    idle: 'workspace-status-control workspace-status-control--info',
   },
   interviewing: {
-    active: 'border-violet-700 bg-violet-950/50 text-violet-200',
-    idle: 'border-violet-950/70 text-violet-400 hover:bg-violet-950/30',
+    active: 'workspace-status-control workspace-status-control--info is-active',
+    idle: 'workspace-status-control workspace-status-control--info',
   },
   skipped: {
-    active: 'border-red-700 bg-red-950/50 text-red-200',
-    idle: 'border-red-950/70 text-red-400 hover:bg-red-950/30',
+    active: 'workspace-status-control workspace-status-control--risk is-active',
+    idle: 'workspace-status-control workspace-status-control--risk',
   },
   archived: {
-    active: 'border-zinc-700 bg-zinc-900 text-zinc-200',
-    idle: 'border-zinc-800 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300',
+    active: 'workspace-status-control workspace-status-control--neutral is-active',
+    idle: 'workspace-status-control workspace-status-control--neutral',
   },
 };
 
 function statusButtonClass(status: DecisionStatus, active: boolean) {
   const classes = STATUS_CLASSES[status];
-  if (!classes) return active ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200';
+  if (!classes) return active ? 'workspace-status-control workspace-status-control--info is-active' : 'workspace-status-control workspace-status-control--neutral';
   return active ? classes.active : classes.idle;
 }
 
@@ -158,13 +151,9 @@ function MaterialPill({
   current?: boolean;
   onClick?: () => void;
 }) {
-  const className = `inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${
-    ready ? MATERIAL_TONES[tone] : MATERIAL_TONES.missing
-  } ${
-    current ? 'ring-1 ring-indigo-500/70 ring-offset-1 ring-offset-zinc-950' : ''
-  } ${
-    onClick ? 'cursor-pointer transition-colors hover:border-indigo-700 hover:bg-indigo-950/30 hover:text-indigo-200' : ''
-  }`;
+  const className = `workspace-material-pill workspace-material-pill--${tone} ${ready ? 'is-ready' : 'is-missing'} inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${
+    current ? 'is-current' : ''
+  } ${onClick ? 'cursor-pointer transition-colors' : ''}`;
   const content = (
     <>
       {ready ? <CheckCircle2 size={11} /> : <Circle size={11} />}
@@ -193,7 +182,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-3">
+    <section className="workspace-section space-y-3 rounded border p-3">
       <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</h4>
       {children}
     </section>
@@ -209,20 +198,13 @@ function ActionButton({
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  tone?: 'emerald' | 'indigo' | 'cyan' | 'zinc';
+  tone?: 'emerald' | 'indigo' | 'cyan' | 'zinc' | 'amber' | 'red';
 }) {
-  const classes = {
-    emerald: 'border-emerald-900/70 bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/40',
-    indigo: 'border-indigo-900/70 bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/40',
-    cyan: 'border-cyan-900/70 bg-cyan-950/40 text-cyan-200 hover:bg-cyan-900/40',
-    zinc: 'border-zinc-800 text-zinc-300 hover:bg-zinc-900',
-  }[tone];
-
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center gap-2 rounded border px-3 py-2 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${classes}`}
+      className={`workspace-action workspace-action--${tone} inline-flex items-center gap-2 rounded border px-3 py-2 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-60`}
     >
       {children}
     </button>
@@ -614,7 +596,7 @@ export function JobWorkspace({
   };
 
   return (
-    <div className={`${layout === 'embedded' ? 'min-w-0 flex-1' : 'w-[42rem] shrink-0 border-l border-zinc-800'} flex flex-col bg-zinc-950`}>
+    <div className={`job-workspace ${layout === 'embedded' ? 'min-w-0 flex-1' : 'w-[42rem] shrink-0 border-l border-zinc-800'} flex flex-col bg-zinc-950`}>
       <div className="border-b border-zinc-800 px-4 py-4 xl:px-6">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -634,6 +616,7 @@ export function JobWorkspace({
             <button
               onClick={onDelete}
               title={t('pipeline.deleteItem')}
+              aria-label={t('pipeline.deleteItem')}
               className="rounded border border-red-900/70 bg-red-950/20 p-1.5 text-red-300 transition-colors hover:bg-red-950/40 hover:text-red-200"
             >
               <Trash2 size={16} />
@@ -641,6 +624,7 @@ export function JobWorkspace({
             <button
               onClick={onClose}
               title={t('pipeline.backToList')}
+              aria-label={t('pipeline.backToList')}
               className={`rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors ${layout === 'embedded' ? 'lg:hidden' : ''}`}
             >
               <X size={16} />
@@ -650,12 +634,14 @@ export function JobWorkspace({
       </div>
 
       <div className="border-b border-zinc-800 px-3 py-2">
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label={t('jobWorkspace.title')}>
           {tabs.map((tab) => (
             <button
               key={tab.value}
               onClick={() => setActiveTab(tab.value)}
-              className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              role="tab"
+              aria-selected={activeTab === tab.value}
+              className={`workspace-tab rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === tab.value
                   ? 'bg-indigo-600 text-white'
                   : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100'
@@ -746,22 +732,22 @@ export function JobWorkspace({
             </Section>
 
             <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+              <div className="workspace-metric flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
                 <div className="text-[11px] text-zinc-500">{t('jobWorkspace.materialProgress')}</div>
                 <div className="text-lg font-semibold text-zinc-100">{materialReadyCount}/4</div>
               </div>
-              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+              <div className="workspace-metric flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
                 <div className="min-w-0 text-[11px] text-zinc-500">
                   <div>{t('jobWorkspace.evidence.confirmedCoverage')}</div>
                   {potentialEvidenceCount > 0 && <div className="truncate text-[9px] text-amber-400" title={t('jobWorkspace.evidence.candidateHint', { count: potentialEvidenceCount })}>{t('jobWorkspace.evidence.candidateHint', { count: potentialEvidenceCount })}</div>}
                 </div>
                 <div className="shrink-0 text-lg font-semibold text-emerald-200">{requirementCount ? `${confirmedCoverageCount}/${requirementCount}` : '-'}</div>
               </div>
-              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+              <div className="workspace-metric flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
                 <div className="text-[11px] text-zinc-500">{t('jobWorkspace.evidence.pendingDecision')}</div>
                 <div className="text-lg font-semibold text-amber-200">{requirementCount ? pendingDecisionCount : '-'}</div>
               </div>
-              <div className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+              <div className="workspace-metric flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5">
                 <div className="text-[11px] text-zinc-500">{t('jobWorkspace.evidence.confirmedGaps')}</div>
                 <div className="text-lg font-semibold text-red-200">{requirementCount ? confirmedGapCount : '-'}</div>
               </div>

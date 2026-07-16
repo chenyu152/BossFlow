@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, RefreshCw, RotateCcw, Search, ShieldCheck, Square, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, MoreHorizontal, RefreshCw, RotateCcw, Search, ShieldCheck, Square, Wand2, X } from 'lucide-react';
 import { useAppTranslation } from '../i18n';
 import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
@@ -345,9 +345,9 @@ export function Jobs({
   };
 
   return (
-    <div className="h-full flex flex-col relative">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-3 min-w-0">
+    <div className="jobs-page h-full flex flex-col relative">
+      <div className="jobs-toolbar mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-2 text-zinc-500" size={14} />
             <input
@@ -367,6 +367,7 @@ export function Jobs({
           </span>
           <button
             onClick={() => setFiltersOpen((value) => !value)}
+            aria-pressed={filtersOpen}
             className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded transition-colors ${filtersOpen || hasActiveFilters ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
           >
             <Funnel size={14} />
@@ -382,68 +383,42 @@ export function Jobs({
             {t('jobs.scorePage')}
           </button>
           <button
-            onClick={() => onScoreJobs(allIds)}
-            disabled={!allIds.length || scoringAll}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
-          >
-            {scoringAll ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            {t('jobs.scoreAll')}
-          </button>
-          <button
-            onClick={() => onScoreJobs(selectedJobs.map((job) => job.id))}
-            disabled={!selectedJobs.length || scoringSelected}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
-          >
-            {scoringSelected ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            {t('jobs.scoreSelected')}
-          </button>
-          <button
-            onClick={() => onUpdateLiveStatus(selectedJobs.map((job) => job.id))}
-            disabled={!selectedJobs.length || taskRunning}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-cyan-900/70 text-cyan-200 hover:bg-cyan-950/40 disabled:opacity-40 rounded transition-colors"
-          >
-            <ShieldCheck size={14} />
-            {t('jobs.updateSelectedLiveStatus')}
-            {selectedJobs.length > 0 && <span className="text-cyan-100">({selectedJobs.length})</span>}
-          </button>
-          <button
-            onClick={updateAllLiveStatus}
-            disabled={taskRunning}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 disabled:opacity-40 rounded transition-colors"
-          >
-            <ShieldCheck size={14} />
-            {t('jobs.updateAllLiveStatus')}
-          </button>
-          <button
             onClick={() => setSortByScore((value) => !value)}
+            aria-pressed={sortByScore}
             className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded transition-colors ${sortByScore ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
           >
             <ArrowDownWideNarrow size={14} />
             {t('jobs.scoreSort')}
           </button>
-          <button
-            onClick={() => onAddToPipeline(selectedJobs)}
-            disabled={!selectedJobs.length}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white rounded transition-colors"
-          >
-            <ListPlus size={14} />
-            {t('jobs.addSelected')}
-            {selectedJobs.length > 0 && <span className="text-indigo-100">({selectedJobs.length})</span>}
-          </button>
-          {selectedJobs.length > 0 && (
-            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-              {t('jobs.clear')}
-            </button>
-          )}
         </div>
-        <button onClick={onExport} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-zinc-800 text-zinc-300 hover:bg-zinc-900 rounded transition-colors">
-          <Download size={14} />
-          {t('jobs.exportExcel')}
-        </button>
+        <details className="jobs-more-menu">
+          <summary className="jobs-more-menu__trigger"><MoreHorizontal size={15} /><span>{t('more', { defaultValue: '更多' })}</span></summary>
+          <div className="jobs-more-menu__panel">
+            <button onClick={() => onScoreJobs(allIds)} disabled={!allIds.length || scoringAll}>
+              {scoringAll ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}{t('jobs.scoreAll')}
+            </button>
+            <button onClick={updateAllLiveStatus} disabled={taskRunning}><ShieldCheck size={14} />{t('jobs.updateAllLiveStatus')}</button>
+            <button onClick={onExport}><Download size={14} />{t('jobs.exportExcel')}</button>
+          </div>
+        </details>
       </div>
 
+      {selectedJobs.length > 0 && (
+        <div className="jobs-selection-bar">
+          <div><CheckSquare size={15} /><strong>{selectedJobs.length}</strong><span>{t('jobs.selected')}</span></div>
+          <div className="jobs-selection-bar__actions">
+            <button onClick={() => onScoreJobs(selectedJobs.map((job) => job.id))} disabled={scoringSelected}>
+              {scoringSelected ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}{t('jobs.scoreSelected')}
+            </button>
+            <button onClick={() => onUpdateLiveStatus(selectedJobs.map((job) => job.id))} disabled={taskRunning}><ShieldCheck size={14} />{t('jobs.updateSelectedLiveStatus')}</button>
+            <button onClick={() => onAddToPipeline(selectedJobs)} className="jobs-selection-bar__primary"><ListPlus size={14} />{t('jobs.addSelected')}</button>
+            <button onClick={() => setSelectedIds(new Set())}>{t('jobs.clear')}</button>
+          </div>
+        </div>
+      )}
+
       {filtersOpen && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/20 p-2 text-xs">
+        <div className="jobs-filterbar mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/20 p-2 text-xs">
           <select
             value={cityFilter}
             onChange={(event) => setCityFilter(event.target.value)}
@@ -522,7 +497,7 @@ export function Jobs({
         </div>
       )}
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+      <div className="jobs-pagination mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
         <div>
           {t('jobs.showing')} {displayJobs.length ? pageStart + 1 : 0}-{pageEnd} / {displayJobs.length.toLocaleString()}
           {hasActiveFilters && <span className="ml-2 text-zinc-400">{t('jobs.filteredFrom')} {jobs.length.toLocaleString()}</span>}
@@ -557,7 +532,7 @@ export function Jobs({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex">
+      <div className="jobs-table-shell flex-1 min-h-0 border border-zinc-800 rounded-md bg-zinc-900/20 overflow-hidden flex">
         <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
           <table className="w-full table-fixed text-left text-xs select-none">
             <colgroup>
@@ -605,7 +580,7 @@ export function Jobs({
                   onMouseDown={(event) => beginRowDrag(event, index)}
                   onMouseEnter={() => updateRowDrag(index)}
                   onClick={() => openJobDetails(job)}
-                  className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${selectedJob?.id === job.id ? 'bg-zinc-800/60' : ''} ${isScoring ? 'bg-indigo-950/20' : ''} ${dragRange && index >= dragRange.start && index <= dragRange.end ? 'bg-indigo-950/30' : ''}`}
+                  className={`jobs-table-row cursor-pointer transition-colors ${selectedJob?.id === job.id ? 'jobs-table-row--selected bg-zinc-800/60' : ''} ${isScoring ? 'jobs-table-row--processing bg-indigo-950/20' : ''} ${dragRange && index >= dragRange.start && index <= dragRange.end ? 'jobs-table-row--range bg-indigo-950/30' : ''}`}
                 >
                   <td
                     onMouseDown={(event) => beginSelectionDrag(event, index)}
@@ -634,9 +609,9 @@ export function Jobs({
                       </span>
                     ) : job.score ? (
                       <div className="space-y-1">
-                        <span className="inline-flex items-center gap-1.5 rounded bg-zinc-800 px-2 py-1 text-zinc-200">
+                        <span className={`jobs-fit-badge ${job.score >= 4.3 ? 'jobs-fit-badge--high' : job.score >= 3.5 ? 'jobs-fit-badge--review' : 'jobs-fit-badge--weak'}`}>
                           {job.score.toFixed(1)}
-                          <span className="text-[10px] text-zinc-500">{job.fitLevel}</span>
+                          <span className="jobs-fit-badge__label">{job.fitLevel}</span>
                         </span>
                         <div className="text-[10px] text-zinc-500">
                           {t('pipeline.experience')} {riskText(job.experienceRisk)} / {t('pipeline.education')} {riskText(job.educationRisk)}
@@ -654,7 +629,7 @@ export function Jobs({
                     </span>
                   </td>
                   <td className="px-4 py-2 truncate">
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] uppercase tracking-wider" title={job.cats[0] || job.tier || '-'}>{job.cats[0] || job.tier || '-'}</span>
+                    <span className="jobs-category-badge" title={job.cats[0] || job.tier || '-'}>{job.cats[0] || job.tier || '-'}</span>
                   </td>
                 </tr>
                 );

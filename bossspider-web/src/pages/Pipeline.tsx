@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
+import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, PanelLeftClose, PanelLeftOpen, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -43,61 +43,55 @@ function getDecisionLabel(status: DecisionStatus, t: (key: string) => string): s
 
 const STATUS_CLASSES: Record<DecisionStatus, { badge: string; active: string; idle: string }> = {
   needs_llm: {
-    badge: 'border-sky-900/60 bg-sky-950/40 text-sky-300',
-    active: 'border-sky-700 bg-sky-950/50 text-sky-200',
-    idle: 'border-sky-950/70 text-sky-400 hover:bg-sky-950/30',
+    badge: 'pipeline-status pipeline-status--info',
+    active: 'pipeline-status-control pipeline-status-control--info is-active',
+    idle: 'pipeline-status-control pipeline-status-control--info',
   },
   needs_review: {
-    badge: 'border-amber-900/60 bg-amber-950/40 text-amber-300',
-    active: 'border-amber-700 bg-amber-950/50 text-amber-200',
-    idle: 'border-amber-950/70 text-amber-400 hover:bg-amber-950/30',
+    badge: 'pipeline-status pipeline-status--pending',
+    active: 'pipeline-status-control pipeline-status-control--pending is-active',
+    idle: 'pipeline-status-control pipeline-status-control--pending',
   },
   ready_to_greet: {
-    badge: 'border-emerald-900/60 bg-emerald-950/40 text-emerald-300',
-    active: 'border-emerald-700 bg-emerald-950/50 text-emerald-200',
-    idle: 'border-emerald-950/70 text-emerald-400 hover:bg-emerald-950/30',
+    badge: 'pipeline-status pipeline-status--success',
+    active: 'pipeline-status-control pipeline-status-control--success is-active',
+    idle: 'pipeline-status-control pipeline-status-control--success',
   },
   greeted: {
-    badge: 'border-blue-900/60 bg-blue-950/40 text-blue-300',
-    active: 'border-blue-700 bg-blue-950/50 text-blue-200',
-    idle: 'border-blue-950/70 text-blue-400 hover:bg-blue-950/30',
+    badge: 'pipeline-status pipeline-status--info',
+    active: 'pipeline-status-control pipeline-status-control--info is-active',
+    idle: 'pipeline-status-control pipeline-status-control--info',
   },
   interviewing: {
-    badge: 'border-violet-900/60 bg-violet-950/40 text-violet-300',
-    active: 'border-violet-700 bg-violet-950/50 text-violet-200',
-    idle: 'border-violet-950/70 text-violet-400 hover:bg-violet-950/30',
+    badge: 'pipeline-status pipeline-status--info',
+    active: 'pipeline-status-control pipeline-status-control--info is-active',
+    idle: 'pipeline-status-control pipeline-status-control--info',
   },
   skipped: {
-    badge: 'border-red-900/60 bg-red-950/40 text-red-300',
-    active: 'border-red-700 bg-red-950/50 text-red-200',
-    idle: 'border-red-950/70 text-red-400 hover:bg-red-950/30',
+    badge: 'pipeline-status pipeline-status--risk',
+    active: 'pipeline-status-control pipeline-status-control--risk is-active',
+    idle: 'pipeline-status-control pipeline-status-control--risk',
   },
   archived: {
-    badge: 'border-zinc-800 bg-zinc-900 text-zinc-400',
-    active: 'border-zinc-700 bg-zinc-900 text-zinc-200',
-    idle: 'border-zinc-800 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300',
+    badge: 'pipeline-status pipeline-status--neutral',
+    active: 'pipeline-status-control pipeline-status-control--neutral is-active',
+    idle: 'pipeline-status-control pipeline-status-control--neutral',
   },
 };
 
 function statusBadgeClass(status: DecisionStatus) {
-  return STATUS_CLASSES[status]?.badge || 'border-zinc-800 bg-zinc-900 text-zinc-300';
+  return STATUS_CLASSES[status]?.badge || 'pipeline-status pipeline-status--neutral';
 }
 
 function statusButtonClass(status: DecisionStatus, active: boolean) {
   const classes = STATUS_CLASSES[status];
-  if (!classes) return active ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200';
+  if (!classes) return active ? 'pipeline-status-control pipeline-status-control--info is-active' : 'pipeline-status-control pipeline-status-control--neutral';
   return active ? classes.active : classes.idle;
 }
 
 function MaterialBadge({ label, ready, tone = 'zinc' }: { label: string; ready: boolean; tone?: 'emerald' | 'indigo' | 'cyan' | 'zinc' }) {
-  const readyClass = {
-    emerald: 'border-emerald-900/60 bg-emerald-950/50 text-emerald-300',
-    indigo: 'border-indigo-900/60 bg-indigo-950/50 text-indigo-300',
-    cyan: 'border-cyan-900/60 bg-cyan-950/50 text-cyan-300',
-    zinc: 'border-zinc-700 bg-zinc-800/70 text-zinc-200',
-  }[tone];
   return (
-    <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${ready ? readyClass : 'border-zinc-800 bg-zinc-900/40 text-zinc-600'}`}>
+    <span className={`pipeline-material-badge pipeline-material-badge--${tone} ${ready ? 'is-ready' : 'is-missing'} inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium`}>
       {ready ? <CheckCircle2 size={10} /> : <Circle size={10} />}
       {label}
     </span>
@@ -176,10 +170,10 @@ function getEvidenceReadiness(
 
 function evidenceReadinessClass(status: EvidenceReadiness) {
   return {
-    ready: 'border-emerald-900/70 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-950/65',
-    needs_confirmation: 'border-amber-900/70 bg-amber-950/40 text-amber-300 hover:bg-amber-950/65',
-    hard_gap: 'border-red-900/70 bg-red-950/40 text-red-300 hover:bg-red-950/65',
-    unassessed: 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-900',
+    ready: 'evidence-readiness evidence-readiness--success',
+    needs_confirmation: 'evidence-readiness evidence-readiness--pending',
+    hard_gap: 'evidence-readiness evidence-readiness--risk',
+    unassessed: 'evidence-readiness evidence-readiness--neutral',
   }[status];
 }
 
@@ -286,6 +280,7 @@ export function Pipeline({
   const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all');
   const [evidenceFilter, setEvidenceFilter] = useState<'all' | EvidenceReadiness>('all');
   const [sortByEvidence, setSortByEvidence] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [evidenceFocus, setEvidenceFocus] = useState<{ sourceKey: string; requestId: number } | null>(null);
   const evaluatingSet = new Set(llmEvaluatingKeys);
   const suggestingSet = new Set(resumeSuggestingKeys);
@@ -442,7 +437,7 @@ export function Pipeline({
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="pipeline-page h-full flex flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-100">{t('pipeline.title')}</h2>
@@ -454,7 +449,7 @@ export function Pipeline({
           <button
             onClick={() => setSortByLlmScore((value) => !value)}
             disabled={!pending.length}
-            className={`inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByLlmScore ? 'border-emerald-800 bg-emerald-950/40 text-emerald-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
+            className={`pipeline-toolbar-button pipeline-toolbar-button--success inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByLlmScore ? 'is-active' : ''}`}
           >
             <ArrowDownWideNarrow size={14} />
             {t('pipeline.llmSort')}
@@ -462,12 +457,21 @@ export function Pipeline({
           <button
             onClick={() => setSortByEvidence((value) => !value)}
             disabled={!pending.length}
-            className={`inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByEvidence ? 'border-amber-800 bg-amber-950/40 text-amber-200' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'}`}
+            className={`pipeline-toolbar-button pipeline-toolbar-button--pending inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByEvidence ? 'is-active' : ''}`}
           >
             <ArrowDownWideNarrow size={14} />
             {t('pipeline.evidence.sort')}
           </button>
-          <button onClick={onRefresh} className="p-1.5 border border-zinc-800 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors">
+          <button
+            type="button"
+            onClick={() => setFocusMode((value) => !value)}
+            aria-pressed={focusMode}
+            className={`pipeline-toolbar-button pipeline-toolbar-button--info inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium transition-colors ${focusMode ? 'is-active' : ''}`}
+          >
+            {focusMode ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            {focusMode ? t('pipeline.exitFocusMode') : t('pipeline.focusMode')}
+          </button>
+          <button aria-label={t('pipeline.refresh')} title={t('pipeline.refresh')} onClick={onRefresh} className="pipeline-toolbar-button p-1.5 border rounded transition-colors">
             <RefreshCw size={14} />
           </button>
         </div>
@@ -478,7 +482,7 @@ export function Pipeline({
           <button
             key={filter.value}
             onClick={() => setStatusFilter(filter.value)}
-            className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${filter.value === 'all' ? (statusFilter === 'all' ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200') : statusButtonClass(filter.value, statusFilter === filter.value)}`}
+            className={`pipeline-filter rounded border px-2.5 py-1 text-xs font-medium transition-colors ${filter.value === 'all' ? (statusFilter === 'all' ? 'pipeline-status-control pipeline-status-control--info is-active' : 'pipeline-status-control pipeline-status-control--neutral') : statusButtonClass(filter.value, statusFilter === filter.value)}`}
           >
             {filter.label}
           </button>
@@ -493,8 +497,8 @@ export function Pipeline({
             onClick={() => setEvidenceFilter(filter)}
             className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
               evidenceFilter === filter
-                ? filter === 'all' ? 'border-indigo-700 bg-indigo-950/40 text-indigo-200' : evidenceReadinessClass(filter)
-                : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+                ? filter === 'all' ? 'pipeline-status-control pipeline-status-control--info is-active' : evidenceReadinessClass(filter)
+                : 'pipeline-status-control pipeline-status-control--neutral'
             }`}
           >
             {t(`pipeline.evidence.filters.${filter}`)}
@@ -502,15 +506,15 @@ export function Pipeline({
         ))}
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
-        <aside className={`${selectedItem ? 'hidden lg:flex' : 'flex'} w-full shrink-0 flex-col border-r border-zinc-800 bg-zinc-950/70 lg:w-[23rem] xl:w-[26rem]`}>
+      <div className="pipeline-workspace flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
+          <aside className={`pipeline-list ${focusMode && selectedItem ? 'hidden' : selectedItem ? 'hidden min-[900px]:flex' : 'flex'} w-full shrink-0 flex-col border-r border-zinc-800 bg-zinc-950/70 min-[900px]:w-[20rem] lg:w-[23rem] xl:w-[26rem]`}>
           <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-zinc-100">{t('pipeline.title')}</div>
               <div className="mt-0.5 text-[11px] text-zinc-500">{t('pipeline.pending', { n: displayedPending.length.toLocaleString() })}</div>
             </div>
             {sortByLlmScore && (
-              <span className="rounded border border-emerald-900/60 bg-emerald-950/30 px-2 py-1 text-[10px] font-medium text-emerald-300">
+              <span className="pipeline-status pipeline-status--success rounded border px-2 py-1 text-[10px] font-medium">
                 {t('pipeline.llmSort')}
               </span>
             )}
@@ -535,7 +539,7 @@ export function Pipeline({
                         void selectItem(item);
                       }}
                       aria-pressed={isSelected}
-                      className={`w-full rounded-md border p-3 text-left transition-colors ${isSelected ? 'border-indigo-700 bg-indigo-950/25 shadow-[inset_3px_0_0_0_rgb(79_70_229)]' : isLlmEvaluating ? 'border-emerald-900/60 bg-emerald-950/15 hover:bg-emerald-950/25' : 'border-zinc-800 bg-zinc-900/35 hover:border-zinc-700 hover:bg-zinc-900/70'}`}
+                      className={`pipeline-job-card w-full rounded-md border p-3 text-left transition-colors ${isSelected ? 'pipeline-job-card--selected' : isLlmEvaluating ? 'pipeline-job-card--evaluating' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -554,10 +558,10 @@ export function Pipeline({
                     </div>
 
                     <div className="mt-3 flex items-center gap-2">
-                      <span className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-200">
+                      <span className="pipeline-score-badge rounded px-2 py-1 text-[11px] font-medium">
                         {t('pipeline.score')} {item.score != null ? item.score.toFixed(1) : '-'}
                       </span>
-                      <span className={`rounded px-2 py-1 text-[11px] font-medium ${item.llmScore != null ? 'bg-emerald-950/60 text-emerald-300' : 'bg-zinc-900 text-zinc-600'}`}>
+                      <span className={`pipeline-llm-badge ${item.llmScore != null ? 'is-ready' : 'is-missing'} rounded px-2 py-1 text-[11px] font-medium`}>
                         {isLlmEvaluating ? <Loader2 size={11} className="mr-1 inline animate-spin" /> : null}
                         {t('pipeline.llm')} {item.llmScore != null ? item.llmScore.toFixed(1) : '-'}
                       </span>

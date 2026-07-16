@@ -15,7 +15,7 @@ export function StatusBadge({ status }: { status: Status }) {
   const item = config[status] || config.ready;
 
   return (
-    <div className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-mono uppercase tracking-wider ${item.bg} ${item.color}`}>
+    <div className={`app-status-badge app-status-badge--${status} flex items-center gap-2 px-2 py-1 rounded text-xs font-mono uppercase tracking-wider ${item.bg} ${item.color}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${item.dot}`} />
       {t(item.labelKey)}
     </div>

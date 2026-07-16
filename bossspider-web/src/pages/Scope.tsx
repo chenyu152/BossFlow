@@ -1,7 +1,6 @@
-import { CITY_OPTIONS } from '../constants';
+import { CitySelector } from '../components/CitySelector';
 import { NumberField } from '../components/NumberField';
 import { useAppTranslation } from '../i18n';
-import { hasCity, toggleCity } from '../utils';
 import type { ConfigPatch, ConfigPayload } from '../types';
 import { OptionToggle } from '../components/OptionToggle';
 import { CircleHelp, PlayCircle, RefreshCw } from 'lucide-react';
@@ -72,7 +71,7 @@ export function Scope({
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="scope-page h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg font-semibold text-zinc-100">{t('scope.title')}</h1>
         <div className="flex gap-3">
@@ -85,9 +84,9 @@ export function Scope({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-8 flex-1">
+      <div className="grid grid-cols-1 gap-5 flex-1 xl:grid-cols-2 xl:gap-6">
         <div className="space-y-6">
-          <section className="border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
+          <section className="scope-card border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
             <h3 className="text-sm font-semibold text-zinc-100 mb-5 border-b border-zinc-800 pb-3">{t('scope.runConfig')}</h3>
             <div className="space-y-5">
               <div>
@@ -111,7 +110,7 @@ export function Scope({
             </div>
           </section>
 
-          <div data-guide-target="scope-keywords">
+          <div data-guide-target="scope-keywords" className="scope-field-group">
             <label className="block text-sm font-medium text-zinc-300 mb-2 flex items-center justify-between">
               {t('scope.keywords')}
               <span className="text-xs text-zinc-500 font-normal">{t('scope.onePerLine')}</span>
@@ -126,7 +125,7 @@ export function Scope({
         </div>
 
         <div className="space-y-6">
-          <div className="border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
+          <div className="scope-card border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
             <h3 className="text-sm font-semibold text-zinc-100 mb-5 border-b border-zinc-800 pb-3">{t('scope.scrapingLimits')}</h3>
             <div className="space-y-5">
               <NumberField label={t('scope.scrollTargetCount')} value={config.scrollTarget} onChange={(value) => updateConfig({ scrollTarget: value })} />
@@ -134,32 +133,9 @@ export function Scope({
             </div>
           </div>
 
-          <div data-guide-target="scope-cities" className="border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
+          <div data-guide-target="scope-cities" className="scope-card border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
             <h3 className="text-sm font-semibold text-zinc-100 mb-5 border-b border-zinc-800 pb-3">{t('scope.cityConfig')}</h3>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">{t('scope.citiesQuickSelect')}</label>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {CITY_OPTIONS.map((city) => {
-                const selected = hasCity(config.citiesText, city.name);
-                return (
-                  <button
-                    key={city.name}
-                    onClick={() => updateConfig({ citiesText: toggleCity(config.citiesText, city) })}
-                    className={`px-2.5 py-1 text-xs border rounded transition-colors ${selected ? 'border-indigo-500 bg-indigo-950/30 text-indigo-300' : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
-                  >
-                    {city.name}
-                  </button>
-                );
-              })}
-            </div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2 flex items-center justify-between">
-              {t('scope.cityCodes')}
-              <span className="text-xs text-zinc-500 font-normal">{t('scope.namecode')}</span>
-            </label>
-            <textarea
-              className="w-full h-40 bg-zinc-950/70 border border-zinc-800 rounded-md p-3 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono resize-none"
-              value={config.citiesText}
-              onChange={(event) => updateConfig({ citiesText: event.target.value })}
-            />
+            <CitySelector value={config.citiesText} onChange={(citiesText) => updateConfig({ citiesText })} />
           </div>
         </div>
       </div>

@@ -1,18 +1,22 @@
-import { lazy, Suspense, type ReactNode, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useAppTranslation } from './i18n';
 import {
   Briefcase,
   BookOpenText,
-  ChevronDown,
-  ChevronRight,
+  ChartNoAxesCombined,
+  Code2,
   Crosshair,
+  Cpu,
   Database,
   FileText,
   Inbox,
   MessageSquareText,
   LayoutDashboard,
   Play,
+  PanelsTopLeft,
   Plus,
+  Server,
+  Sparkles,
   SlidersHorizontal,
   Square,
   Settings as SettingsIcon,
@@ -20,14 +24,16 @@ import {
   Terminal,
   UserRound,
 } from 'lucide-react';
-import { NavItem } from './components/NavItem';
 import { StatusBadge } from './components/StatusBadge';
+import { ThemePicker } from './components/ThemePicker';
 import { GuidedTour } from './components/GuidedTour';
+import { CitySelector } from './components/CitySelector';
 import { useBossSpider } from './hooks/useBossSpider';
+import { buildTemplateSeed, JOB_DIRECTION_TEMPLATES, type JobDirectionTemplate } from './jobTemplates';
 import type { DashboardTaskTarget } from './pages/Dashboard';
 import type { ResumeNavigationTarget, Tab } from './types';
 
-type NavStage = 'discovery' | 'evaluation' | 'materials' | 'interview';
+type RailMenu = 'discovery' | 'materials' | 'interview';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Interview = lazy(() => import('./pages/Interview').then((module) => ({ default: module.Interview })));
@@ -43,45 +49,38 @@ const Story = lazy(() => import('./pages/Story').then((module) => ({ default: mo
 
 function PageLoading({ label }: { label: string }) {
   return (
-    <div className="flex h-full min-h-[240px] items-center justify-center rounded-lg border border-zinc-900 bg-zinc-950 text-sm text-zinc-500">
-      {label}
+    <div className="page-loading" role="status" aria-live="polite">
+      <span className="page-loading__mark" aria-hidden="true" />
+      <span>{label}</span>
     </div>
   );
 }
 
-function NavSection({
+function RailButton({
   icon,
   label,
   active,
   expanded,
-  onToggle,
-  children,
+  onClick,
 }: {
   icon: ReactNode;
   label: string;
   active: boolean;
-  expanded: boolean;
-  onToggle: () => void;
-  children: ReactNode;
+  expanded?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div>
-      <button
-        onClick={onToggle}
-        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-          active ? 'bg-zinc-900/80 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-        }`}
-      >
-        <span className={active ? 'text-indigo-400' : 'text-zinc-500'}>{icon}</span>
-        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-        {expanded ? <ChevronDown size={15} className="text-zinc-500" /> : <ChevronRight size={15} className="text-zinc-500" />}
-      </button>
-      {expanded && (
-        <div className="ml-5 mt-1 space-y-1 border-l border-zinc-800/80 pl-2">
-          {children}
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      aria-expanded={expanded}
+      className={`desktop-rail__button${active ? ' desktop-rail__button--active' : ''}${expanded ? ' desktop-rail__button--expanded' : ''}`}
+      title={label}
+    >
+      <span className="desktop-rail__icon">{icon}</span>
+      <span className="desktop-rail__label">{label}</span>
+    </button>
   );
 }
 
@@ -99,7 +98,9 @@ export default function App() {
   const [dashboardTargetRequestId, setDashboardTargetRequestId] = useState(0);
   const [personalResumeDirty, setPersonalResumeDirty] = useState(false);
   const [createDirectionOpen, setCreateDirectionOpen] = useState(false);
-  const [directionName, setDirectionName] = useState('');
+  const [directionName, setDirectionName] = useState(JOB_DIRECTION_TEMPLATES[0].defaultName);
+  const [directionCitiesText, setDirectionCitiesText] = useState('');
+  const [selectedDirectionTemplateId, setSelectedDirectionTemplateId] = useState<string>(JOB_DIRECTION_TEMPLATES[0].id);
   const [directionCreateError, setDirectionCreateError] = useState('');
   const [creatingDirection, setCreatingDirection] = useState(false);
   const [scopeGuideAutoStartPending, setScopeGuideAutoStartPending] = useState(false);
@@ -108,12 +109,8 @@ export default function App() {
   const [crawlGuideOpen, setCrawlGuideOpen] = useState(false);
   const [resumeGuideAutoStartPending, setResumeGuideAutoStartPending] = useState(false);
   const [resumeGuideAfterCrawl, setResumeGuideAfterCrawl] = useState(false);
-  const [expandedStages, setExpandedStages] = useState<Record<NavStage, boolean>>({
-    discovery: true,
-    evaluation: true,
-    materials: true,
-    interview: true,
-  });
+  const [activeRailMenu, setActiveRailMenu] = useState<RailMenu | null>(null);
+  const railRef = useRef<HTMLElement>(null);
   const boss = useBossSpider();
   const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
@@ -128,6 +125,21 @@ export default function App() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    const closeRailMenu = (event: MouseEvent) => {
+      if (!railRef.current?.contains(event.target as Node)) setActiveRailMenu(null);
+    };
+    const closeRailMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveRailMenu(null);
+    };
+    document.addEventListener('mousedown', closeRailMenu);
+    document.addEventListener('keydown', closeRailMenuOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeRailMenu);
+      document.removeEventListener('keydown', closeRailMenuOnEscape);
+    };
+  }, []);
 
   useEffect(() => {
     if (!boss.loading && !boss.config && boss.projects.length === 0) {
@@ -157,7 +169,10 @@ export default function App() {
   }, [confirmDiscardUnsavedConfig]);
 
   const navigateToTab = useCallback((tab: Tab) => {
-    if (tab === activeTab || confirmDiscardUnsavedConfig()) setActiveTab(tab);
+    if (tab === activeTab || confirmDiscardUnsavedConfig()) {
+      setActiveTab(tab);
+      setActiveRailMenu(null);
+    }
   }, [activeTab, confirmDiscardUnsavedConfig]);
 
   const setActiveTabStable = useCallback((tab: Tab) => {
@@ -176,10 +191,6 @@ export default function App() {
     if (tab === 'Interview' && target?.sourceKey) setSelectedInterviewKey(target.sourceKey);
     setActiveTab(tab);
   }, [activeTab, confirmDiscardUnsavedConfig]);
-
-  const toggleStage = (stage: NavStage) => {
-    setExpandedStages((current) => ({ ...current, [stage]: !current[stage] }));
-  };
 
   const startCrawl = async () => {
     if (boss.isConfigDirty && !confirmUnsavedConfig()) return;
@@ -212,9 +223,17 @@ export default function App() {
 
   const openCreateDirection = () => {
     if (!confirmDiscardUnsavedConfig()) return;
-    setDirectionName('');
+    setSelectedDirectionTemplateId(JOB_DIRECTION_TEMPLATES[0].id);
+    setDirectionName(JOB_DIRECTION_TEMPLATES[0].defaultName);
+    setDirectionCitiesText('');
     setDirectionCreateError('');
     setCreateDirectionOpen(true);
+  };
+
+  const selectDirectionTemplate = (template?: JobDirectionTemplate) => {
+    setSelectedDirectionTemplateId(template?.id ?? 'custom');
+    setDirectionName(template?.defaultName ?? '');
+    setDirectionCreateError('');
   };
 
   const createDirection = async () => {
@@ -223,13 +242,18 @@ export default function App() {
       setDirectionCreateError(t('directions.nameRequired'));
       return;
     }
+    if (!directionCitiesText.trim()) {
+      setDirectionCreateError(t('directions.cityRequired'));
+      return;
+    }
     setCreatingDirection(true);
     setDirectionCreateError('');
     try {
-      await boss.createProject(name);
+      const template = JOB_DIRECTION_TEMPLATES.find((item) => item.id === selectedDirectionTemplateId);
+      await boss.createProject(name, buildTemplateSeed(template, name, directionCitiesText));
       setCreateDirectionOpen(false);
       setActiveTab('Scope');
-      setScopeGuideAutoStartPending(true);
+      setScopeGuideAutoStartPending(false);
     } catch (error) {
       setDirectionCreateError((error as Error).message);
     } finally {
@@ -237,98 +261,115 @@ export default function App() {
     }
   };
 
-  return (
-    <div className="flex h-screen w-full bg-zinc-950 text-zinc-300 font-sans selection:bg-indigo-500/30 overflow-hidden">
-      <aside className="w-56 border-r border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
-        <div className="h-14 flex items-center px-4 border-b border-zinc-800">
-          <div className="flex items-center gap-2 text-zinc-100 font-semibold tracking-wide">
-            <div className="w-5 h-5 bg-indigo-600 rounded flex items-center justify-center text-[10px]">
-              <Crosshair size={12} className="text-white" />
-            </div>
-            BossFlow
-          </div>
+  const pageTitleByTab: Record<Tab, string> = {
+    Dashboard: t('nav.dashboard'), Scope: t('nav.scope'), MatchingRules: t('nav.matchingRules'),
+    ScoringRules: t('nav.scoringRules'), Jobs: t('nav.jobs'), Pipeline: t('nav.pipeline'),
+    PersonalResume: t('nav.personalResume'), Resume: t('nav.resume'), Story: t('nav.story'),
+    Interview: t('nav.interview'), Logs: t('nav.logs'), Settings: t('nav.settings'),
+  };
+  const discoveryActive = activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'ScoringRules' || activeTab === 'Jobs' || activeTab === 'Logs';
+  const materialsActive = activeTab === 'PersonalResume' || activeTab === 'Resume';
+  const interviewActive = activeTab === 'Interview' || activeTab === 'Story';
+
+  const renderRailFlyout = (menu: RailMenu) => {
+    const definitions = {
+      discovery: {
+        title: t('nav.stages.discovery'),
+        items: [
+          { tab: 'Jobs' as Tab, icon: <Briefcase size={16} />, label: t('nav.jobs') },
+          { tab: 'Scope' as Tab, icon: <Crosshair size={16} />, label: t('nav.scope') },
+          { tab: 'MatchingRules' as Tab, icon: <Tags size={16} />, label: t('nav.matchingRules') },
+          { tab: 'ScoringRules' as Tab, icon: <SlidersHorizontal size={16} />, label: t('nav.scoringRules') },
+          { tab: 'Logs' as Tab, icon: <Terminal size={16} />, label: t('nav.logs') },
+        ],
+      },
+      materials: {
+        title: t('nav.stages.materials'),
+        items: [
+          { tab: 'PersonalResume' as Tab, icon: <UserRound size={16} />, label: t('nav.personalResume') },
+          { tab: 'Resume' as Tab, icon: <FileText size={16} />, label: t('nav.resume') },
+        ],
+      },
+      interview: {
+        title: t('nav.stages.interview'),
+        items: [
+          { tab: 'Interview' as Tab, icon: <MessageSquareText size={16} />, label: t('nav.interview') },
+          { tab: 'Story' as Tab, icon: <BookOpenText size={16} />, label: t('nav.story') },
+        ],
+      },
+    }[menu];
+    return (
+      <div className={`desktop-rail-menu desktop-rail-menu--${menu}`} role="menu" aria-label={definitions.title}>
+        <div className="desktop-rail-menu__header">{definitions.title}</div>
+        <div className="desktop-rail-menu__items">
+          {definitions.items.map((item) => (
+            <button key={item.tab} type="button" role="menuitem" onClick={() => navigateToTab(item.tab)} className={`desktop-rail-menu__item${activeTab === item.tab ? ' desktop-rail-menu__item--active' : ''}`}>
+              <span>{item.icon}</span><span>{item.label}</span>
+            </button>
+          ))}
         </div>
+      </div>
+    );
+  };
 
-        <nav className="flex-1 space-y-2 overflow-y-auto p-3">
-          <div className="space-y-1">
-            <NavItem icon={<LayoutDashboard size={16} />} label={t('nav.dashboard')} active={activeTab === 'Dashboard'} onClick={() => navigateToTab('Dashboard')} />
+  return (
+    <div className="app-shell desktop-shell flex h-screen w-full overflow-hidden font-sans selection:bg-indigo-500/30">
+      <aside ref={railRef} className="app-sidebar desktop-rail" aria-label="Primary navigation">
+        <button type="button" className="desktop-rail__brand" onClick={() => navigateToTab('Dashboard')} title="BossFlow">
+          <Crosshair size={18} />
+          <span className="sr-only">BossFlow</span>
+        </button>
+        <nav className="desktop-rail__nav">
+          <RailButton icon={<LayoutDashboard size={19} />} label={t('nav.dashboard')} active={activeTab === 'Dashboard'} onClick={() => navigateToTab('Dashboard')} />
+          <div className="desktop-rail__group">
+            <RailButton icon={<Briefcase size={19} />} label={t('nav.stages.discovery')} active={discoveryActive} expanded={activeRailMenu === 'discovery'} onClick={() => setActiveRailMenu((current) => current === 'discovery' ? null : 'discovery')} />
+            {activeRailMenu === 'discovery' && renderRailFlyout('discovery')}
           </div>
-
-          <NavSection
-            icon={<Crosshair size={16} />}
-            label={t('nav.stages.discovery')}
-            active={activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'ScoringRules' || activeTab === 'Jobs' || activeTab === 'Logs'}
-            expanded={expandedStages.discovery}
-            onToggle={() => toggleStage('discovery')}
-          >
-            <NavItem icon={<Crosshair size={16} />} label={t('nav.scope')} active={activeTab === 'Scope'} onClick={() => navigateToTab('Scope')} />
-            <NavItem icon={<Tags size={16} />} label={t('nav.matchingRules')} active={activeTab === 'MatchingRules'} onClick={() => navigateToTab('MatchingRules')} />
-            <NavItem icon={<SlidersHorizontal size={16} />} label={t('nav.scoringRules')} active={activeTab === 'ScoringRules'} onClick={() => navigateToTab('ScoringRules')} />
-            <NavItem icon={<Briefcase size={16} />} label={t('nav.jobs')} active={activeTab === 'Jobs'} onClick={() => navigateToTab('Jobs')} />
-            <NavItem icon={<Terminal size={16} />} label={t('nav.logs')} active={activeTab === 'Logs'} onClick={() => navigateToTab('Logs')} />
-          </NavSection>
-
-          <NavSection
-            icon={<Inbox size={16} />}
-            label={t('nav.stages.evaluation')}
-            active={activeTab === 'Pipeline'}
-            expanded={expandedStages.evaluation}
-            onToggle={() => toggleStage('evaluation')}
-          >
-            <NavItem icon={<Inbox size={16} />} label={t('nav.pipeline')} active={activeTab === 'Pipeline'} onClick={() => navigateToTab('Pipeline')} />
-          </NavSection>
-
-          <NavSection
-            icon={<FileText size={16} />}
-            label={t('nav.stages.materials')}
-            active={activeTab === 'PersonalResume' || activeTab === 'Resume'}
-            expanded={expandedStages.materials}
-            onToggle={() => toggleStage('materials')}
-          >
-            <NavItem icon={<UserRound size={16} />} label={t('nav.personalResume')} active={activeTab === 'PersonalResume'} onClick={() => navigateToTab('PersonalResume')} />
-            <NavItem icon={<FileText size={16} />} label={t('nav.resume')} active={activeTab === 'Resume'} onClick={() => navigateToTab('Resume')} />
-          </NavSection>
-
-          <NavSection
-            icon={<MessageSquareText size={16} />}
-            label={t('nav.stages.interview')}
-            active={activeTab === 'Interview' || activeTab === 'Story'}
-            expanded={expandedStages.interview}
-            onToggle={() => toggleStage('interview')}
-          >
-            <NavItem icon={<MessageSquareText size={16} />} label={t('nav.interview')} active={activeTab === 'Interview'} onClick={() => navigateToTab('Interview')} />
-            <NavItem icon={<BookOpenText size={16} />} label={t('nav.story')} active={activeTab === 'Story'} onClick={() => navigateToTab('Story')} />
-          </NavSection>
+          <RailButton icon={<Inbox size={19} />} label={t('nav.pipeline')} active={activeTab === 'Pipeline'} onClick={() => navigateToTab('Pipeline')} />
+          <div className="desktop-rail__group">
+            <RailButton icon={<FileText size={19} />} label={t('nav.stages.materials')} active={materialsActive} expanded={activeRailMenu === 'materials'} onClick={() => setActiveRailMenu((current) => current === 'materials' ? null : 'materials')} />
+            {activeRailMenu === 'materials' && renderRailFlyout('materials')}
+          </div>
+          <div className="desktop-rail__group">
+            <RailButton icon={<MessageSquareText size={19} />} label={t('nav.stages.interview')} active={interviewActive} expanded={activeRailMenu === 'interview'} onClick={() => setActiveRailMenu((current) => current === 'interview' ? null : 'interview')} />
+            {activeRailMenu === 'interview' && renderRailFlyout('interview')}
+          </div>
         </nav>
-
-        <div className="space-y-2 border-t border-zinc-800 p-3">
-          <NavItem icon={<SettingsIcon size={16} />} label={t('nav.settings')} active={activeTab === 'Settings'} onClick={() => navigateToTab('Settings')} />
-          <div className="px-1 text-xs text-zinc-600">{t('nav.webConsole')}</div>
+        <div className="desktop-rail__footer">
+          <RailButton icon={<SettingsIcon size={19} />} label={t('nav.settings')} active={activeTab === 'Settings'} onClick={() => navigateToTab('Settings')} />
+          <ThemePicker />
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500 uppercase font-medium">{t('header.project')}</span>
+        <header className="app-header desktop-titlebar">
+          <div className="desktop-titlebar__identity">
+            <span className="desktop-titlebar__product">BossFlow</span>
+            <span className="desktop-titlebar__separator">/</span>
+            <span className="desktop-titlebar__page">{pageTitleByTab[activeTab]}</span>
+          </div>
+          <div className="desktop-titlebar__controls">
+            <div className="desktop-project-switcher">
               <select
+                aria-label={t('header.project')}
                 value={boss.project}
                 onChange={(event) => {
                   if (confirmDiscardUnsavedConfig()) void boss.loadConfig(event.target.value);
                 }}
                 disabled={boss.projects.length === 0}
-                className="bg-zinc-900 border border-zinc-800 text-sm rounded px-2 py-1 outline-none focus:border-indigo-500"
+                className="desktop-project-switcher__select"
               >
                 {boss.projects.length === 0 && <option value="">{t('directions.none')}</option>}
                 {boss.projects.map((name) => <option value={name} key={name}>{name}</option>)}
               </select>
               <button
+                type="button"
                 onClick={openCreateDirection}
-                className="inline-flex items-center gap-1 rounded border border-zinc-800 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-indigo-700 hover:bg-indigo-950/30 hover:text-indigo-200"
+                className="desktop-titlebar__icon-button"
+                title={t('directions.newButton')}
+                aria-label={t('directions.newButton')}
               >
-                <Plus size={13} />
-                {t('directions.newButton')}
+                <Plus size={14} />
               </button>
             </div>
 
@@ -337,48 +378,43 @@ export default function App() {
             <div className="h-4 w-[1px] bg-zinc-800" />
 
             <button
-              className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors max-w-[340px] min-w-0"
+              className="desktop-titlebar__database"
               onClick={() => setDbPathExpanded(!dbPathExpanded)}
               title={boss.config?.dbFilePath || ''}
             >
               <Database size={14} className="shrink-0" />
-              <span className="truncate">
+              <span>
                 {dbPathExpanded ? boss.config?.dbFilePath || t('header.noDatabaseLoaded') : boss.config?.dbFileName || t('header.noDatabase')}
               </span>
             </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-0.5 rounded border border-zinc-800 bg-zinc-900/50 p-0.5">
+            <div className="desktop-titlebar__secondary-controls">
+            <div className="desktop-language-toggle">
               {(['zh', 'en'] as const).map((lang) => (
                 <button
                   key={lang}
                   onClick={() => i18n.changeLanguage(lang)}
-                  className={`px-1.5 py-0.5 text-[11px] font-medium rounded-sm transition-colors ${
-                    currentLanguage.startsWith(lang)
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
+                  className={currentLanguage.startsWith(lang) ? 'desktop-language-toggle__button desktop-language-toggle__button--active' : 'desktop-language-toggle__button'}
                   title={lang === 'zh' ? '切换到中文' : 'Switch to English'}
                 >
                   {lang === 'zh' ? '中' : 'EN'}
                 </button>
               ))}
             </div>
-            <button onClick={() => navigateToTab('Logs')} className="text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors">
-              {t('header.viewLogs')}
+            <button type="button" onClick={() => navigateToTab('Logs')} className="desktop-titlebar__icon-button" title={t('header.viewLogs')} aria-label={t('header.viewLogs')}>
+              <Terminal size={15} />
             </button>
             {!boss.isRunning ? (
-              <button data-guide-target="start-crawl" onClick={startCrawl} disabled={!boss.config || boss.loading} className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors">
+              <button data-guide-target="start-crawl" onClick={startCrawl} disabled={!boss.config || boss.loading} className="desktop-titlebar__primary-action">
                 <Play size={14} />
                 {t('header.startCrawl')}
               </button>
             ) : (
-              <button onClick={stopTask} className="flex items-center gap-1.5 bg-red-900/50 text-red-400 border border-red-900/50 hover:bg-red-900/80 px-3 py-1.5 rounded text-sm font-medium transition-colors">
+              <button onClick={stopTask} className="desktop-titlebar__stop-action">
                 <Square size={14} />
                 {t('header.stopCrawl')}
               </button>
             )}
+            </div>
           </div>
         </header>
 
@@ -389,30 +425,67 @@ export default function App() {
         )}
 
         {createDirectionOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-            <div className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
-              <div className="border-b border-zinc-800 p-5">
-                <h2 className="text-lg font-semibold text-zinc-100">{t('directions.createTitle')}</h2>
-                <p className="mt-2 text-sm leading-6 text-zinc-400">{t('directions.createDescription')}</p>
+          <div className="direction-create-overlay">
+            <div className="direction-create-dialog" role="dialog" aria-modal="true" aria-labelledby="direction-create-title">
+              <div className="direction-create-dialog__header">
+                <div>
+                  <span>{t('directions.onboardingEyebrow')}</span>
+                  <h2 id="direction-create-title">{t('directions.createTitle')}</h2>
+                  <p>{t('directions.createDescription')}</p>
+                </div>
+                {boss.projects.length > 0 && <button type="button" onClick={() => setCreateDirectionOpen(false)} disabled={creatingDirection} aria-label={t('directions.cancel')}>×</button>}
               </div>
-              <div className="space-y-3 p-5">
-                <label className="block text-sm font-medium text-zinc-200" htmlFor="direction-name">{t('directions.nameLabel')}</label>
-                <input
-                  id="direction-name"
-                  autoFocus
-                  value={directionName}
-                  onChange={(event) => setDirectionName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void createDirection();
-                  }}
-                  placeholder={t('directions.namePlaceholder')}
-                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-indigo-500"
-                />
-                {directionCreateError && <p className="text-sm text-red-300">{directionCreateError}</p>}
+              <div className="direction-create-dialog__body">
+                <section className="direction-template-picker">
+                  <div className="direction-create-section-heading">
+                    <div><strong>{t('directions.templateHeading')}</strong><p>{t('directions.templateHint')}</p></div>
+                  </div>
+                  <div className="direction-template-grid">
+                    {JOB_DIRECTION_TEMPLATES.map((template) => {
+                      const TemplateIcon = {
+                        sparkles: Sparkles,
+                        product: LayoutDashboard,
+                        frontend: PanelsTopLeft,
+                        backend: Server,
+                        data: ChartNoAxesCombined,
+                        embedded: Cpu,
+                      }[template.icon];
+                      const selected = selectedDirectionTemplateId === template.id;
+                      return (
+                        <button key={template.id} type="button" aria-pressed={selected} className={selected ? 'direction-template-card direction-template-card--selected' : 'direction-template-card'} onClick={() => selectDirectionTemplate(template)}>
+                          <span className="direction-template-card__icon"><TemplateIcon size={17} /></span>
+                          <span className="direction-template-card__copy"><strong>{t(template.titleKey)}</strong><small>{t(template.descriptionKey)}</small></span>
+                        </button>
+                      );
+                    })}
+                    <button type="button" aria-pressed={selectedDirectionTemplateId === 'custom'} className={selectedDirectionTemplateId === 'custom' ? 'direction-template-card direction-template-card--selected' : 'direction-template-card'} onClick={() => selectDirectionTemplate()}>
+                      <span className="direction-template-card__icon"><Code2 size={17} /></span>
+                      <span className="direction-template-card__copy"><strong>{t('directions.customTitle')}</strong><small>{t('directions.customDescription')}</small></span>
+                    </button>
+                  </div>
+                </section>
+
+                <section className="direction-target-setup">
+                  <div className="direction-create-section-heading"><div><strong>{t('directions.setupHeading')}</strong></div></div>
+                  <label htmlFor="direction-name">{t('directions.nameLabel')}</label>
+                  <input id="direction-name" value={directionName} onChange={(event) => setDirectionName(event.target.value)} placeholder={t('directions.namePlaceholder')} />
+                  {selectedDirectionTemplateId !== 'custom' && (() => {
+                    const template = JOB_DIRECTION_TEMPLATES.find((item) => item.id === selectedDirectionTemplateId);
+                    return template ? (
+                      <div className="direction-template-keywords">
+                        <span>{t('directions.templateKeywords')}</span>
+                        <div>{template.keywords.map((keyword) => <small key={keyword}>{keyword}</small>)}</div>
+                      </div>
+                    ) : null;
+                  })()}
+                  <label>{t('directions.targetCities')}</label>
+                  <CitySelector compact showAdvanced={false} value={directionCitiesText} onChange={(citiesText) => { setDirectionCitiesText(citiesText); setDirectionCreateError(''); }} />
+                  {directionCreateError && <p className="direction-create-error">{directionCreateError}</p>}
+                </section>
               </div>
-              <div className="flex justify-end gap-2 border-t border-zinc-800 p-4">
-                {boss.projects.length > 0 && <button onClick={() => setCreateDirectionOpen(false)} disabled={creatingDirection} className="rounded border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900 disabled:opacity-50">{t('directions.cancel')}</button>}
-                <button onClick={() => void createDirection()} disabled={creatingDirection} className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
+              <div className="direction-create-dialog__footer">
+                {boss.projects.length > 0 && <button className="direction-create-cancel" onClick={() => setCreateDirectionOpen(false)} disabled={creatingDirection}>{t('directions.cancel')}</button>}
+                <button className="direction-create-submit" onClick={() => void createDirection()} disabled={creatingDirection}>
                   {creatingDirection ? t('directions.creating') : t('directions.createAction')}
                 </button>
               </div>
@@ -438,7 +511,7 @@ export default function App() {
           />
         )}
 
-        <main className="flex-1 overflow-auto bg-zinc-950 p-5">
+        <main className="app-main flex-1 overflow-auto bg-zinc-950 p-4 lg:p-5">
           <div className={isWideWorkspace ? 'h-full w-full min-w-0' : 'max-w-6xl mx-auto h-full'}>
             <Suspense fallback={<PageLoading label={currentLanguage.startsWith('zh') ? '加载页面...' : 'Loading page...'} />}>
               {activeTab === 'Dashboard' && boss.config && (

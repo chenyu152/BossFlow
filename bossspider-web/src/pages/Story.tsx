@@ -374,7 +374,7 @@ export function Story({
     : storyDraft.title || t('story.untitledStory');
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="story-page flex h-full min-h-0 flex-col">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-zinc-100">{t('story.title')}</h2>

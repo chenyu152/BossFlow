@@ -307,7 +307,7 @@ export function PersonalResume({
     : `${target.item.company} · ${target.item.title}`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="personal-resume-page flex h-full min-h-0 flex-col gap-4">
       <div className="flex shrink-0 items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-zinc-100">{t('personalResume.title')}</h1>

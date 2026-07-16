@@ -21,6 +21,13 @@ export function hasCity(citiesText: string, name: string) {
   });
 }
 
+export function parseCitiesText(citiesText: string) {
+  return citiesText.split(/\r?\n/).map((line) => {
+    const [name = '', code = ''] = line.trim().split('=').map((value) => value.trim());
+    return { name, code };
+  }).filter((city) => city.name);
+}
+
 export function toggleCity(citiesText: string, city: { name: string; code: string }) {
   const lines = citiesText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const next = lines.filter((line) => line.split('=')[0]?.trim() !== city.name);

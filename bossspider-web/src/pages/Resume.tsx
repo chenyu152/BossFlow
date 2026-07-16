@@ -244,7 +244,7 @@ export function Resume({
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="resume-page h-full min-h-0 flex flex-col">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-zinc-100">{t('resume.title')}</h2>
