@@ -96,6 +96,13 @@
     "subtitle": "这里的配置作用于整个 BossFlow，不会随求职方向切换。",
     "save": "保存设置",
     "saving": "保存中…",
+    "interface": {
+      "title": "界面与语言",
+      "description": "调整应用的显示语言和外观主题。语言选项集中在这里，便于后续扩展更多语言。",
+      "language": "显示语言",
+      "languageDescription": "切换后立即应用，并在本机记住你的选择。",
+      "languages": { "zh": "简体中文", "en": "English" }
+    },
     "llm": {
       "title": "LLM 服务",
       "description": "用于生成入库规则、评分词库、岗位精评、简历和面试材料。API 密钥只保存在本机系统配置中，不会写入任何求职方向。",
@@ -429,8 +436,10 @@
     "pending": "待处理",
     "processed": "已处理",
     "llmSort": "LLM 排序",
-    "focusMode": "专注模式",
-    "exitFocusMode": "显示列表",
+    "sortLabel": "排序方式",
+    "sortDefault": "默认排序",
+    "hideList": "收起候选列表",
+    "showList": "展开候选列表",
     "refresh": "刷新",
     "rescorePending": "重新评分",
     "status": "状态",

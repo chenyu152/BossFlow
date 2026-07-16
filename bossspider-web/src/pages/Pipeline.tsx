@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, CheckCircle2, Circle, FileText, Loader2, PanelLeftClose, PanelLeftOpen, RefreshCw, X } from 'lucide-react';
+import { ArrowDownWideNarrow, BookOpenText, BrainCircuit, FileText, Loader2, PanelLeftClose, PanelLeftOpen, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -81,21 +81,6 @@ const STATUS_CLASSES: Record<DecisionStatus, { badge: string; active: string; id
 
 function statusBadgeClass(status: DecisionStatus) {
   return STATUS_CLASSES[status]?.badge || 'pipeline-status pipeline-status--neutral';
-}
-
-function statusButtonClass(status: DecisionStatus, active: boolean) {
-  const classes = STATUS_CLASSES[status];
-  if (!classes) return active ? 'pipeline-status-control pipeline-status-control--info is-active' : 'pipeline-status-control pipeline-status-control--neutral';
-  return active ? classes.active : classes.idle;
-}
-
-function MaterialBadge({ label, ready, tone = 'zinc' }: { label: string; ready: boolean; tone?: 'emerald' | 'indigo' | 'cyan' | 'zinc' }) {
-  return (
-    <span className={`pipeline-material-badge pipeline-material-badge--${tone} ${ready ? 'is-ready' : 'is-missing'} inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium`}>
-      {ready ? <CheckCircle2 size={10} /> : <Circle size={10} />}
-      {label}
-    </span>
-  );
 }
 
 type EvidenceReadiness = 'ready' | 'needs_confirmation' | 'hard_gap' | 'unassessed';
@@ -280,7 +265,7 @@ export function Pipeline({
   const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all');
   const [evidenceFilter, setEvidenceFilter] = useState<'all' | EvidenceReadiness>('all');
   const [sortByEvidence, setSortByEvidence] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
+  const [listCollapsed, setListCollapsed] = useState(false);
   const [evidenceFocus, setEvidenceFocus] = useState<{ sourceKey: string; requestId: number } | null>(null);
   const evaluatingSet = new Set(llmEvaluatingKeys);
   const suggestingSet = new Set(resumeSuggestingKeys);
@@ -427,6 +412,12 @@ export function Pipeline({
     await onUpdateStatus(sourceKey, decisionStatus);
   };
 
+  const sortMode = sortByEvidence ? 'evidence' : sortByLlmScore ? 'llm' : 'default';
+  const changeSortMode = (mode: 'default' | 'llm' | 'evidence') => {
+    setSortByEvidence(mode === 'evidence');
+    setSortByLlmScore(mode === 'llm');
+  };
+
   const deleteSelected = async () => {
     if (!selectedItem) return;
     const ok = window.confirm(t('pipeline.confirmDelete'));
@@ -438,84 +429,58 @@ export function Pipeline({
 
   return (
     <div className="pipeline-page h-full flex flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div>
+      <div className="pipeline-commandbar">
+        <div className="pipeline-commandbar__heading">
           <h2 className="text-lg font-semibold text-zinc-100">{t('pipeline.title')}</h2>
           <p className="text-xs text-zinc-500">
             {t('pipeline.pending', { n: pending.length.toLocaleString() })} / {t('pipeline.processed', { n: processed.length.toLocaleString() })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSortByLlmScore((value) => !value)}
-            disabled={!pending.length}
-            className={`pipeline-toolbar-button pipeline-toolbar-button--success inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByLlmScore ? 'is-active' : ''}`}
-          >
+        <div className="pipeline-commandbar__controls">
+          <label className="pipeline-select-control">
+            <span>{t('pipeline.status')}</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | DecisionStatus)}>
+              {STATUS_FILTERS.map((filter) => (
+                <option key={filter.value} value={filter.value}>
+                  {filter.label} · {filter.value === 'all' ? pending.length : pending.filter((item) => item.decisionStatus === filter.value).length}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="pipeline-select-control">
+            <span>{t('pipeline.evidence.title')}</span>
+            <select value={evidenceFilter} onChange={(event) => setEvidenceFilter(event.target.value as 'all' | EvidenceReadiness)}>
+              {(['all', 'ready', 'needs_confirmation', 'hard_gap', 'unassessed'] as const).map((filter) => (
+                <option key={filter} value={filter}>
+                  {t(`pipeline.evidence.filters.${filter}`)} · {filter === 'all' ? pending.length : pending.filter((item) => evidenceReadinessBySourceKey.get(item.sourceKey)?.status === filter).length}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="pipeline-select-control pipeline-select-control--sort">
             <ArrowDownWideNarrow size={14} />
-            {t('pipeline.llmSort')}
-          </button>
-          <button
-            onClick={() => setSortByEvidence((value) => !value)}
-            disabled={!pending.length}
-            className={`pipeline-toolbar-button pipeline-toolbar-button--pending inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40 transition-colors ${sortByEvidence ? 'is-active' : ''}`}
-          >
-            <ArrowDownWideNarrow size={14} />
-            {t('pipeline.evidence.sort')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setFocusMode((value) => !value)}
-            aria-pressed={focusMode}
-            className={`pipeline-toolbar-button pipeline-toolbar-button--info inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm font-medium transition-colors ${focusMode ? 'is-active' : ''}`}
-          >
-            {focusMode ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-            {focusMode ? t('pipeline.exitFocusMode') : t('pipeline.focusMode')}
-          </button>
+            <select value={sortMode} onChange={(event) => changeSortMode(event.target.value as 'default' | 'llm' | 'evidence')} disabled={!pending.length} aria-label={t('pipeline.sortLabel')}>
+              <option value="default">{t('pipeline.sortDefault')}</option>
+              <option value="llm">{t('pipeline.llmSort')}</option>
+              <option value="evidence">{t('pipeline.evidence.sort')}</option>
+            </select>
+          </label>
           <button aria-label={t('pipeline.refresh')} title={t('pipeline.refresh')} onClick={onRefresh} className="pipeline-toolbar-button p-1.5 border rounded transition-colors">
             <RefreshCw size={14} />
           </button>
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {STATUS_FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            onClick={() => setStatusFilter(filter.value)}
-            className={`pipeline-filter rounded border px-2.5 py-1 text-xs font-medium transition-colors ${filter.value === 'all' ? (statusFilter === 'all' ? 'pipeline-status-control pipeline-status-control--info is-active' : 'pipeline-status-control pipeline-status-control--neutral') : statusButtonClass(filter.value, statusFilter === filter.value)}`}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-zinc-900 pt-3">
-        <span className="mr-1 text-xs text-zinc-500">{t('pipeline.evidence.title')}</span>
-        {(['all', 'ready', 'needs_confirmation', 'hard_gap', 'unassessed'] as const).map((filter) => (
-          <button
-            key={filter}
-            onClick={() => setEvidenceFilter(filter)}
-            className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
-              evidenceFilter === filter
-                ? filter === 'all' ? 'pipeline-status-control pipeline-status-control--info is-active' : evidenceReadinessClass(filter)
-                : 'pipeline-status-control pipeline-status-control--neutral'
-            }`}
-          >
-            {t(`pipeline.evidence.filters.${filter}`)}
-          </button>
-        ))}
-      </div>
-
-      <div className="pipeline-workspace flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
-          <aside className={`pipeline-list ${focusMode && selectedItem ? 'hidden' : selectedItem ? 'hidden min-[900px]:flex' : 'flex'} w-full shrink-0 flex-col border-r border-zinc-800 bg-zinc-950/70 min-[900px]:w-[20rem] lg:w-[23rem] xl:w-[26rem]`}>
+      <div className="pipeline-workspace relative flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
+          <aside className={`pipeline-list ${selectedItem ? 'hidden min-[900px]:flex' : 'flex'} ${listCollapsed && selectedItem ? 'pipeline-list--collapsed' : ''} w-full shrink-0 flex-col border-r border-zinc-800 bg-zinc-950/70 min-[900px]:w-[19rem] lg:w-[20rem] xl:w-[22rem]`}>
           <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-zinc-100">{t('pipeline.title')}</div>
               <div className="mt-0.5 text-[11px] text-zinc-500">{t('pipeline.pending', { n: displayedPending.length.toLocaleString() })}</div>
             </div>
-            {sortByLlmScore && (
+            {sortMode !== 'default' && (
               <span className="pipeline-status pipeline-status--success rounded border px-2 py-1 text-[10px] font-medium">
-                {t('pipeline.llmSort')}
+                {sortMode === 'llm' ? t('pipeline.llmSort') : t('pipeline.evidence.sort')}
               </span>
             )}
           </div>
@@ -568,12 +533,6 @@ export function Pipeline({
                       <span className="ml-auto text-[10px] text-zinc-500">{materialReadyCount}/4 {t('pipeline.materials')}</span>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      <MaterialBadge label={t('pipeline.materialShort.llm')} ready={Boolean(item.reportPath)} tone="emerald" />
-                      <MaterialBadge label={t('pipeline.materialShort.resumeSuggestion')} ready={Boolean(item.resumeSuggestionPath)} tone="indigo" />
-                      <MaterialBadge label={t('pipeline.materialShort.resumeDraft')} ready={Boolean(item.resumeDraftPath)} tone="indigo" />
-                      <MaterialBadge label={t('pipeline.materialShort.interviewPrep')} ready={Boolean(item.interviewPrepPath)} tone="cyan" />
-                    </div>
                     {(() => {
                       const readiness = evidenceReadinessBySourceKey.get(item.sourceKey) || getEvidenceReadiness(item, [], coverageByRequirement);
                       return (
@@ -606,6 +565,20 @@ export function Pipeline({
           )}
           </div>
         </aside>
+
+        {selectedItem && (
+          <div className={`pipeline-list-divider${listCollapsed ? ' pipeline-list-divider--collapsed' : ''}`}>
+            <button
+              type="button"
+              className="pipeline-list-toggle"
+              onClick={() => setListCollapsed((value) => !value)}
+              aria-label={listCollapsed ? t('pipeline.showList') : t('pipeline.hideList')}
+              title={listCollapsed ? t('pipeline.showList') : t('pipeline.hideList')}
+            >
+              {listCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            </button>
+          </div>
+        )}
 
         {selectedItem && (
           <JobWorkspace
@@ -665,12 +638,6 @@ export function Pipeline({
           </div>
         )}
       </div>
-
-      {pipeline?.path && (
-        <div className="mt-3 text-xs text-zinc-600 truncate">
-          {t('pipeline.sourceFile', { path: pipeline.path })}
-        </div>
-      )}
 
       {report && (
         <div

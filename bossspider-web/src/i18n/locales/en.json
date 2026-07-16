@@ -96,6 +96,13 @@
     "subtitle": "These settings apply to all of BossFlow and do not change with the job-search direction.",
     "save": "Save settings",
     "saving": "Saving…",
+    "interface": {
+      "title": "Interface & Language",
+      "description": "Adjust the app language and appearance. Language choices live here so more can be added later.",
+      "language": "Display language",
+      "languageDescription": "Changes apply immediately and are remembered on this device.",
+      "languages": { "zh": "简体中文", "en": "English" }
+    },
     "llm": {
       "title": "LLM service",
       "description": "Used for ingestion rules, scoring keywords, job evaluation, resumes, and interview materials. The API key stays in local system settings and is never stored in a job-search direction.",
@@ -428,8 +435,10 @@
     "pending": "Pending",
     "processed": "Processed",
     "llmSort": "LLM sort",
-    "focusMode": "Focus mode",
-    "exitFocusMode": "Show list",
+    "sortLabel": "Sort order",
+    "sortDefault": "Default order",
+    "hideList": "Collapse candidate list",
+    "showList": "Expand candidate list",
     "refresh": "Refresh",
     "rescorePending": "Rescore pending",
     "status": "Status",

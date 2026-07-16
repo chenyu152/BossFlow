@@ -8,6 +8,12 @@
   button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   input, select, textarea { color: var(--text-primary); }
   input::placeholder, textarea::placeholder { color: var(--text-muted); }
+  select { color-scheme: light; }
+  select option, select optgroup { background: var(--surface-panel); color: var(--text-primary); }
+  select option:disabled { color: var(--text-muted); }
+  .dark select { color-scheme: dark; }
+  .dark select option, .dark select optgroup { background: #0c1a2b; color: #f2f6fc; }
+  .dark select option:disabled { color: #718198; }
 }
 
 .app-shell { background: var(--surface-canvas) !important; color: var(--text-primary) !important; }
@@ -288,14 +294,41 @@
 .theme-option__preview { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border-radius: .4rem; background: var(--surface-raised); color: var(--action-primary); }
 
 .pipeline-page { min-height: 0; }
-.pipeline-page > .flex:first-child { padding: .15rem 0 .35rem; }
+.pipeline-commandbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .05rem 0 .65rem; }
+.pipeline-commandbar__heading { display: flex; min-width: max-content; align-items: baseline; gap: .55rem; }
+.pipeline-commandbar__heading h2 { color: var(--text-primary) !important; font-size: 1rem; }
+.pipeline-commandbar__heading p { color: var(--text-muted) !important; white-space: nowrap; }
+.pipeline-commandbar__controls { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: .4rem; }
+.pipeline-select-control { display: flex; min-width: 0; align-items: center; gap: .42rem; border: 1px solid var(--border-subtle); border-radius: .46rem; background: var(--surface-panel); padding: .08rem .16rem .08rem .55rem; color: var(--text-muted); }
+.pipeline-select-control:focus-within { border-color: var(--action-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--action-primary) 10%, transparent); }
+.pipeline-select-control > span { flex: none; font-size: .58rem; font-weight: 680; }
+.pipeline-select-control select { width: 9.3rem; min-width: 0; border: 0; background: transparent; padding: .38rem .35rem; color: var(--text-primary); font-size: .68rem; outline: none; }
+.pipeline-select-control--sort { padding-left: .5rem; color: var(--text-muted); }
+.pipeline-select-control--sort select { width: 7.8rem; }
 .pipeline-workspace { border-color: var(--border-subtle) !important; background: var(--surface-panel) !important; box-shadow: 0 12px 28px color-mix(in srgb, #172033 8%, transparent); }
 .pipeline-list { background: var(--surface-subtle) !important; }
-.pipeline-job-card { position: relative; border-color: var(--border-subtle) !important; background: var(--surface-panel) !important; }
+.pipeline-job-card { position: relative; border-color: var(--border-subtle) !important; background: var(--surface-panel) !important; padding: .68rem !important; }
 .pipeline-job-card:hover { border-color: var(--border-strong) !important; background: var(--surface-hover) !important; }
 .pipeline-job-card--evaluating { background: color-mix(in srgb, var(--status-confirmed-surface) 72%, var(--surface-panel)) !important; }
 .pipeline-job-card--selected { border-color: #93c5fd !important; background: var(--surface-selected) !important; box-shadow: inset 3px 0 0 var(--action-primary) !important; }
 .pipeline-job-card .text-emerald-400 { color: var(--status-confirmed) !important; }
+.pipeline-list-divider { position: relative; z-index: 16; width: 0; flex: 0 0 0; }
+.pipeline-list-toggle { position: absolute; top: .65rem; left: -.78rem; display: none; width: 1.6rem; height: 1.6rem; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: .42rem; background: var(--surface-panel); color: var(--text-muted); box-shadow: var(--shadow-soft); }
+.pipeline-list-toggle:hover { border-color: color-mix(in srgb, var(--action-primary) 38%, var(--border-strong)); background: var(--surface-hover); color: var(--action-primary); }
+.pipeline-list-divider--collapsed .pipeline-list-toggle { left: .45rem; }
+@media (min-width: 900px) {
+  .pipeline-list-toggle { display: inline-flex; }
+  .pipeline-list.pipeline-list--collapsed { display: none !important; }
+}
+@media (max-width: 1080px) {
+  .pipeline-commandbar { align-items: flex-start; flex-direction: column; }
+  .pipeline-commandbar__controls { width: 100%; justify-content: flex-start; }
+}
+@media (max-width: 720px) {
+  .pipeline-commandbar__controls { flex-wrap: wrap; }
+  .pipeline-select-control { flex: 1 1 10rem; }
+  .pipeline-select-control select { width: 100%; }
+}
 .job-workspace { background: var(--surface-panel) !important; }
 .workspace-section { border-color: var(--border-subtle) !important; background: var(--surface-elevated) !important; }
 .workspace-metric { border-color: var(--border-subtle) !important; background: var(--surface-elevated) !important; }
@@ -480,6 +513,8 @@
   padding: 0 .75rem 0 1rem;
   backdrop-filter: blur(16px);
 }
+html[data-desktop-platform="win32"] .desktop-titlebar,
+html[data-desktop-platform="linux"] .desktop-titlebar { padding-right: 9.5rem; }
 .desktop-titlebar button, .desktop-titlebar select { -webkit-app-region: no-drag; }
 .desktop-titlebar__identity { display: flex; min-width: 0; align-items: baseline; gap: .45rem; white-space: nowrap; }
 .desktop-titlebar__product { color: var(--text-primary); font-size: .79rem; font-weight: 700; letter-spacing: .01em; }
@@ -495,9 +530,6 @@
 .desktop-titlebar__database { display: flex; max-width: 10rem; min-width: 0; align-items: center; gap: .35rem; color: var(--text-muted); font-size: .68rem; }
 .desktop-titlebar__database span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-titlebar__database:hover { color: var(--text-primary); }
-.desktop-language-toggle { display: flex; gap: .1rem; border: 1px solid var(--border-subtle); border-radius: .42rem; background: var(--surface-subtle); padding: .12rem; }
-.desktop-language-toggle__button { border-radius: .28rem; padding: .16rem .35rem; color: var(--text-muted); font-size: .62rem; font-weight: 700; }
-.desktop-language-toggle__button--active { background: var(--surface-panel); color: var(--action-primary); box-shadow: 0 1px 2px color-mix(in srgb, #172033 12%, transparent); }
 .desktop-titlebar__primary-action, .desktop-titlebar__stop-action { display: inline-flex; height: 2rem; align-items: center; gap: .35rem; border-radius: .48rem; padding: 0 .72rem; font-size: .72rem; font-weight: 700; }
 .desktop-titlebar__primary-action { background: var(--action-primary); color: #fff; box-shadow: 0 5px 14px color-mix(in srgb, var(--action-primary) 22%, transparent); }
 .desktop-titlebar__primary-action:hover { background: var(--action-primary-hover); }
@@ -516,8 +548,15 @@
   .desktop-rail__label { font-size: .56rem; }
   .desktop-titlebar__product, .desktop-titlebar__separator { display: none; }
   .desktop-project-switcher__select { max-width: 6.5rem; }
-  .desktop-language-toggle { display: none; }
 }
+
+.settings-language-field { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.settings-language-field > span { display: grid; gap: .2rem; }
+.settings-language-field strong { color: var(--text-primary); font-size: .76rem; }
+.settings-language-field small { color: var(--text-muted); font-size: .65rem; line-height: 1rem; }
+.settings-language-field select { min-width: 12rem; border: 1px solid var(--border-subtle); border-radius: .48rem; background: var(--surface-subtle); padding: .52rem 2rem .52rem .65rem; color: var(--text-primary); font-size: .72rem; outline: none; }
+.settings-language-field select:focus { border-color: var(--action-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--action-primary) 12%, transparent); }
+@media (max-width: 600px) { .settings-language-field { align-items: stretch; flex-direction: column; } .settings-language-field select { width: 100%; } }
 
 /* Today workspace: one decisive next action, then dense task launchers. */
 .dashboard-home__heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }

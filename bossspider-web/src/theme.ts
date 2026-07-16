@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
 
+declare global {
+  interface Window {
+    bossflowDesktop?: {
+      platform: string;
+      setTheme: (theme: 'dark' | 'light') => void;
+    };
+  }
+}
+
 export const THEME_STORAGE_KEY = 'bossflow-theme-mode';
 
 function getStoredThemeMode(): ThemeMode {
@@ -26,6 +35,7 @@ export function applyTheme(mode: ThemeMode) {
   root.dataset.theme = resolved;
   root.classList.toggle('dark', resolved === 'dark');
   root.style.colorScheme = resolved;
+  window.bossflowDesktop?.setTheme(resolved);
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, mode);
   } catch {

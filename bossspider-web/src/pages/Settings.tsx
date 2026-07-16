@@ -1,4 +1,4 @@
-import { Eye, EyeOff, KeyRound, PlugZap, Save, Settings2 } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Languages, PlugZap, Save, Settings2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { bossApi } from '../api';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
@@ -15,7 +15,8 @@ export function Settings({
   returnToMatchingGuideAfterTest?: boolean;
   onReturnToMatchingGuide?: () => void;
 }) {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
+  const currentLanguage = (i18n.resolvedLanguage || i18n.language).startsWith('en') ? 'en' : 'zh';
   const [settings, setSettings] = useState<LlmSettingsStatus | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [apiBase, setApiBase] = useState('');
@@ -159,10 +160,28 @@ export function Settings({
       </section>
       <section className="rounded-lg border border-zinc-800 bg-zinc-950">
         <div className="border-b border-zinc-800 p-5">
-          <h2 className="text-base font-semibold text-zinc-100">{t('theme.appearance')}</h2>
-          <p className="mt-2 text-sm leading-6 text-zinc-500">{t('theme.appearanceDescription')}</p>
+          <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-100"><Languages size={17} className="text-indigo-300" />{t('settings.interface.title')}</h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">{t('settings.interface.description')}</p>
         </div>
-        <div className="p-4 sm:p-5"><ThemeOptions /></div>
+        <div className="space-y-5 p-4 sm:p-5">
+          <label className="settings-language-field">
+            <span>
+              <strong>{t('settings.interface.language')}</strong>
+              <small>{t('settings.interface.languageDescription')}</small>
+            </span>
+            <select value={currentLanguage} onChange={(event) => void i18n.changeLanguage(event.target.value)}>
+              <option value="zh">{t('settings.interface.languages.zh')}</option>
+              <option value="en">{t('settings.interface.languages.en')}</option>
+            </select>
+          </label>
+          <div className="border-t border-zinc-800 pt-5">
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold text-zinc-100">{t('theme.appearance')}</h3>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">{t('theme.appearanceDescription')}</p>
+            </div>
+            <ThemeOptions />
+          </div>
+        </div>
       </section>
       {setupGuideOpen && (
         <GuidedTour

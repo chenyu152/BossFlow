@@ -388,18 +388,6 @@ export default function App() {
               </span>
             </button>
             <div className="desktop-titlebar__secondary-controls">
-            <div className="desktop-language-toggle">
-              {(['zh', 'en'] as const).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => i18n.changeLanguage(lang)}
-                  className={currentLanguage.startsWith(lang) ? 'desktop-language-toggle__button desktop-language-toggle__button--active' : 'desktop-language-toggle__button'}
-                  title={lang === 'zh' ? '切换到中文' : 'Switch to English'}
-                >
-                  {lang === 'zh' ? '中' : 'EN'}
-                </button>
-              ))}
-            </div>
             <button type="button" onClick={() => navigateToTab('Logs')} className="desktop-titlebar__icon-button" title={t('header.viewLogs')} aria-label={t('header.viewLogs')}>
               <Terminal size={15} />
             </button>

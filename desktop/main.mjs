@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
 import { mkdir } from 'node:fs/promises';
@@ -15,6 +15,26 @@ let backendUrl = '';
 let frontendUrl = '';
 let runtimeToken = '';
 let isQuitting = false;
+
+const desktopTheme = {
+  dark: {
+    backgroundColor: '#07111f',
+    titleBarOverlay: { color: '#0c1a2b', symbolColor: '#f2f6fc', height: 48 },
+  },
+  light: {
+    backgroundColor: '#f6f8fb',
+    titleBarOverlay: { color: '#ffffff', symbolColor: '#172033', height: 48 },
+  },
+};
+
+function applyDesktopTheme(theme) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const palette = desktopTheme[theme] || desktopTheme.light;
+  mainWindow.setBackgroundColor(palette.backgroundColor);
+  if (process.platform !== 'darwin') {
+    mainWindow.setTitleBarOverlay(palette.titleBarOverlay);
+  }
+}
 
 function developmentConfig() {
   const backendPort = process.env.BOSSFLOW_BACKEND_PORT || '8000';
@@ -117,14 +137,19 @@ async function startPackagedSidecar() {
 }
 
 async function createWindow() {
+  const initialTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  const initialPalette = desktopTheme[initialTheme];
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 960,
     minWidth: 1120,
     minHeight: 720,
     show: false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform !== 'darwin' ? { titleBarOverlay: initialPalette.titleBarOverlay } : {}),
+    backgroundColor: initialPalette.backgroundColor,
     webPreferences: {
-      preload: join(here, 'preload.mjs'),
+      preload: join(here, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -132,6 +157,7 @@ async function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
+  if (process.platform === 'win32') mainWindow.setAccentColor(false);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
@@ -185,6 +211,10 @@ app.whenReady().then(async () => {
     await stopPackagedSidecar();
     app.quit();
   }
+});
+
+ipcMain.on('bossflow:theme-changed', (_event, theme) => {
+  if (theme === 'dark' || theme === 'light') applyDesktopTheme(theme);
 });
 
 app.on('before-quit', async (event) => {
