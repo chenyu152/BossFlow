@@ -1,0 +1,9 @@
+interface:
+  display_name: "Import Story Bank"
+  short_description: "Turn authorized project evidence into story drafts"
+  default_prompt: "Use $import-story-bank to extract interview story drafts from this authorized project."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "bossflow"
+      description: "BossFlow local story draft and evidence tools"

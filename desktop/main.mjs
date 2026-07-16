@@ -1,9 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
@@ -14,6 +14,9 @@ let sidecar;
 let backendUrl = '';
 let frontendUrl = '';
 let runtimeToken = '';
+let agentToken = '';
+let agentConnectionFile = '';
+let packagedSidecarPath = '';
 let isQuitting = false;
 let tray;
 let desktopSettings = {
@@ -27,6 +30,39 @@ if (!hasSingleInstanceLock) app.quit();
 
 function desktopSettingsPath() {
   return join(app.getPath('userData'), 'desktop-settings.json');
+}
+
+function agentAccessPath() {
+  return join(app.getPath('userData'), 'agent-access.json');
+}
+
+function agentRuntimePath() {
+  return join(app.getPath('userData'), 'agent-runtime.json');
+}
+
+async function loadAgentAccess() {
+  try {
+    const stored = JSON.parse(await readFile(agentAccessPath(), 'utf8'));
+    agentToken = typeof stored.token === 'string' && stored.token.length >= 32 ? stored.token : '';
+  } catch {
+    agentToken = '';
+  }
+  if (!agentToken) {
+    agentToken = randomBytes(32).toString('base64url');
+    await mkdir(dirname(agentAccessPath()), { recursive: true });
+    await writeFile(agentAccessPath(), `${JSON.stringify({ token: agentToken }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  }
+  agentConnectionFile = agentRuntimePath();
+}
+
+async function writeAgentRuntime() {
+  if (!agentToken || !backendUrl) return;
+  await mkdir(dirname(agentConnectionFile), { recursive: true });
+  await writeFile(agentConnectionFile, `${JSON.stringify({
+    url: `${backendUrl}/mcp/`,
+    token: agentToken,
+    updatedAt: new Date().toISOString(),
+  }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
 }
 
 function normalizeDesktopSettings(value = {}) {
@@ -179,6 +215,7 @@ async function startPackagedSidecar() {
   await mkdir(workspace, { recursive: true });
 
   runtimeToken = randomBytes(32).toString('base64url');
+  packagedSidecarPath = sidecarPath;
   backendUrl = `http://127.0.0.1:${port}`;
   frontendUrl = backendUrl;
   sidecar = spawn(sidecarPath, [], {
@@ -191,6 +228,7 @@ async function startPackagedSidecar() {
       BOSSFLOW_PORT: String(port),
       BOSSFLOW_RESOURCE_DIR: resourceDir,
       BOSSFLOW_RUNTIME_TOKEN: runtimeToken,
+      BOSSFLOW_AGENT_TOKEN: agentToken,
       BOSSFLOW_WEB_DIR: webDir,
     },
   });
@@ -203,6 +241,7 @@ async function startPackagedSidecar() {
     }
   });
   await waitForBackend(backendUrl);
+  await writeAgentRuntime();
 }
 
 async function createWindow() {
@@ -249,7 +288,10 @@ async function createWindow() {
 }
 
 async function stopPackagedSidecar() {
-  if (!sidecar || sidecar.exitCode !== null) return;
+  if (!sidecar || sidecar.exitCode !== null) {
+    await unlink(agentConnectionFile).catch(() => {});
+    return;
+  }
   try {
     await fetch(`${backendUrl}/api/tasks/stop`, {
       method: 'POST',
@@ -271,6 +313,7 @@ async function stopPackagedSidecar() {
   } else {
     sidecar.kill('SIGTERM');
   }
+  await unlink(agentConnectionFile).catch(() => {});
 }
 
 app.whenReady().then(async () => {
@@ -278,11 +321,15 @@ app.whenReady().then(async () => {
   try {
     await loadDesktopSettings();
     if (isDevelopment) {
+      agentConnectionFile = agentRuntimePath();
+      agentToken = process.env.BOSSFLOW_AGENT_TOKEN || '';
       const config = developmentConfig();
       backendUrl = config.backendUrl;
       frontendUrl = config.frontendUrl;
       await waitForBackend(backendUrl, 12);
+      if (agentToken) await writeAgentRuntime();
     } else {
+      await loadAgentAccess();
       await startPackagedSidecar();
       attachDesktopRuntimeToken();
     }
@@ -311,6 +358,52 @@ ipcMain.handle('bossflow:desktop-settings:set', async (_event, value) => {
   await syncTray();
   if (!desktopSettings.keepRunningInTray && mainWindow && !mainWindow.isVisible()) showMainWindow();
   return { supported: true, ...desktopSettings };
+});
+
+ipcMain.handle('bossflow:agent-access:get', async (event) => {
+  if (!trustedUrl(event.senderFrame?.url || '')) throw new Error('Untrusted Agent access request');
+  const sourceRoot = resolve(here, '..');
+  const command = isDevelopment ? (process.env.PYTHON || 'python') : packagedSidecarPath;
+  const args = isDevelopment
+    ? [join(sourceRoot, 'backend', 'mcp_stdio_bridge.py')]
+    : ['--mcp-stdio-bridge'];
+  const supported = Boolean(agentToken && backendUrl && command);
+  let server = {
+    name: 'BossFlow MCP Server',
+    status: supported ? 'unavailable' : 'disabled',
+    transport: 'Streamable HTTP + stdio bridge',
+    endpoint: supported ? `${backendUrl}/mcp/` : '',
+    toolCount: 0,
+    resourceCount: 0,
+  };
+  if (backendUrl) {
+    try {
+      const response = await fetch(`${backendUrl}/api/mcp/status`);
+      if (response.ok) {
+        const status = await response.json();
+        server = { ...server, ...status, endpoint: `${backendUrl}${status.endpoint || '/mcp/'}` };
+      }
+    } catch {
+      // Keep the unavailable state visible so the renderer can offer retry.
+    }
+  }
+  return {
+    supported,
+    server,
+    endpoint: supported ? `${backendUrl}/mcp/` : '',
+    connectionFile: supported ? agentConnectionFile : '',
+    stdioConfig: supported ? {
+      type: 'stdio',
+      command,
+      args,
+      env: { BOSSFLOW_AGENT_CONNECTION_FILE: agentConnectionFile },
+    } : null,
+    httpConfig: supported ? {
+      type: 'http',
+      url: `${backendUrl}/mcp/`,
+      headers: { Authorization: `Bearer ${agentToken}` },
+    } : null,
+  };
 });
 
 app.on('second-instance', showMainWindow);

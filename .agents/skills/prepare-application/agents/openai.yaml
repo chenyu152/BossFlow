@@ -1,0 +1,9 @@
+interface:
+  display_name: "Prepare Application"
+  short_description: "Review a role and prepare grounded application material"
+  default_prompt: "Use $prepare-application to prepare evidence-bound materials for this candidate role."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "bossflow"
+      description: "BossFlow local job-search tools and resources"

@@ -1,0 +1,9 @@
+interface:
+  display_name: "Triage New Jobs"
+  short_description: "Review new jobs and build a confirmed shortlist"
+  default_prompt: "Use $triage-new-jobs to review newly collected roles and propose a shortlist."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "bossflow"
+      description: "BossFlow local job-search tools and resources"

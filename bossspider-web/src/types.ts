@@ -64,6 +64,33 @@ export type DesktopSettings = {
   keepRunningInTray: boolean;
 };
 
+export type AgentMcpConfig = {
+  type: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+};
+
+export type McpServerInfo = {
+  name: string;
+  status: 'running' | 'unavailable' | 'disabled';
+  transport: string;
+  endpoint: string;
+  toolCount: number;
+  resourceCount: number;
+};
+
+export type AgentAccess = {
+  supported: boolean;
+  server: McpServerInfo;
+  endpoint: string;
+  connectionFile: string;
+  stdioConfig: AgentMcpConfig | null;
+  httpConfig: AgentMcpConfig | null;
+};
+
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'failed';
 
 export type ConfigPayload = {

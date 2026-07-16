@@ -31,6 +31,11 @@ def _port() -> int:
 
 def main() -> None:
     _configure_standard_streams()
+    if "--mcp-stdio-bridge" in sys.argv:
+        from backend.mcp_stdio_bridge import main as bridge_main
+
+        bridge_main()
+        return
     if not os.environ.get("BOSSFLOW_HOME"):
         raise RuntimeError("BOSSFLOW_HOME is required for the desktop sidecar")
     os.environ.setdefault("BOSSFLOW_DESKTOP", "1")

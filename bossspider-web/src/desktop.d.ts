@@ -1,4 +1,4 @@
-import type { DesktopSettings } from './types';
+import type { AgentAccess, DesktopSettings } from './types';
 
 declare global {
   interface Window {
@@ -7,6 +7,7 @@ declare global {
       setTheme: (theme: 'dark' | 'light') => void;
       getSettings: () => Promise<DesktopSettings>;
       setSettings: (settings: Omit<DesktopSettings, 'supported'>) => Promise<DesktopSettings>;
+      getAgentAccess: () => Promise<AgentAccess>;
     };
   }
 }

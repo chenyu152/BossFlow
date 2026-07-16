@@ -1,10 +1,10 @@
-import { CalendarClock, Check, ChevronDown, Clock3, Eye, EyeOff, KeyRound, Languages, MonitorUp, Pencil, Play, PlugZap, Plus, Save, Settings2, Trash2 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { CalendarClock, Check, ChevronDown, Clock3, Copy, Eye, EyeOff, KeyRound, Languages, MonitorUp, Pencil, Play, PlugZap, Plus, RefreshCw, Save, Server, Settings2, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { ThemeOptions } from '../components/ThemePicker';
 import { useAppTranslation } from '../i18n';
-import type { AutomationResponse, AutomationSchedule, AutomationScheduleInput, DesktopSettings, LlmSettingsStatus } from '../types';
+import type { AgentAccess, AutomationResponse, AutomationSchedule, AutomationScheduleInput, DesktopSettings, LlmSettingsStatus } from '../types';
 
 const defaultSchedule: AutomationScheduleInput = {
   project: '',
@@ -15,6 +15,8 @@ const defaultSchedule: AutomationScheduleInput = {
   misfirePolicy: 'run_once',
   maxDelayMinutes: 360,
 };
+
+type McpClient = 'claude' | 'codex' | 'trae';
 
 function scheduleInput(schedule: AutomationSchedule): AutomationScheduleInput {
   return {
@@ -146,6 +148,11 @@ export function Settings({
   const [automationError, setAutomationError] = useState('');
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null);
   const [desktopSaving, setDesktopSaving] = useState(false);
+  const [agentAccess, setAgentAccess] = useState<AgentAccess | null>(null);
+  const [agentLoading, setAgentLoading] = useState(Boolean(window.bossflowDesktop));
+  const [agentAccessError, setAgentAccessError] = useState('');
+  const [mcpClient, setMcpClient] = useState<McpClient>('claude');
+  const [agentCopyState, setAgentCopyState] = useState<McpClient | ''>('');
   const setupGuideSteps = useMemo<GuidedTourStep[]>(() => [
     {
       target: 'settings-test-api',
@@ -153,6 +160,34 @@ export function Settings({
       body: t('settings.llm.setupTour.body'),
     },
   ], [t]);
+
+  const mcpConfigText = useMemo(() => {
+    const config = agentAccess?.stdioConfig;
+    if (!config?.command) return '';
+    const stdioConfig = {
+      type: 'stdio',
+      command: config.command,
+      args: config.args || [],
+      env: config.env || {},
+    };
+    if (mcpClient === 'claude') return JSON.stringify(stdioConfig, null, 2);
+    if (mcpClient === 'trae') return JSON.stringify({ mcpServers: { bossflow: stdioConfig } }, null, 2);
+    const quote = (value: string) => JSON.stringify(value);
+    const lines = [
+      '[mcp_servers.bossflow]',
+      `command = ${quote(config.command)}`,
+      `args = [${(config.args || []).map(quote).join(', ')}]`,
+      'startup_timeout_sec = 20',
+      'tool_timeout_sec = 120',
+      'default_tools_approval_mode = "writes"',
+    ];
+    const env = Object.entries(config.env || {});
+    if (env.length) {
+      lines.push('', '[mcp_servers.bossflow.env]');
+      env.forEach(([key, value]) => lines.push(`${key} = ${quote(value)}`));
+    }
+    return lines.join('\n');
+  }, [agentAccess, mcpClient]);
 
   const load = async () => {
     setError('');
@@ -192,12 +227,35 @@ export function Settings({
     return () => window.clearInterval(timer);
   }, []);
 
+  const loadAgentAccess = useCallback(async () => {
+    if (!window.bossflowDesktop) {
+      setAgentLoading(false);
+      return;
+    }
+    setAgentLoading(true);
+    setAgentAccessError('');
+    let timeout = 0;
+    try {
+      const timeoutPromise = new Promise<AgentAccess>((_resolve, reject) => {
+        timeout = window.setTimeout(() => reject(new Error('MCP status request timed out')), 5000);
+      });
+      setAgentAccess(await Promise.race([window.bossflowDesktop.getAgentAccess(), timeoutPromise]));
+    } catch (desktopError) {
+      setAgentAccess(null);
+      setAgentAccessError((desktopError as Error).message);
+    } finally {
+      window.clearTimeout(timeout);
+      setAgentLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!window.bossflowDesktop) return;
     void window.bossflowDesktop.getSettings().then(setDesktopSettings).catch((desktopError) => {
       setAutomationError((desktopError as Error).message);
     });
-  }, []);
+    void loadAgentAccess();
+  }, [loadAgentAccess]);
 
   const saveSchedule = async () => {
     if (!scheduleDraft.project) return;
@@ -281,6 +339,17 @@ export function Settings({
       setAutomationError((desktopError as Error).message);
     } finally {
       setDesktopSaving(false);
+    }
+  };
+
+  const copyAgentConfig = async () => {
+    if (!mcpConfigText) return;
+    try {
+      await navigator.clipboard.writeText(mcpConfigText);
+      setAgentCopyState(mcpClient);
+      window.setTimeout(() => setAgentCopyState(''), 1800);
+    } catch (copyError) {
+      setAutomationError((copyError as Error).message);
     }
   };
 
@@ -390,6 +459,54 @@ export function Settings({
             <button data-guide-target="settings-test-api" onClick={() => void testConnection()} disabled={testing || saving} className="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950/20 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-950/40 disabled:cursor-not-allowed disabled:opacity-60"><PlugZap size={15} />{testing ? t('settings.llm.testing') : t('settings.llm.test')}</button>
             <button onClick={() => void save()} disabled={saving} className="inline-flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"><Save size={15} />{saving ? t('settings.saving') : t('settings.save')}</button>
           </div>
+        </div>
+      </section>
+      <section className="rounded-lg border border-zinc-800 bg-zinc-950">
+        <div className="border-b border-zinc-800 p-5">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-100"><Server size={17} className="text-indigo-300" />MCP</h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">{isZh ? '查看 BossFlow MCP Server 运行状态，并将它连接到支持 MCP 的工具。' : 'Check the BossFlow MCP Server and connect it to MCP-compatible tools.'}</p>
+        </div>
+        <div className="mcp-panel p-4 sm:p-5">
+          {!window.bossflowDesktop && <div className="automation-empty">{isZh ? 'MCP Server 仅在 BossFlow 桌面应用中启用。' : 'The MCP Server is available in the BossFlow desktop app.'}</div>}
+          {window.bossflowDesktop && agentLoading && !agentAccess && <div className="automation-empty">{isZh ? '正在检查 MCP Server…' : 'Checking the MCP Server…'}</div>}
+          {agentAccessError && <div className="mcp-load-error"><span>{isZh ? `无法读取 MCP 状态：${agentAccessError}` : `Unable to read MCP status: ${agentAccessError}`}</span><button type="button" onClick={() => void loadAgentAccess()}>{isZh ? '重试' : 'Retry'}</button></div>}
+          {agentAccess && <>
+            <div className={`mcp-server-card is-${agentAccess.server.status}`}>
+              <div className="mcp-server-main">
+                <span className="mcp-server-icon"><Server size={18} /></span>
+                <div>
+                  <div className="mcp-server-title"><strong>{agentAccess.server.name}</strong><span><i />{agentAccess.server.status === 'running' ? (isZh ? '运行中' : 'Running') : agentAccess.server.status === 'disabled' ? (isZh ? '未启用' : 'Disabled') : (isZh ? '无法连接' : 'Unavailable')}</span></div>
+                  <code>{agentAccess.server.endpoint || (isZh ? '暂无 Server 地址' : 'No server endpoint')}</code>
+                </div>
+              </div>
+              <div className="mcp-server-meta">
+                <span>{agentAccess.server.transport}</span>
+                <span>{agentAccess.server.toolCount} Tools</span>
+                <span>{agentAccess.server.resourceCount} Resources</span>
+                <button type="button" onClick={() => void loadAgentAccess()} disabled={agentLoading}><RefreshCw size={14} className={agentLoading ? 'animate-spin' : ''} />{isZh ? '刷新' : 'Refresh'}</button>
+              </div>
+            </div>
+            {!agentAccess.supported && <div className="automation-empty">{isZh ? '当前环境没有可用的 MCP 连接令牌，Server 无法供外部工具连接。' : 'No MCP access token is available in this environment.'}</div>}
+            {agentAccess.supported && <>
+              <div className="mcp-connect-heading"><div><strong>{isZh ? '连接工具' : 'Connect a tool'}</strong><p>{isZh ? '选择你使用的工具，按步骤添加同一个 BossFlow MCP Server。' : 'Choose a tool and follow the steps to add this BossFlow MCP Server.'}</p></div><span>{isZh ? '推荐使用 stdio，应用重启后无需更新端口' : 'stdio recommended; no port updates after restart'}</span></div>
+              <div className="mcp-client-tabs" role="tablist" aria-label={isZh ? '选择 MCP 客户端' : 'Choose MCP client'}>
+                {([['claude', 'Claude Code'], ['codex', 'Codex'], ['trae', 'Trae']] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={mcpClient === value} className={mcpClient === value ? 'is-active' : ''} onClick={() => setMcpClient(value)}>{label}</button>)}
+              </div>
+              <div className="mcp-client-guide">
+                <div className="mcp-client-steps">
+                  <strong>{mcpClient === 'claude' ? 'Claude Code' : mcpClient === 'codex' ? 'Codex' : 'Trae'} {isZh ? '配置步骤' : 'setup'}</strong>
+                  {mcpClient === 'claude' && <ol><li>{isZh ? '保持 BossFlow 运行，在终端打开 Claude Code。' : 'Keep BossFlow running and open Claude Code in a terminal.'}</li><li>{isZh ? '运行 claude mcp add-json bossflow，并把右侧 JSON 作为配置；建议使用 --scope user。' : 'Run claude mcp add-json bossflow with the JSON shown here; user scope is recommended.'}</li><li>{isZh ? '运行 claude mcp get bossflow，或在会话中输入 /mcp 检查连接。' : 'Run claude mcp get bossflow, or enter /mcp in a session to verify.'}</li></ol>}
+                  {mcpClient === 'codex' && <ol><li>{isZh ? '打开 Codex 设置 → MCP servers，或编辑 ~/.codex/config.toml。' : 'Open Codex Settings → MCP servers, or edit ~/.codex/config.toml.'}</li><li>{isZh ? '将右侧 TOML 追加到配置文件并保存。' : 'Append the TOML shown here and save the file.'}</li><li>{isZh ? '重启 Codex，然后通过 MCP servers 页面或 /mcp 检查状态。' : 'Restart Codex, then verify in MCP servers or with /mcp.'}</li></ol>}
+                  {mcpClient === 'trae' && <ol><li>{isZh ? '在 Trae AI 对话面板右上角打开设置 → MCP。' : 'In Trae, open AI panel settings → MCP.'}</li><li>{isZh ? '选择“添加 → 手动添加 → 原始配置（JSON）”。' : 'Choose Add → Manual add → Raw configuration (JSON).'}</li><li>{isZh ? '粘贴右侧配置并确认，然后在 Builder with MCP 中检查 BossFlow。' : 'Paste the configuration, save it, then check BossFlow in Builder with MCP.'}</li></ol>}
+                </div>
+                <div className="mcp-config-card">
+                  <div><span>{mcpClient === 'codex' ? 'config.toml' : 'MCP JSON'}</span><button type="button" onClick={() => void copyAgentConfig()}>{agentCopyState === mcpClient ? <Check size={14} /> : <Copy size={14} />}{agentCopyState === mcpClient ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制配置' : 'Copy')}</button></div>
+                  <pre><code>{mcpConfigText}</code></pre>
+                </div>
+              </div>
+              <p className="mcp-security-note">{isZh ? '连接仅对当前 Windows 用户有效；外部工具使用期间需保持 BossFlow 运行。写入、采集和付费 LLM 工具仍会要求确认并记录审计日志。' : 'The connection is limited to the current Windows user. Keep BossFlow running; writes, collection, and paid LLM tools still require confirmation and are audited.'}</p>
+            </>}
+          </>}
         </div>
       </section>
       <section className="rounded-lg border border-zinc-800 bg-zinc-950">

@@ -1,14 +1,15 @@
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
 import tempfile
 
-from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from backend.schemas.automation import AutomationScheduleInput, AutomationScheduleUpdate
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
@@ -31,6 +32,8 @@ from backend.schemas.project import ProjectCreateRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, ResumeSuggestionRequest
 from backend.schemas.scoring import ScoringKeywordSuggestionRequest
 from backend.schemas.system_settings import LlmSettingsUpdate
+from backend.mcp_security import DesktopRuntimeTokenMiddleware, McpSecurityMiddleware
+from backend.mcp_server import create_bossflow_mcp
 from backend.services.automation_service import AutomationService
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.cv_service import create_cv_from_template, cv_status, read_cv_document, save_cv_document
@@ -80,9 +83,27 @@ from backend.services.system_settings_service import llm_settings_status, reveal
 from backend.services.workspace_service import project_from_source_key, project_workspace
 from crawler.boss import load_config
 
-app = FastAPI(title="BossSpider Web Backend", version="0.1.0")
 _desktop_mode = os.environ.get("BOSSFLOW_DESKTOP") == "1"
 _runtime_token = os.environ.get("BOSSFLOW_RUNTIME_TOKEN", "")
+_agent_token = os.environ.get("BOSSFLOW_AGENT_TOKEN", "")
+task_manager = TaskManager()
+automation_service = AutomationService(task_manager)
+bossflow_mcp = create_bossflow_mcp(task_manager)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    automation_service.start()
+    try:
+        async with bossflow_mcp.session_manager.run():
+            yield
+    finally:
+        automation_service.stop()
+
+
+app = FastAPI(title="BossSpider Web Backend", version="0.2.0", lifespan=lifespan)
+app.add_middleware(DesktopRuntimeTokenMiddleware, token=_runtime_token)
+app.mount("/mcp", McpSecurityMiddleware(bossflow_mcp.streamable_http_app(), token=_agent_token), name="mcp")
 
 # The regular browser development server is the only cross-origin caller.  A
 # packaged Electron app is same-origin and should not advertise its loopback
@@ -97,39 +118,32 @@ if not _desktop_mode:
     )
 
 
-@app.middleware("http")
-async def require_desktop_runtime_token(request: Request, call_next):
-    """Reject cross-site state changes against the packaged loopback API."""
-    if (
-        _runtime_token
-        and request.url.path.startswith("/api/")
-        and request.method in {"POST", "PUT", "PATCH", "DELETE"}
-        and request.headers.get("X-BossFlow-Token") != _runtime_token
-    ):
-        return JSONResponse(status_code=403, content={"detail": "Invalid desktop runtime token"})
-    return await call_next(request)
-
-task_manager = TaskManager()
-automation_service = AutomationService(task_manager)
-
-
-@app.on_event("startup")
-def start_automation_service():
-    automation_service.start()
-
-
-@app.on_event("shutdown")
-def stop_automation_service():
-    automation_service.stop()
-
-
 def _workspace_project(project: Optional[str] = None, source_key: str = "") -> str:
     return project_from_source_key(source_key) if source_key else (project or default_project_name())
 
 
 @app.get("/api/health")
 def health_check():
-    return {"ok": True, "desktop": _desktop_mode}
+    return {
+        "ok": True,
+        "desktop": _desktop_mode,
+        "mcp": {"configured": bool(_agent_token), "endpoint": "/mcp/"},
+    }
+
+
+@app.get("/api/mcp/status")
+async def mcp_status():
+    tools = await bossflow_mcp.list_tools()
+    resources = await bossflow_mcp.list_resources()
+    templates = await bossflow_mcp.list_resource_templates()
+    return {
+        "name": "BossFlow MCP Server",
+        "status": "running" if _agent_token else "disabled",
+        "transport": "Streamable HTTP + stdio bridge",
+        "endpoint": "/mcp/",
+        "toolCount": len(tools),
+        "resourceCount": len(resources) + len(templates),
+    }
 
 
 @app.get("/api/projects")

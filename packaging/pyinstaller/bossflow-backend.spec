@@ -52,7 +52,7 @@ a = Analysis(
         (str(ROOT / "crawler" / "config"), "crawler/config"),
         (str(ROOT / "backend" / "services" / "resume_parser" / "models"), "backend/services/resume_parser/models"),
     ],
-    hiddenimports=drission_hiddenimports + rapidocr_hiddenimports,
+    hiddenimports=drission_hiddenimports + rapidocr_hiddenimports + ["backend.mcp_stdio_bridge"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -358,7 +358,46 @@
 .desktop-switch.is-on > span { transform: translateX(.98rem); }
 .desktop-switch:disabled { cursor: not-allowed; opacity: .42; }
 .desktop-setting-warning { margin-top: .55rem; border: 1px solid color-mix(in srgb, var(--status-pending) 28%, var(--border-subtle)); border-radius: .46rem; background: var(--status-pending-surface); padding: .55rem .65rem; color: var(--status-pending); font-size: .62rem; }
+.mcp-panel { display: grid; gap: .72rem; }
+.mcp-load-error { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border: 1px solid color-mix(in srgb, var(--status-blocked) 30%, var(--border-subtle)); border-radius: .5rem; background: var(--status-blocked-surface); padding: .65rem .72rem; color: var(--status-blocked); font-size: .64rem; }
+.mcp-load-error button, .mcp-server-meta button { display: inline-flex; flex: none; align-items: center; gap: .3rem; border: 1px solid var(--border-subtle); border-radius: .4rem; background: var(--surface-panel); padding: .34rem .48rem; color: var(--text-secondary); font-size: .6rem; font-weight: 680; }
+.mcp-load-error button:hover, .mcp-server-meta button:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.mcp-server-card { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border-subtle); border-radius: .58rem; background: var(--surface-subtle); padding: .72rem .78rem; }
+.mcp-server-card.is-running { border-color: color-mix(in srgb, var(--status-confirmed) 30%, var(--border-subtle)); background: var(--status-confirmed-surface); }
+.mcp-server-card.is-unavailable { border-color: color-mix(in srgb, var(--status-blocked) 30%, var(--border-subtle)); background: var(--status-blocked-surface); }
+.mcp-server-main { display: flex; min-width: 0; align-items: center; gap: .68rem; }
+.mcp-server-main > div { min-width: 0; }
+.mcp-server-icon { display: inline-flex; width: 2rem; height: 2rem; flex: none; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); border-radius: .48rem; background: var(--surface-panel); color: var(--action-primary); }
+.mcp-server-title { display: flex; align-items: center; gap: .55rem; }
+.mcp-server-title strong { color: var(--text-primary); font-size: .73rem; }
+.mcp-server-title span { display: inline-flex; align-items: center; gap: .28rem; color: var(--text-muted); font-size: .58rem; font-weight: 700; }
+.mcp-server-title i { width: .42rem; height: .42rem; border-radius: 999px; background: var(--text-muted); }
+.mcp-server-card.is-running .mcp-server-title span { color: var(--status-confirmed); }
+.mcp-server-card.is-running .mcp-server-title i { background: var(--status-confirmed); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-confirmed) 13%, transparent); }
+.mcp-server-card.is-unavailable .mcp-server-title span { color: var(--status-blocked); }
+.mcp-server-card.is-unavailable .mcp-server-title i { background: var(--status-blocked); }
+.mcp-server-main code { display: block; overflow: hidden; margin-top: .2rem; color: var(--text-muted); font-size: .59rem; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-server-meta { display: flex; flex: none; align-items: center; gap: .38rem; }
+.mcp-server-meta > span { border-right: 1px solid var(--border-subtle); padding-right: .38rem; color: var(--text-muted); font-size: .56rem; }
+.mcp-connect-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-top: .12rem; }
+.mcp-connect-heading strong { color: var(--text-primary); font-size: .71rem; }
+.mcp-connect-heading p, .mcp-connect-heading > span { color: var(--text-muted); font-size: .59rem; line-height: .9rem; }
+.mcp-client-tabs { display: flex; gap: .28rem; border-bottom: 1px solid var(--border-subtle); }
+.mcp-client-tabs button { margin-bottom: -1px; border-bottom: 2px solid transparent; padding: .48rem .65rem; color: var(--text-muted); font-size: .64rem; font-weight: 680; }
+.mcp-client-tabs button:hover { color: var(--text-primary); }
+.mcp-client-tabs button.is-active { border-bottom-color: var(--action-primary); color: var(--action-primary); }
+.mcp-client-guide { display: grid; grid-template-columns: minmax(15rem, .78fr) minmax(22rem, 1.22fr); gap: .65rem; }
+.mcp-client-steps { border: 1px solid var(--border-subtle); border-radius: .52rem; background: var(--surface-subtle); padding: .72rem .78rem; }
+.mcp-client-steps > strong { color: var(--text-primary); font-size: .68rem; }
+.mcp-client-steps ol { display: grid; margin: .48rem 0 0 1rem; list-style: decimal; gap: .34rem; color: var(--text-secondary); font-size: .61rem; line-height: .92rem; }
+.mcp-config-card { min-width: 0; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: .52rem; background: var(--surface-sunken); }
+.mcp-config-card > div { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); background: var(--surface-subtle); padding: .42rem .58rem; }
+.mcp-config-card > div > span { color: var(--text-muted); font-size: .58rem; font-weight: 700; }
+.mcp-config-card button { display: inline-flex; align-items: center; gap: .28rem; color: var(--action-primary); font-size: .59rem; font-weight: 680; }
+.mcp-config-card pre { max-height: 11rem; overflow: auto; padding: .62rem .7rem; color: var(--text-secondary); font-size: .57rem; line-height: .86rem; white-space: pre; }
+.mcp-security-note { color: var(--text-muted); font-size: .58rem; line-height: .9rem; }
 @media (max-width: 820px) { .automation-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .mcp-server-card, .mcp-connect-heading { align-items: flex-start; flex-direction: column; } .mcp-server-meta { width: 100%; flex-wrap: wrap; } .mcp-client-guide { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .automation-queue-summary { grid-template-columns: 1fr auto; } .automation-queue-summary small { grid-column: 1 / -1; justify-self: start; } .automation-form-grid { grid-template-columns: 1fr; } .automation-history > div { grid-template-columns: 4.6rem minmax(0, 1fr); } .automation-history > div > small { grid-column: 2; } }
 
 .theme-picker { position: relative; }

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('bossflowDesktop', {
   },
   getSettings: () => ipcRenderer.invoke('bossflow:desktop-settings:get'),
   setSettings: (settings) => ipcRenderer.invoke('bossflow:desktop-settings:set', settings),
+  getAgentAccess: () => ipcRenderer.invoke('bossflow:agent-access:get'),
 });
 
 window.addEventListener('DOMContentLoaded', () => {
