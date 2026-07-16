@@ -20,6 +20,10 @@
     "appId": "com.bossflow.desktop",
     "productName": "BossFlow",
     "asar": true,
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
     "directories": {
       "output": "../release/installer",
       "buildResources": "build"

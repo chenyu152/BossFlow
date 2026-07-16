@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('bossflowDesktop', {
       ipcRenderer.send('bossflow:theme-changed', theme);
     }
   },
+  getSettings: () => ipcRenderer.invoke('bossflow:desktop-settings:get'),
+  setSettings: (settings) => ipcRenderer.invoke('bossflow:desktop-settings:set', settings),
 });
 
 window.addEventListener('DOMContentLoaded', () => {

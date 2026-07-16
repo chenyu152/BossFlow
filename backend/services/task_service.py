@@ -70,7 +70,13 @@ class TaskManager:
                 "logs": list(self.logs),
             }
 
-    def start(self, label: str, target, stop_handler: Optional[Callable[[], None]] = None):
+    def start(
+        self,
+        label: str,
+        target,
+        stop_handler: Optional[Callable[[], None]] = None,
+        on_complete: Optional[Callable[[bool, str], None]] = None,
+    ):
         with self.lock:
             if self.worker and self.worker.is_alive():
                 raise HTTPException(status_code=409, detail="已有任务正在运行")
@@ -82,8 +88,11 @@ class TaskManager:
         self.append_log("任务已启动")
 
         def runner():
+            success = False
+            completion_error = ""
             try:
                 target()
+                success = True
                 self.append_log("任务结束")
                 with self.lock:
                     self.status = "ready"
@@ -91,12 +100,19 @@ class TaskManager:
                     self.current_crawler = None
                     self.current_stop = None
             except Exception:
-                self.append_log(traceback.format_exc())
+                completion_error = traceback.format_exc()
+                self.append_log(completion_error)
                 with self.lock:
                     self.status = "failed"
                     self.running = False
                     self.current_crawler = None
                     self.current_stop = None
+            finally:
+                if on_complete:
+                    try:
+                        on_complete(success, completion_error)
+                    except Exception:
+                        self.append_log(traceback.format_exc())
 
         self.worker = threading.Thread(target=runner, daemon=True)
         self.worker.start()

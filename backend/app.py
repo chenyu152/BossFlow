@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from backend.schemas.automation import AutomationScheduleInput, AutomationScheduleUpdate
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.schemas.cv import CvSaveRequest
 from backend.schemas.evidence import (
@@ -30,6 +31,7 @@ from backend.schemas.project import ProjectCreateRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, ResumeSuggestionRequest
 from backend.schemas.scoring import ScoringKeywordSuggestionRequest
 from backend.schemas.system_settings import LlmSettingsUpdate
+from backend.services.automation_service import AutomationService
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.cv_service import create_cv_from_template, cv_status, read_cv_document, save_cv_document
 from backend.services.evidence_service import (
@@ -108,6 +110,17 @@ async def require_desktop_runtime_token(request: Request, call_next):
     return await call_next(request)
 
 task_manager = TaskManager()
+automation_service = AutomationService(task_manager)
+
+
+@app.on_event("startup")
+def start_automation_service():
+    automation_service.start()
+
+
+@app.on_event("shutdown")
+def stop_automation_service():
+    automation_service.stop()
 
 
 def _workspace_project(project: Optional[str] = None, source_key: str = "") -> str:
@@ -156,6 +169,31 @@ def test_llm_settings(payload: LlmSettingsUpdate):
     except ValueError as error:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/automation")
+def get_automation():
+    return automation_service.snapshot()
+
+
+@app.post("/api/automation/schedules")
+def create_automation_schedule(payload: AutomationScheduleInput):
+    return automation_service.create_schedule(payload)
+
+
+@app.put("/api/automation/schedules/{schedule_id}")
+def update_automation_schedule(schedule_id: str, payload: AutomationScheduleUpdate):
+    return automation_service.update_schedule(schedule_id, payload)
+
+
+@app.delete("/api/automation/schedules/{schedule_id}")
+def delete_automation_schedule(schedule_id: str):
+    return automation_service.delete_schedule(schedule_id)
+
+
+@app.post("/api/automation/schedules/{schedule_id}/run")
+def run_automation_schedule(schedule_id: str):
+    return automation_service.run_now(schedule_id)
 
 
 @app.get("/api/config")

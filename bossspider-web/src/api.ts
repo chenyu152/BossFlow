@@ -1,4 +1,8 @@
 import type {
+  AutomationResponse,
+  AutomationRun,
+  AutomationSchedule,
+  AutomationScheduleInput,
   ConfigPayload,
   CvDocumentResponse,
   CvStatusResponse,
@@ -68,6 +72,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const bossApi = {
+  getAutomation() {
+    return request<AutomationResponse>('/api/automation');
+  },
+
+  createAutomationSchedule(body: AutomationScheduleInput) {
+    return request<AutomationSchedule>('/api/automation/schedules', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  updateAutomationSchedule(scheduleId: string, body: AutomationScheduleInput) {
+    return request<AutomationSchedule>(`/api/automation/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  },
+
+  deleteAutomationSchedule(scheduleId: string) {
+    return request<{ ok: boolean; scheduleId: string }>(`/api/automation/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  runAutomationSchedule(scheduleId: string) {
+    return request<AutomationRun>(`/api/automation/schedules/${encodeURIComponent(scheduleId)}/run`, {
+      method: 'POST',
+    });
+  },
+
   getLlmSettings() {
     return request<LlmSettingsStatus>('/api/system/llm-settings');
   },

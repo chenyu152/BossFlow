@@ -10,7 +10,7 @@ from crawler.db import save_run, upsert_jobs
 from crawler.pipeline import MIN_AVG_SALARY_K, process_batch
 
 
-def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager) -> dict:
+def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager, on_complete=None) -> dict:
     project_dir, config, paths = save_form_config(payload)
 
     def worker():
@@ -60,7 +60,7 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager) -> dict:
                 )
                 print(f"[OK] SQLite 写入完成: 新增 {stats['inserted']}，刷新 {stats['updated']}，跳过 {stats['skipped']}")
 
-    task_manager.start("crawling", worker)
+    task_manager.start("crawling", worker, on_complete=on_complete)
     return {"ok": True, "status": "crawling"}
 
 

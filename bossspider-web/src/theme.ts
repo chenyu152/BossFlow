@@ -2,15 +2,6 @@ import { useEffect, useState } from 'react';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
 
-declare global {
-  interface Window {
-    bossflowDesktop?: {
-      platform: string;
-      setTheme: (theme: 'dark' | 'light') => void;
-    };
-  }
-}
-
 export const THEME_STORAGE_KEY = 'bossflow-theme-mode';
 
 function getStoredThemeMode(): ThemeMode {

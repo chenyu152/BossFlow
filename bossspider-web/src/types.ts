@@ -8,6 +8,62 @@ export type LlmSettingsStatus = {
   source: 'environment' | 'settings-file';
 };
 
+export type AutomationCadence = 'daily' | 'weekdays' | 'weekly';
+export type AutomationMisfirePolicy = 'run_once' | 'skip';
+export type AutomationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'missed' | 'interrupted' | 'cancelled';
+
+export type AutomationScheduleInput = {
+  project: string;
+  enabled: boolean;
+  cadence: AutomationCadence;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  misfirePolicy: AutomationMisfirePolicy;
+  maxDelayMinutes: number;
+};
+
+export type AutomationSchedule = AutomationScheduleInput & {
+  id: string;
+  nextRunAt: string;
+  lastRunStatus: AutomationRunStatus | '';
+  lastRunAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AutomationRun = {
+  id: string;
+  scheduleId: string;
+  project: string;
+  trigger: 'schedule' | 'manual';
+  scheduledFor: string;
+  status: AutomationRunStatus;
+  createdAt: string;
+  startedAt: string;
+  finishedAt: string;
+  error: string;
+};
+
+export type AutomationResponse = {
+  ok: boolean;
+  schedules: AutomationSchedule[];
+  runs: AutomationRun[];
+  queue: {
+    queued: number;
+    running: number;
+    serial: boolean;
+    schedulerRunning: boolean;
+    lastError: string;
+  };
+};
+
+export type DesktopSettings = {
+  supported: boolean;
+  openAtLogin: boolean;
+  startMinimized: boolean;
+  keepRunningInTray: boolean;
+};
+
 export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'failed';
 
 export type ConfigPayload = {
