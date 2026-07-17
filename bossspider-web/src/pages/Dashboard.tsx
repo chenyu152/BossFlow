@@ -339,13 +339,16 @@ export function Dashboard({
     void loadCvStatus();
   }, [config.project]);
 
-  const todayJobs = useMemo(
+  const allTodayJobs = useMemo(
     () => jobs
-      .filter((job) => isToday(job.lastSeen))
-      .sort((a, b) => parseTime(b.lastSeen) - parseTime(a.lastSeen))
-      .slice(0, 5),
+      .filter((job) => isToday(job.firstSeen || job.lastSeen))
+      .sort((a, b) => parseTime(b.firstSeen || b.lastSeen) - parseTime(a.firstSeen || a.lastSeen)),
     [jobs],
   );
+
+  // The dashboard only renders a short preview, but the summary and launcher
+  // counters must reflect every job collected today rather than that preview.
+  const todayJobs = useMemo(() => allTodayJobs.slice(0, 5), [allTodayJobs]);
 
   const recentJobs = useMemo(
     () => [...jobs]
@@ -469,7 +472,7 @@ export function Dashboard({
   const materialCount = materialTasks.length;
   const storyGapCount = storyGapTasks.length;
   const evidenceTaskCount = evidenceTasks.length;
-  const todayCount = todayJobs.length;
+  const todayCount = allTodayJobs.length;
   const jobsToShow = todayJobs.length ? todayJobs : recentJobs;
   const jobSectionTitle = todayJobs.length ? t('dashboardTasks.todayJobs') : t('dashboardTasks.recentJobs');
   const jobSectionSubtitle = todayJobs.length ? t('dashboardTasks.todayJobsSubtitle') : t('dashboardTasks.recentJobsSubtitle');
@@ -487,7 +490,7 @@ export function Dashboard({
     id: `job:${jobsToShow[0].id}`,
     title: `${jobsToShow[0].company} · ${jobsToShow[0].title}`,
     detail: `${jobsToShow[0].city || '-'} · ${jobsToShow[0].salary || '-'} · ${jobsToShow[0].fitLevel || t('dashboardTasks.notScored')}`,
-    meta: jobsToShow[0].lastSeen || t('dashboardTasks.noTime'),
+    meta: (todayJobs.length ? jobsToShow[0].firstSeen : jobsToShow[0].lastSeen) || t('dashboardTasks.noTime'),
     tone: 'zinc',
     tab: 'Jobs',
     action: t('dashboardTasks.openJobs'),
@@ -581,7 +584,7 @@ export function Dashboard({
                   id: `job:${job.id}`,
                   title: `${job.company} · ${job.title}`,
                   detail: `${job.city || '-'} · ${job.salary || '-'} · ${job.fitLevel || t('dashboardTasks.notScored')}`,
-                  meta: job.lastSeen || t('dashboardTasks.noTime'),
+                  meta: (todayJobs.length ? job.firstSeen : job.lastSeen) || t('dashboardTasks.noTime'),
                   tone: (job.score ?? 0) >= 4 ? 'emerald' : 'zinc',
                   tab: 'Jobs',
                   action: t('dashboardTasks.openJobs'),

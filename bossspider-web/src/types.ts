@@ -149,6 +149,7 @@ export type Job = {
   cats: string[];
   desc: string;
   url: string;
+  firstSeen: string;
   lastSeen: string;
   liveStatus?: 'open' | 'closed' | 'unknown' | '';
   liveStatusRaw?: string;

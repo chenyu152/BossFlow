@@ -118,6 +118,7 @@ def query_jobs(
             "cats": cats,
             "desc": row["desc"] or "",
             "url": row["url"] or "",
+            "firstSeen": row["first_seen"] or "",
             "lastSeen": row["last_seen"] or "",
         }
         keys = set(row.keys())
@@ -196,6 +197,7 @@ def get_jobs_by_ids(project_dir: Path, job_ids: list[int]) -> list[dict[str, Any
             "cats": cats,
             "desc": row["desc"] or "",
             "url": row["url"] or "",
+            "firstSeen": row["first_seen"] or "",
             "lastSeen": row["last_seen"] or "",
         }
         keys = set(row.keys())

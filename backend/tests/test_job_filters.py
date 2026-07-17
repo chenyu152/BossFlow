@@ -39,6 +39,8 @@ class JobFilterTest(unittest.TestCase):
 
             self.assertEqual(result["total"], 1)
             self.assertEqual(result["items"][0]["title"], "Agent Engineer")
+            self.assertEqual(result["items"][0]["firstSeen"], "2026-07-17")
+            self.assertEqual(result["items"][0]["lastSeen"], "2026-07-17")
 
 
 if __name__ == "__main__":
