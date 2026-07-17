@@ -8,7 +8,8 @@ from typing import Any
 import requests
 from fastapi import HTTPException
 
-from backend.services.evidence_service import sync_requirement_assessment
+from backend.services.capability_service import merge_requirement_assessments, normalize_proficiency
+from backend.services.evidence_service import read_capability_catalog, sync_requirement_assessment
 from backend.services.job_service import get_jobs_by_ids
 from backend.services.greeting_service import sync_greeting_draft_from_report
 from backend.services.pipeline_service import find_pipeline_item, read_pipeline, update_pipeline_item_metadata
@@ -19,6 +20,7 @@ from backend.services.workspace_service import workspace_path
 CV_PATH = workspace_path("cv.md")
 PROFILE_PATH = workspace_path("profile.yml")
 REPORTS_DIR = workspace_path("reports/jobs")
+EVALUATION_PROFILE_VERSION = 2
 
 
 def _read_text(path: Path, limit: int | None = None) -> str:
@@ -120,6 +122,8 @@ def _prompt(job: dict[str, Any], item: dict[str, Any]) -> list[dict[str, str]]:
     cv_text = _read_text(CV_PATH, 12000)
     profile_text = _read_text(PROFILE_PATH, 6000)
     pre_score = item.get("score")
+    capability_catalog = read_capability_catalog()
+    capability_catalog_text = json.dumps(capability_catalog, ensure_ascii=False, separators=(",", ":"))
     system = """你是 BossSpider 的求职岗位精评估助手。
 
 你的任务是根据 Boss 直聘岗位 JD、候选人 cv.md、可选 profile.yml，生成一份可落地的岗位精评估报告。
@@ -173,11 +177,19 @@ GREETING_READY: <yes|no>
 ---BOSSFLOW_REQUIREMENT_ASSESSMENT---
 [
   {{
-    "canonicalKey": "规范、稳定、适合跨岗位聚合的键",
-    "label": "要求名称",
+    "canonicalKey": "纯能力的稳定键，不含熟练度、年限、岗位名称",
+    "capabilityName": "原子能力名称，例如 C++、RAG、向量数据库",
+    "label": "忠实保留该岗位的完整要求表达",
     "category": "skill|experience|behavior|education|location|preference|other",
     "verificationMode": "document_fact|experience_fact|preference|behavior_example|manual_review",
     "importance": "required|preferred|context",
+    "requiredProficiency": "unspecified|awareness|familiar|working|proficient|expert",
+    "requiredProficiencySource": "JD 中表示熟练度的原词，如了解、熟悉、掌握、熟练、精通；未说明则为空",
+    "proficiencyApplicable": true,
+    "requirementGroupId": "同一个任一满足组使用相同稳定标识；非任一满足组留空",
+    "requirementGroupMode": "all_of|any_of",
+    "requirementGroupLabel": "向用户解释任一满足关系的完整岗位要求；非任一满足组留空",
+    "minimumSatisfied": 1,
     "jdQuote": "JD 中的对应短句",
     "candidateEvidenceRefs": [
       {{"sourceType": "cv", "quote": "cv.md 中的对应原文或短摘要", "locator": "简历章节或项目名"}}
@@ -190,8 +202,17 @@ GREETING_READY: <yes|no>
 ---END_REQUIREMENT_ASSESSMENT---
 
 Requirement assessment 规则：
-- 提取 5-12 条对岗位决策最重要的要求，合并语义重复项。
-- canonicalKey 应简短、稳定；相同能力在不同岗位中应尽量使用相同 key。
+- 提取 5-16 条对岗位决策最重要的要求；只合并“同一能力的重复表达”，不能合并相关但不同的能力。
+- 每个数组元素只能表达一个原子能力。RAG、向量数据库、Prompt Engineering、Tool Calling、LangChain、LangGraph、C++、Java 等必须分别输出。
+- 如果 JD 使用 “C++/Java”“RAG 与向量数据库”等并列或任选表达，仍拆成多个元素；每个元素的 label 和 jdQuote 可以保留同一段 JD 原文。
+- 必须区分“全部都要”和“满足任一即可”。“以及/并且/同时掌握”为 all_of；“或/任一/至少一门/任选其一/one of/any of”为 any_of。
+- any_of 的每个原子能力分别输出，但 requirementGroupMode 必须为 any_of，并共享 requirementGroupId、requirementGroupLabel 和 minimumSatisfied。其他要求使用 all_of 且组字段留空。
+- capabilityName 只写能力名词，不包含“熟悉、精通、经验、能力、加分项、岗位名称”等修饰语。
+- label 忠实保留岗位要求的精确表达；能力身份以 canonicalKey + capabilityName 为准，岗位措辞不能用作新的能力身份。
+- requiredProficiency 与能力身份分离：了解=awareness，熟悉=familiar，掌握=working，熟练=proficient，精通=expert；JD 未说明则为 unspecified。
+- proficiencyApplicable 仅在该要求确实比较“掌握程度”时为 true。学历、年限、行业经历、行为能力，以及只判断“是否拥有/是否做过”的要求必须为 false；未出现熟练度要求的技能也应为 false。
+- canonicalKey 应简短、稳定。先检索下方已有能力目录，语义完全相同时必须复用；只是相关、上下位或包含关系时不得强行复用。
+- 不允许使用 programming-language-proficiency、rag-vector-db-experience、rag-prompt-tool-calling 等“多个技能组成的 key”。
 - 学历、专业、证书等可由简历原文直接核验的结构化事实使用 document_fact。
 - 技能和项目经历使用 experience_fact，行为举例使用 behavior_example，地点和求职偏好使用 preference。
 - candidateEvidenceRefs 只能引用 cv.md 中真实存在的内容；没有证据时必须是空数组。
@@ -199,6 +220,11 @@ Requirement assessment 规则：
 - 当前材料中未找到证据时只能输出 not_found，绝不能输出 user_confirmed_absent。
 - 不得输出 done、adjacent、not_done、unsure；这些只能由用户交互产生。
 - confidence 必须是 0 到 1 之间的数字。
+
+已有能力目录（用于检索增强归一化；只能复用语义相同的原子能力）：
+```json
+{capability_catalog_text}
+```
 
 候选人 cv.md：
 ```markdown
@@ -218,13 +244,13 @@ profile.yml：
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def _call_llm(messages: list[dict[str, str]]) -> str:
+def _call_llm(messages: list[dict[str, str]], *, max_tokens: int = 5000, temperature: float = 0.25) -> str:
     api_key, api_base, model = _llm_config()
     url = f"{api_base.rstrip('/')}/chat/completions"
     response = requests.post(
         url,
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": messages, "temperature": 0.25, "max_tokens": 5000},
+        json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens},
         timeout=120,
     )
     if response.status_code != 200:
@@ -272,22 +298,70 @@ def _canonical_key(value: str, fallback: str) -> str:
     return re.sub(r"-+", "-", key).strip("-._")[:80]
 
 
-def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
+def _decode_requirement_payload(raw: str) -> list[Any] | None:
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"\s*```$", "", raw)
+    candidates = [raw]
+    repaired = re.sub(r",\s*([}\]])", r"\1", raw)
+    if repaired != raw:
+        candidates.append(repaired)
+    for candidate in candidates:
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            payload = payload.get("requirements")
+        if isinstance(payload, list):
+            return payload
+    return None
+
+
+def _requirement_payload(text: str) -> list[Any] | None:
     match = re.search(
         r"---BOSSFLOW_REQUIREMENT_ASSESSMENT---\s*([\s\S]*?)---END_REQUIREMENT_ASSESSMENT---",
         text,
     )
-    if not match:
-        return []
-    raw = match.group(1).strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"\s*```$", "", raw)
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        return []
-    if isinstance(payload, dict):
-        payload = payload.get("requirements")
+    if match:
+        payload = _decode_requirement_payload(match.group(1))
+        if payload is not None:
+            return payload
+
+    # Some OpenAI-compatible models wrap the requested JSON in a fenced block
+    # or omit our marker lines. Accept only blocks that look like requirement
+    # assessments so unrelated snippets in the narrative report are ignored.
+    for fenced in re.findall(r"```(?:json)?\s*([\s\S]*?)```", text, flags=re.IGNORECASE):
+        if '"canonicalKey"' not in fenced:
+            continue
+        payload = _decode_requirement_payload(fenced)
+        if payload is not None:
+            return payload
+
+    # If the response was truncated after the JSON but before the end marker,
+    # JSONDecoder can still recover a complete leading array/object.
+    decoder = json.JSONDecoder()
+    starts: list[int] = []
+    for key_match in re.finditer(r'"canonicalKey"\s*:', text):
+        for delimiter in ("[", "{"):
+            start = text.rfind(delimiter, 0, key_match.start())
+            if start >= 0 and start not in starts:
+                starts.append(start)
+    for start in starts:
+        fragment = text[start:].lstrip()
+        try:
+            decoded, _ = decoder.raw_decode(fragment)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(decoded, dict):
+            decoded = decoded.get("requirements")
+        if isinstance(decoded, list):
+            return decoded
+    return None
+
+
+def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
+    payload = _requirement_payload(text)
     if not isinstance(payload, list):
         return []
 
@@ -296,14 +370,12 @@ def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
     allowed_statuses = {"supported", "partial", "not_found", "unknown"}
     allowed_verification_modes = {"document_fact", "experience_fact", "preference", "behavior_example", "manual_review"}
     requirements: list[dict[str, Any]] = []
-    seen_keys: set[str] = set()
-
     for raw_item in payload:
         if not isinstance(raw_item, dict):
             continue
         label = str(raw_item.get("label") or "").strip()
         canonical_key = _canonical_key(str(raw_item.get("canonicalKey") or ""), label)
-        if not label or not canonical_key or canonical_key in seen_keys:
+        if not label or not canonical_key:
             continue
         category = str(raw_item.get("category") or "other").strip().lower()
         importance = str(raw_item.get("importance") or "context").strip().lower()
@@ -352,10 +424,25 @@ def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
         requirements.append(
             {
                 "canonicalKey": canonical_key,
+                "capabilityName": str(raw_item.get("capabilityName") or "").strip(),
                 "label": label,
                 "category": category,
                 "verificationMode": verification_mode,
                 "importance": importance,
+                "requiredProficiency": normalize_proficiency(
+                    raw_item.get("requiredProficiency"),
+                    f"{label} {raw_item.get('jdQuote') or ''}",
+                ),
+                "requiredProficiencySource": str(raw_item.get("requiredProficiencySource") or "").strip(),
+                "proficiencyApplicable": raw_item.get("proficiencyApplicable"),
+                "requirementGroupId": str(raw_item.get("requirementGroupId") or "").strip(),
+                "requirementGroupMode": (
+                    "any_of"
+                    if str(raw_item.get("requirementGroupMode") or "").strip().lower() == "any_of"
+                    else "all_of"
+                ),
+                "requirementGroupLabel": str(raw_item.get("requirementGroupLabel") or "").strip(),
+                "minimumSatisfied": raw_item.get("minimumSatisfied") or 1,
                 "jdQuote": str(raw_item.get("jdQuote") or "").strip(),
                 "candidateEvidenceRefs": refs,
                 "coverageStatus": coverage_status,
@@ -363,8 +450,56 @@ def _parse_requirement_assessment(text: str) -> list[dict[str, Any]]:
                 "confidence": confidence,
             }
         )
-        seen_keys.add(canonical_key)
-    return requirements
+    return merge_requirement_assessments(requirements)
+
+
+def _repair_requirement_messages(
+    job: dict[str, Any],
+    item: dict[str, Any],
+    previous_response: str,
+) -> list[dict[str, str]]:
+    return [
+        *_prompt(job, item),
+        {"role": "assistant", "content": previous_response[-18000:]},
+        {
+            "role": "user",
+            "content": """上一次回答缺少可解析的 requirement assessment，或 JSON 格式不完整。
+现在不要重写 Markdown 报告，只修复结构化要求。
+严格输出以下三部分，不要添加解释或 Markdown 代码围栏：
+---BOSSFLOW_REQUIREMENT_ASSESSMENT---
+<合法 JSON 数组；字段与上一条指令完全一致>
+---END_REQUIREMENT_ASSESSMENT---
+必须输出 5-16 项重要要求，并继续遵守原子能力、熟练度适用性和 any_of 分组规则。""",
+        },
+    ]
+
+
+def _save_failed_llm_output(
+    job: dict[str, Any],
+    initial_response: str,
+    repair_response: str,
+) -> Path:
+    failed_dir = REPORTS_DIR / "_failed-evaluations"
+    failed_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"{timestamp}-{_slug(job.get('company'))}-{_slug(job.get('title'))}.md"
+    path = failed_dir / filename
+    path.write_text(
+        "\n".join(
+            [
+                "# Initial LLM response",
+                "",
+                initial_response,
+                "",
+                "# Automatic repair response",
+                "",
+                repair_response,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _strip_requirement_assessment_block(text: str) -> str:
@@ -381,7 +516,21 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
     summary = _parse_summary(report_text)
     requirement_assessment = _parse_requirement_assessment(report_text)
     if not requirement_assessment:
-        raise HTTPException(status_code=502, detail="LLM report is missing a valid structured requirement assessment")
+        repair_text = _call_llm(
+            _repair_requirement_messages(job, item, report_text),
+            max_tokens=5000,
+            temperature=0.05,
+        )
+        requirement_assessment = _parse_requirement_assessment(repair_text)
+        if not requirement_assessment:
+            failed_path = _save_failed_llm_output(job, report_text, repair_text)
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "LLM returned an invalid structured requirement assessment after one automatic repair attempt. "
+                    f"Raw responses were saved to {failed_path}"
+                ),
+            )
     report_id = _next_report_id()
     filename = f"{report_id}-{_slug(job.get('company'))}-{_slug(job.get('title'))}-{dt.datetime.now().strftime('%Y-%m-%d')}.md"
     report_path = REPORTS_DIR / filename
@@ -394,6 +543,7 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
         json.dumps(
             {
                 "schemaVersion": 2,
+                "evaluationProfileVersion": EVALUATION_PROFILE_VERSION,
                 "reportId": report_id,
                 "sourceKey": source_key,
                 "generatedAt": dt.datetime.now().isoformat(),
@@ -419,6 +569,7 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
             "greetingReady": summary["greetingReady"],
             "reportPath": str(report_path),
             "reportId": report_id,
+            "evaluationProfileVersion": EVALUATION_PROFILE_VERSION,
             "evaluatedAt": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "decisionStatus": "needs_review",
             **evidence_summary,

@@ -265,6 +265,7 @@ export type PipelineItem = {
   unresolvedRequirementCount: number;
   blockingGapCount: number;
   requirementAssessedAt: string;
+  evaluationProfileVersion: number;
   decisionStatus: DecisionStatus;
   raw: string;
 };
@@ -388,10 +389,13 @@ export type LlmEvaluatePipelineResponse = {
   };
   requirementAssessment: Array<{
     canonicalKey: string;
+    capabilityName: string;
     label: string;
     category: EvidenceRequirementCategory;
     verificationMode?: EvidenceVerificationMode;
     importance: EvidenceRequirementImportance;
+    requiredProficiency: ProficiencyLevel;
+    requiredProficiencySource: string;
     jdQuote: string;
     candidateEvidenceRefs: Array<{ sourceType: string; quote: string; locator: string }>;
     coverageStatus: 'supported' | 'partial' | 'not_found' | 'unknown';
@@ -587,6 +591,7 @@ export type EvidenceRequirementImportance = 'required' | 'preferred' | 'context'
 export type EvidenceVerificationMode = 'document_fact' | 'experience_fact' | 'preference' | 'behavior_example' | 'manual_review';
 export type EvidenceCoverageStatus = 'supported' | 'partial' | 'not_found' | 'user_confirmed_absent' | 'unknown';
 export type EvidenceClassification = 'done' | 'adjacent' | 'not_done' | 'unsure';
+export type ProficiencyLevel = 'unspecified' | 'awareness' | 'familiar' | 'working' | 'proficient' | 'expert';
 export type EvidenceItemStatus = 'draft' | 'confirmed' | 'rejected' | 'archived';
 export type EvidenceTaskType = 'extract' | 'strengthen' | 'translate' | 'learn' | 'project' | 'accept_risk' | 'ignore';
 export type EvidenceTaskStatus = 'pending' | 'in_progress' | 'completed' | 'dismissed';
@@ -595,12 +600,20 @@ export type EvidenceRequirement = {
   requirementId: string;
   canonicalKey: string;
   canonicalGroupId?: string;
+  capabilityName?: string;
   label: string;
   category: EvidenceRequirementCategory;
   verificationMode?: EvidenceVerificationMode;
   importance: EvidenceRequirementImportance;
   sourceKey: string;
   jdQuote: string;
+  requiredProficiency?: ProficiencyLevel;
+  requiredProficiencySource?: string;
+  proficiencyApplicable?: boolean;
+  requirementGroupId?: string;
+  requirementGroupMode?: 'all_of' | 'any_of';
+  requirementGroupLabel?: string;
+  minimumSatisfied?: number;
   extractionConfidence: number;
   active?: boolean;
   assessedAt?: string;
@@ -637,6 +650,7 @@ export type EvidenceCoverage = {
   rationale: string;
   confidence: number;
   userClassification: EvidenceClassification;
+  userProficiency?: ProficiencyLevel;
   userDecisionAt: string;
   decisionSource?: 'assessment' | 'direct' | 'canonical_reuse' | 'source_document';
   verificationStatus?: 'source_verified' | 'candidate' | 'needs_input' | 'user_confirmed';
@@ -666,9 +680,58 @@ export type EvidenceTask = {
   priorityBand: 'high' | 'medium' | 'low';
   status: EvidenceTaskStatus;
   completionEvidenceIds: string[];
+  progressPercent: number;
+  nextStep: string;
+  progressNotes: string[];
+  currentProficiency: ProficiencyLevel;
+  targetProficiency: ProficiencyLevel;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+};
+
+export type CapabilityStatus = 'mastered' | 'adjacent' | 'pending' | 'gap';
+export type CapabilityImpactTier = 'core' | 'high_value' | 'common' | 'specialized';
+
+export type CapabilityProfile = {
+  capabilityId: string;
+  canonicalKey: string;
+  label: string;
+  category: EvidenceRequirementCategory;
+  actionability: 'developable' | 'basic';
+  status: CapabilityStatus;
+  proficiencyApplicable: boolean;
+  userProficiency: ProficiencyLevel;
+  highestRequiredProficiency: ProficiencyLevel;
+  requiredProficiencyCounts: Record<ProficiencyLevel, number>;
+  impactTier: CapabilityImpactTier;
+  jobCount: number;
+  requiredCount: number;
+  preferredCount: number;
+  evidenceCount: number;
+  sourceCount: number;
+  requirementIds: string[];
+  sourceKeys: string[];
+  evidenceIds: string[];
+  planIds: string[];
+  requirements: Array<{
+    requirementId: string;
+    sourceKey: string;
+    sourceLabel?: string;
+    company?: string;
+    jobTitle?: string;
+    label: string;
+    capabilityName?: string;
+    requiredProficiency: ProficiencyLevel;
+    requiredProficiencySource?: string;
+    proficiencyApplicable?: boolean;
+    requirementGroupId?: string;
+    requirementGroupMode?: 'all_of' | 'any_of';
+    requirementGroupLabel?: string;
+    minimumSatisfied?: number;
+    importance: EvidenceRequirementImportance;
+    jdQuote: string;
+  }>;
 };
 
 export type EvidenceOverviewResponse = {
@@ -679,6 +742,8 @@ export type EvidenceOverviewResponse = {
   evidenceItems: EvidenceItem[];
   coverages: EvidenceCoverage[];
   tasks: EvidenceTask[];
+  capabilities: CapabilityProfile[];
+  constraints: EvidenceRequirement[];
   updatedAt: string;
   counts: {
     requirements: number;
@@ -686,6 +751,12 @@ export type EvidenceOverviewResponse = {
     confirmedEvidenceItems: number;
     unresolvedCoverages: number;
     pendingTasks: number;
+    capabilities: number;
+    masteredCapabilities: number;
+    pendingCapabilities: number;
+    gapCapabilities: number;
+    basicConditions: number;
+    activePlans: number;
   };
 };
 
@@ -718,6 +789,10 @@ export type EvidenceItemInput = Omit<EvidenceItem, 'evidenceId' | 'status' | 'cr
   status?: 'draft';
 };
 export type EvidenceTaskInput = Omit<EvidenceTask, 'taskId' | 'createdAt' | 'updatedAt' | 'completedAt'>;
+export type EvidenceTaskUpdateInput = Pick<
+  EvidenceTask,
+  'taskId' | 'status' | 'completionEvidenceIds' | 'progressPercent' | 'nextStep' | 'progressNotes' | 'currentProficiency' | 'targetProficiency'
+>;
 
 export type GreetingDraftStatus = 'draft' | 'edited' | 'copied' | 'sent' | 'dismissed';
 

@@ -152,6 +152,50 @@ def _metadata_from_line(line: str) -> dict[str, Any]:
         return {}
 
 
+def _evaluation_profile_version(meta: dict[str, Any]) -> int:
+    try:
+        explicit_version = int(meta.get("evaluationProfileVersion") or 0)
+    except (TypeError, ValueError):
+        explicit_version = 0
+    if explicit_version:
+        return explicit_version
+
+    report_value = str(meta.get("reportPath") or "").strip()
+    if not report_value:
+        return 0
+    try:
+        json_path = Path(report_value).with_suffix(".json").resolve()
+        reports_root = REPORTS_DIR.resolve()
+        if json_path != reports_root and reports_root not in json_path.parents:
+            return 0
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    try:
+        sidecar_version = int(payload.get("evaluationProfileVersion") or 0)
+    except (TypeError, ValueError):
+        sidecar_version = 0
+    if sidecar_version:
+        return sidecar_version
+
+    requirements = payload.get("requirementAssessment")
+    if (
+        isinstance(requirements, list)
+        and requirements
+        and all(
+            isinstance(item, dict)
+            and item.get("canonicalKey")
+            and item.get("capabilityName")
+            and "requiredProficiency" in item
+            for item in requirements
+        )
+    ):
+        return 2
+    return 0
+
+
 def _item_from_line(line: str, status: str) -> dict[str, Any] | None:
     stripped = line.strip()
     if not stripped.startswith("- ["):
@@ -216,6 +260,7 @@ def _item_from_line(line: str, status: str) -> dict[str, Any] | None:
         "unresolvedRequirementCount": meta.get("unresolvedRequirementCount", 0),
         "blockingGapCount": meta.get("blockingGapCount", 0),
         "requirementAssessedAt": meta.get("requirementAssessedAt", ""),
+        "evaluationProfileVersion": _evaluation_profile_version(meta),
         "decisionStatus": meta.get("decisionStatus") or ("needs_review" if meta.get("reportPath") else "needs_llm"),
         "raw": line,
     }

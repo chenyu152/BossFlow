@@ -1,17 +1,30 @@
 from __future__ import annotations
 
+import copy
 import datetime as dt
 import hashlib
 import json
 import os
 import re
-import unicodedata
 import uuid
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
 
+from backend.services.capability_service import (
+    PROFICIENCY_RANK,
+    atomicize_requirement,
+    canonical_capability_label,
+    canonicalize_capability_key,
+    compact_requirement_text,
+    highest_proficiency,
+    is_proficiency_applicable,
+    merge_requirement_assessments,
+    normalize_canonical_key,
+    normalize_proficiency,
+)
 from backend.storage.file_lock import exclusive_file_lock
 from backend.storage.paths import BASE_DIR
 from backend.services.workspace_service import workspace_path
@@ -19,10 +32,10 @@ from backend.services.workspace_service import workspace_path
 DATA_DIR = workspace_path("data")
 EVIDENCE_STORE_PATH = workspace_path("data/evidence-store.json")
 EVIDENCE_LOCK_PATH = workspace_path("data/.evidence-store.lock")
-EVIDENCE_SCHEMA_VERSION = 3
+EVIDENCE_SCHEMA_VERSION = 6
 
 VERIFICATION_MODES = {"document_fact", "experience_fact", "preference", "behavior_example", "manual_review"}
-
+IMPROVEMENT_TASK_TYPES = {"learn", "project", "strengthen", "translate"}
 
 def _now() -> str:
     return dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -38,10 +51,11 @@ def _stable_requirement_id(source_key: str, canonical_key: str) -> str:
 
 
 def _normalize_canonical_key(value: Any) -> str:
-    normalized = unicodedata.normalize("NFKC", str(value or "")).strip().lower()
-    normalized = re.sub(r"[\s_/\\|:：]+", "-", normalized)
-    normalized = re.sub(r"[^\w\u4e00-\u9fff-]+", "-", normalized, flags=re.UNICODE)
-    return re.sub(r"-+", "-", normalized).strip("-")
+    return normalize_canonical_key(value)
+
+
+def _capability_key(value: Any, category: Any = "") -> str:
+    return canonicalize_capability_key(value, category)
 
 
 def _canonical_group_id(canonical_key: str) -> str:
@@ -76,6 +90,230 @@ def _empty_store() -> dict[str, Any]:
     }
 
 
+def _merge_coverage_records(current: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    decision_rank = {
+        "direct": 4,
+        "source_document": 3,
+        "canonical_reuse": 2,
+        "assessment": 1,
+        "": 0,
+    }
+    if decision_rank.get(str(incoming.get("decisionSource") or ""), 0) > decision_rank.get(
+        str(current.get("decisionSource") or ""),
+        0,
+    ):
+        base, extra = incoming, current
+    else:
+        base, extra = current, incoming
+    merged = copy.deepcopy(base)
+    merged["evidenceIds"] = list(dict.fromkeys([
+        *(base.get("evidenceIds") or []),
+        *(extra.get("evidenceIds") or []),
+    ]))
+    merged["candidateEvidenceRefs"] = list({
+        (
+            str(ref.get("sourceType") or ""),
+            str(ref.get("quote") or ""),
+            str(ref.get("locator") or ""),
+        ): ref
+        for ref in [
+            *(base.get("candidateEvidenceRefs") or []),
+            *(extra.get("candidateEvidenceRefs") or []),
+        ]
+        if isinstance(ref, dict) and ref.get("quote")
+    }.values())
+    merged["userProficiency"] = highest_proficiency([
+        normalize_proficiency(base.get("userProficiency")),
+        normalize_proficiency(extra.get("userProficiency")),
+    ])
+    return merged
+
+
+def _migrate_atomic_capabilities(store: dict[str, Any]) -> bool:
+    original_requirements = [
+        item for item in store.get("requirements", [])
+        if isinstance(item, dict)
+    ]
+    if not original_requirements:
+        return False
+
+    changed = False
+    id_map: dict[str, list[str]] = {}
+    requirements_by_id: dict[str, dict[str, Any]] = {}
+    requirement_id_by_source_and_key: dict[tuple[str, str], str] = {}
+    importance_rank = {"context": 0, "preferred": 1, "required": 2}
+
+    for original in original_requirements:
+        old_id = str(original.get("requirementId") or "")
+        atoms = atomicize_requirement(original)
+        if len(atoms) != 1 or any(
+            atoms[0].get(field) != original.get(field)
+            for field in (
+                "canonicalKey",
+                "capabilityName",
+                "requiredProficiency",
+                "proficiencyApplicable",
+                "requirementGroupId",
+                "requirementGroupMode",
+                "requirementGroupLabel",
+                "minimumSatisfied",
+                "jdQuote",
+            )
+        ):
+            changed = True
+        mapped_ids: list[str] = []
+        for atom in atoms:
+            canonical_key = _capability_key(atom.get("canonicalKey"), atom.get("category"))
+            if not canonical_key:
+                continue
+            source_key = str(atom.get("sourceKey") or "")
+            group_key = (source_key, canonical_key)
+            requirement_id = requirement_id_by_source_and_key.get(group_key, "")
+            if not requirement_id:
+                requirement_id = (
+                    old_id
+                    if len(atoms) == 1 and old_id
+                    else _stable_requirement_id(source_key, canonical_key)
+                    if source_key
+                    else _new_id("req")
+                )
+                requirement_id_by_source_and_key[group_key] = requirement_id
+            mapped_ids.append(requirement_id)
+            next_item = {
+                **atom,
+                "requirementId": requirement_id,
+                "canonicalKey": canonical_key,
+                "canonicalGroupId": _canonical_group_id(canonical_key),
+                "capabilityName": canonical_capability_label(
+                    canonical_key,
+                    str(atom.get("capabilityName") or atom.get("label") or ""),
+                ),
+                "requiredProficiency": normalize_proficiency(
+                    atom.get("requiredProficiency"),
+                    f"{atom.get('label') or ''} {atom.get('jdQuote') or ''}",
+                ),
+            }
+            existing = requirements_by_id.get(requirement_id)
+            if existing is None:
+                requirements_by_id[requirement_id] = next_item
+                continue
+            changed = True
+            if importance_rank.get(str(next_item.get("importance") or "context"), 0) > importance_rank.get(
+                str(existing.get("importance") or "context"),
+                0,
+            ):
+                existing["importance"] = next_item.get("importance")
+            existing["requiredProficiency"] = highest_proficiency([
+                str(existing.get("requiredProficiency") or "unspecified"),
+                str(next_item.get("requiredProficiency") or "unspecified"),
+            ])
+            existing["extractionConfidence"] = max(
+                float(existing.get("extractionConfidence") or 0),
+                float(next_item.get("extractionConfidence") or 0),
+            )
+            existing["active"] = bool(existing.get("active", True) or next_item.get("active", True))
+            quotes = [
+                part
+                for value in (existing.get("jdQuote"), next_item.get("jdQuote"))
+                for part in compact_requirement_text(value).split("；")
+                if part
+            ]
+            existing["jdQuote"] = "；".join(dict.fromkeys(quotes))
+        if old_id:
+            id_map[old_id] = list(dict.fromkeys(mapped_ids))
+
+    next_coverages: dict[str, dict[str, Any]] = {}
+    for coverage in store.get("coverages", []):
+        if not isinstance(coverage, dict):
+            continue
+        old_id = str(coverage.get("requirementId") or "")
+        target_ids = id_map.get(old_id, [old_id])
+        for target_id in target_ids:
+            if not target_id or target_id not in requirements_by_id:
+                continue
+            clone = copy.deepcopy(coverage)
+            clone["requirementId"] = target_id
+            reused_from = str(clone.get("reusedFromRequirementId") or "")
+            if reused_from in id_map:
+                clone["reusedFromRequirementId"] = (id_map[reused_from] or [""])[0]
+            if target_id in next_coverages:
+                next_coverages[target_id] = _merge_coverage_records(next_coverages[target_id], clone)
+            else:
+                next_coverages[target_id] = clone
+        if target_ids != [old_id]:
+            changed = True
+
+    for item in store.get("evidenceItems", []):
+        if not isinstance(item, dict):
+            continue
+        previous = [str(value) for value in item.get("requirementIds") or [] if value]
+        replacement = list(dict.fromkeys(
+            target
+            for requirement_id in previous
+            for target in id_map.get(requirement_id, [requirement_id])
+            if target
+        ))
+        if replacement != previous:
+            item["requirementIds"] = replacement
+            changed = True
+
+    for task in store.get("tasks", []):
+        if not isinstance(task, dict):
+            continue
+        old_id = str(task.get("requirementId") or "")
+        target_ids = id_map.get(old_id, [old_id])
+        if target_ids and target_ids[0] != old_id:
+            task["requirementId"] = target_ids[0]
+            changed = True
+        task.setdefault("currentProficiency", "unspecified")
+        task.setdefault("targetProficiency", "working")
+
+    store["requirements"] = list(requirements_by_id.values())
+    store["coverages"] = list(next_coverages.values())
+    return changed
+
+
+def _infer_any_of_groups(store: dict[str, Any]) -> bool:
+    candidates: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for requirement in store.get("requirements", []):
+        if not isinstance(requirement, dict):
+            continue
+        source_key = str(requirement.get("sourceKey") or "")
+        quote = str(requirement.get("jdQuote") or "").strip()
+        if not source_key or not quote:
+            continue
+        if not re.search(
+            r"(?:至少\s*(?:一|1)\s*(?:门|项|种|个)|任一|任选|二选一|三选一|其中之一|"
+            r"(?i:\bone\s+of\b|\bany\s+of\b|\bat\s+least\s+one\b|\beither\b))",
+            quote,
+        ):
+            continue
+        candidates.setdefault((source_key, quote), []).append(requirement)
+
+    changed = False
+    for (source_key, quote), related in candidates.items():
+        canonical_keys = {
+            str(item.get("canonicalKey") or "")
+            for item in related
+            if item.get("canonicalKey")
+        }
+        if len(canonical_keys) < 2:
+            continue
+        digest = hashlib.sha1(f"{source_key}\0{quote}".encode("utf-8")).hexdigest()[:12]
+        group_id = f"any-of-{digest}"
+        for requirement in related:
+            for field, value in (
+                ("requirementGroupId", group_id),
+                ("requirementGroupMode", "any_of"),
+                ("requirementGroupLabel", quote),
+                ("minimumSatisfied", 1),
+            ):
+                if requirement.get(field) != value:
+                    requirement[field] = value
+                    changed = True
+    return changed
+
+
 def _normalize_store(raw: Any) -> tuple[dict[str, Any], bool]:
     if not isinstance(raw, dict):
         raise HTTPException(status_code=500, detail="Evidence store root must be a JSON object")
@@ -100,10 +338,15 @@ def _normalize_store(raw: Any) -> tuple[dict[str, Any], bool]:
             store[key] = []
             changed = True
 
+    if _migrate_atomic_capabilities(store):
+        changed = True
+    if _infer_any_of_groups(store):
+        changed = True
+
     for requirement in store["requirements"]:
         if not isinstance(requirement, dict):
             continue
-        canonical_key = _normalize_canonical_key(requirement.get("canonicalKey"))
+        canonical_key = _capability_key(requirement.get("canonicalKey"), requirement.get("category"))
         if canonical_key and requirement.get("canonicalKey") != canonical_key:
             requirement["canonicalKey"] = canonical_key
             changed = True
@@ -115,6 +358,57 @@ def _normalize_store(raw: Any) -> tuple[dict[str, Any], bool]:
         if requirement.get("verificationMode") != verification_mode:
             requirement["verificationMode"] = verification_mode
             changed = True
+        capability_name = canonical_capability_label(
+            canonical_key,
+            str(requirement.get("capabilityName") or requirement.get("label") or ""),
+        )
+        if requirement.get("capabilityName") != capability_name:
+            requirement["capabilityName"] = capability_name
+            changed = True
+        required_proficiency = normalize_proficiency(
+            requirement.get("requiredProficiency"),
+            f"{requirement.get('label') or ''} {requirement.get('jdQuote') or ''}",
+        )
+        if requirement.get("requiredProficiency") != required_proficiency:
+            requirement["requiredProficiency"] = required_proficiency
+            changed = True
+        proficiency_applicable = is_proficiency_applicable(
+            requirement.get("category"),
+            required_proficiency,
+            f"{requirement.get('label') or ''} {requirement.get('jdQuote') or ''}",
+            requirement.get("proficiencyApplicable"),
+        )
+        if requirement.get("proficiencyApplicable") != proficiency_applicable:
+            requirement["proficiencyApplicable"] = proficiency_applicable
+            changed = True
+        group_mode = (
+            "any_of"
+            if str(requirement.get("requirementGroupMode") or "").strip().lower() == "any_of"
+            else "all_of"
+        )
+        group_id = (
+            normalize_canonical_key(requirement.get("requirementGroupId"))
+            if group_mode == "any_of"
+            else ""
+        )
+        group_label = (
+            str(requirement.get("requirementGroupLabel") or requirement.get("jdQuote") or "").strip()
+            if group_mode == "any_of"
+            else ""
+        )
+        try:
+            minimum_satisfied = max(1, int(requirement.get("minimumSatisfied") or 1))
+        except (TypeError, ValueError):
+            minimum_satisfied = 1
+        for field, value in (
+            ("requirementGroupMode", group_mode),
+            ("requirementGroupId", group_id),
+            ("requirementGroupLabel", group_label),
+            ("minimumSatisfied", minimum_satisfied),
+        ):
+            if requirement.get(field) != value:
+                requirement[field] = value
+                changed = True
 
     requirements_by_id = {
         str(item.get("requirementId") or ""): item
@@ -135,6 +429,17 @@ def _normalize_store(raw: Any) -> tuple[dict[str, Any], bool]:
             changed = True
         requirement_id = str(coverage.get("requirementId") or "")
         requirement = requirements_by_id.get(requirement_id, {})
+        user_proficiency = normalize_proficiency(coverage.get("userProficiency"))
+        if user_proficiency == "unspecified" and coverage.get("userDecisionAt"):
+            classification = str(coverage.get("userClassification") or "")
+            if classification == "done":
+                required_level = normalize_proficiency(requirement.get("requiredProficiency"))
+                user_proficiency = required_level if required_level != "unspecified" else "working"
+            elif classification == "adjacent":
+                user_proficiency = "familiar"
+        if coverage.get("userProficiency") != user_proficiency:
+            coverage["userProficiency"] = user_proficiency
+            changed = True
         candidate_refs = coverage.get("candidateEvidenceRefs") if isinstance(coverage.get("candidateEvidenceRefs"), list) else []
         source_verified = (
             requirement.get("verificationMode") == "document_fact"
@@ -173,6 +478,20 @@ def _normalize_store(raw: Any) -> tuple[dict[str, Any], bool]:
         if item.get("requirementIds") != requirement_ids:
             item["requirementIds"] = requirement_ids
             changed = True
+    for task in store["tasks"]:
+        if not isinstance(task, dict):
+            continue
+        defaults = {
+            "progressPercent": 100 if task.get("status") == "completed" else 0,
+            "nextStep": "",
+            "progressNotes": [],
+            "currentProficiency": "unspecified",
+            "targetProficiency": "working",
+        }
+        for key, value in defaults.items():
+            if key not in task:
+                task[key] = value
+                changed = True
     if not store.get("updatedAt"):
         store["updatedAt"] = _now()
         changed = True
@@ -229,18 +548,253 @@ def _overview(store: dict[str, Any]) -> dict[str, Any]:
         1
         for task in store["tasks"]
         if task.get("requirementId") in active_requirement_ids
+        and task.get("taskType") in IMPROVEMENT_TASK_TYPES
         and task.get("status") in {"pending", "in_progress"}
     )
+    capability_summary = _capability_summary(store)
     return {
         "ok": True,
         "path": str(EVIDENCE_STORE_PATH),
         **store,
+        **capability_summary,
         "counts": {
             "requirements": sum(1 for item in store["requirements"] if item.get("active") is not False),
             "evidenceItems": len(store["evidenceItems"]),
             "confirmedEvidenceItems": confirmed,
             "unresolvedCoverages": unresolved,
             "pendingTasks": pending_tasks,
+            **capability_summary["capabilityCounts"],
+        },
+    }
+
+
+def _is_basic_condition(requirements: list[dict[str, Any]]) -> bool:
+    if any(str(item.get("category") or "") == "education" for item in requirements):
+        return True
+    for item in requirements:
+        if str(item.get("category") or "") != "experience":
+            continue
+        key = str(item.get("canonicalKey") or "")
+        label = str(item.get("label") or "")
+        if key == "experience-years" or (
+            "experience" in key and ("year" in key or "years" in key)
+        ):
+            return True
+        if re.search(r"(工作|从业|开发).{0,8}(年限|年经验)", label):
+            return True
+        if re.search(r"\d+\s*(?:[-—~至到]\s*\d+|\+|以上)?\s*年.{0,8}(经验|经历)", label):
+            return True
+    return False
+
+
+def _capability_status(
+    requirements: list[dict[str, Any]],
+    coverages: list[dict[str, Any]],
+) -> str:
+    classifications = {
+        str(item.get("userClassification") or "")
+        for item in coverages
+        if item.get("userDecisionAt")
+    }
+    if "done" in classifications:
+        return "mastered"
+    if "adjacent" in classifications:
+        return "adjacent"
+    if "not_done" in classifications:
+        return "gap"
+    if "unsure" in classifications:
+        return "pending"
+    if _is_basic_condition(requirements) and any(
+        item.get("decisionSource") == "source_document" and item.get("coverageStatus") == "supported"
+        for item in coverages
+    ):
+        return "mastered"
+    return "pending"
+
+
+def _impact_tier(job_count: int, required_count: int, preferred_count: int) -> str:
+    if required_count >= 3 or (job_count >= 4 and required_count >= 2):
+        return "core"
+    if required_count >= 2 or job_count >= 3:
+        return "high_value"
+    if required_count >= 1 or preferred_count >= 2:
+        return "common"
+    return "specialized"
+
+
+def _source_metadata() -> dict[str, dict[str, str]]:
+    try:
+        from backend.services.pipeline_service import read_pipeline
+
+        pipeline = read_pipeline()
+    except Exception:
+        return {}
+    metadata: dict[str, dict[str, str]] = {}
+    for item in [*pipeline.get("pending", []), *pipeline.get("processed", [])]:
+        source_key = str(item.get("sourceKey") or "")
+        if not source_key:
+            continue
+        company = str(item.get("company") or "").strip()
+        title = str(item.get("title") or "").strip()
+        metadata[source_key] = {
+            "company": company,
+            "jobTitle": title,
+            "sourceLabel": " · ".join(value for value in (company, title) if value) or source_key,
+        }
+    return metadata
+
+
+def _capability_summary(store: dict[str, Any]) -> dict[str, Any]:
+    requirements = [
+        item for item in store["requirements"]
+        if isinstance(item, dict) and item.get("active") is not False
+    ]
+    coverages_by_requirement = {
+        str(item.get("requirementId") or ""): item
+        for item in store["coverages"]
+        if isinstance(item, dict) and item.get("requirementId")
+    }
+    evidence_by_id = {
+        str(item.get("evidenceId") or ""): item
+        for item in store["evidenceItems"]
+        if isinstance(item, dict) and item.get("evidenceId")
+    }
+    source_metadata = _source_metadata()
+    groups: dict[str, list[dict[str, Any]]] = {}
+    constraints: list[dict[str, Any]] = []
+    for requirement in requirements:
+        if requirement.get("category") in {"location", "preference"}:
+            constraints.append(requirement)
+            continue
+        key = _capability_key(requirement.get("canonicalKey"), requirement.get("category"))
+        if key:
+            groups.setdefault(key, []).append(requirement)
+
+    capabilities: list[dict[str, Any]] = []
+    for canonical_key, related in groups.items():
+        requirement_ids = [str(item.get("requirementId") or "") for item in related]
+        related_coverages = [
+            coverages_by_requirement[requirement_id]
+            for requirement_id in requirement_ids
+            if requirement_id in coverages_by_requirement
+        ]
+        source_keys = sorted({str(item.get("sourceKey") or "") for item in related if item.get("sourceKey")})
+        evidence_ids = sorted({
+            str(evidence_id)
+            for coverage in related_coverages
+            for evidence_id in (coverage.get("evidenceIds") or [])
+            if evidence_id
+        })
+        evidence_items = [evidence_by_id[evidence_id] for evidence_id in evidence_ids if evidence_id in evidence_by_id]
+        active_plans = [
+            task for task in store["tasks"]
+            if task.get("requirementId") in requirement_ids
+            and task.get("taskType") in IMPROVEMENT_TASK_TYPES
+            and task.get("status") in {"pending", "in_progress"}
+        ]
+        required_count = sum(1 for item in related if item.get("importance") == "required")
+        preferred_count = sum(1 for item in related if item.get("importance") == "preferred")
+        label_counts = Counter(
+            str(item.get("capabilityName") or "").strip()
+            for item in related
+            if item.get("capabilityName")
+        )
+        label = (
+            sorted(label_counts, key=lambda value: (-label_counts[value], len(value)))[0]
+            if label_counts
+            else canonical_capability_label(canonical_key, str(related[0].get("label") or ""))
+        )
+        category_counts = Counter(str(item.get("category") or "other") for item in related)
+        category = category_counts.most_common(1)[0][0]
+        status = _capability_status(related, related_coverages)
+        actionability = "basic" if _is_basic_condition(related) else "developable"
+        proficiency_applicable = any(bool(item.get("proficiencyApplicable")) for item in related)
+        required_proficiency_counts = Counter(
+            normalize_proficiency(item.get("requiredProficiency"))
+            for item in related
+            if item.get("proficiencyApplicable")
+        )
+        user_proficiency = highest_proficiency([
+            normalize_proficiency(item.get("userProficiency"))
+            for item in related_coverages
+            if item.get("userDecisionAt") and item.get("userClassification") in {"done", "adjacent"}
+        ])
+        capabilities.append(
+            {
+                "capabilityId": _canonical_group_id(canonical_key),
+                "canonicalKey": canonical_key,
+                "label": label,
+                "category": category,
+                "actionability": actionability,
+                "status": status,
+                "proficiencyApplicable": proficiency_applicable,
+                "userProficiency": user_proficiency,
+                "highestRequiredProficiency": highest_proficiency([
+                    normalize_proficiency(item.get("requiredProficiency"))
+                    for item in related
+                    if item.get("proficiencyApplicable")
+                ]),
+                "requiredProficiencyCounts": {
+                    level: required_proficiency_counts.get(level, 0)
+                    for level in PROFICIENCY_RANK
+                },
+                "impactTier": _impact_tier(len(source_keys), required_count, preferred_count),
+                "jobCount": len(source_keys),
+                "requiredCount": required_count,
+                "preferredCount": preferred_count,
+                "evidenceCount": len(evidence_items),
+                "sourceCount": sum(len(item.get("sourceRefs") or []) for item in evidence_items),
+                "requirementIds": requirement_ids,
+                "sourceKeys": source_keys,
+                "evidenceIds": evidence_ids,
+                "planIds": [str(item.get("taskId") or "") for item in active_plans],
+                "requirements": [
+                    {
+                        "requirementId": item.get("requirementId"),
+                        "sourceKey": item.get("sourceKey"),
+                        **source_metadata.get(str(item.get("sourceKey") or ""), {}),
+                        "label": item.get("label"),
+                        "capabilityName": item.get("capabilityName"),
+                        "requiredProficiency": normalize_proficiency(item.get("requiredProficiency")),
+                        "requiredProficiencySource": item.get("requiredProficiencySource", ""),
+                        "proficiencyApplicable": bool(item.get("proficiencyApplicable")),
+                        "requirementGroupId": item.get("requirementGroupId", ""),
+                        "requirementGroupMode": item.get("requirementGroupMode", "all_of"),
+                        "requirementGroupLabel": item.get("requirementGroupLabel", ""),
+                        "minimumSatisfied": item.get("minimumSatisfied", 1),
+                        "importance": item.get("importance"),
+                        "jdQuote": item.get("jdQuote"),
+                    }
+                    for item in related
+                ],
+            }
+        )
+
+    status_rank = {"gap": 0, "pending": 1, "adjacent": 2, "mastered": 3}
+    tier_rank = {"core": 0, "high_value": 1, "common": 2, "specialized": 3}
+    capabilities.sort(
+        key=lambda item: (
+            0 if item["actionability"] == "developable" else 1,
+            status_rank.get(item["status"], 9),
+            tier_rank.get(item["impactTier"], 9),
+            -item["jobCount"],
+            item["label"],
+        )
+    )
+    return {
+        "capabilities": capabilities,
+        "constraints": constraints,
+        "capabilityCounts": {
+            "capabilities": len(capabilities),
+            "masteredCapabilities": sum(1 for item in capabilities if item["status"] == "mastered"),
+            "pendingCapabilities": sum(1 for item in capabilities if item["status"] == "pending"),
+            "gapCapabilities": sum(1 for item in capabilities if item["status"] == "gap"),
+            "basicConditions": sum(1 for item in capabilities if item["actionability"] == "basic"),
+            "activePlans": sum(
+                1 for task in store["tasks"]
+                if task.get("taskType") in IMPROVEMENT_TASK_TYPES
+                and task.get("status") in {"pending", "in_progress"}
+            ),
         },
     }
 
@@ -248,6 +802,24 @@ def _overview(store: dict[str, Any]) -> dict[str, Any]:
 def read_evidence_overview() -> dict[str, Any]:
     with exclusive_file_lock(EVIDENCE_LOCK_PATH):
         return _overview(_read_store_unlocked())
+
+
+def read_capability_catalog(limit: int = 80) -> list[dict[str, str]]:
+    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
+        summary = _capability_summary(_read_store_unlocked())
+    capabilities = sorted(
+        summary["capabilities"],
+        key=lambda item: (-int(item.get("jobCount") or 0), str(item.get("label") or "")),
+    )
+    return [
+        {
+            "canonicalKey": str(item.get("canonicalKey") or ""),
+            "capabilityName": str(item.get("label") or ""),
+            "category": str(item.get("category") or "other"),
+        }
+        for item in capabilities[:max(1, min(limit, 120))]
+        if item.get("canonicalKey") and item.get("label")
+    ]
 
 
 def list_requirements(source_key: str = "") -> dict[str, Any]:
@@ -269,24 +841,72 @@ def upsert_requirements(requirements: list[dict[str, Any]]) -> dict[str, Any]:
     with exclusive_file_lock(EVIDENCE_LOCK_PATH):
         store = _read_store_unlocked()
         by_id = {str(item.get("requirementId") or ""): item for item in store["requirements"] if item.get("requirementId")}
-        for raw in requirements:
-            item = dict(raw)
-            canonical_key = _normalize_canonical_key(item.get("canonicalKey"))
+        for item in merge_requirement_assessments([dict(raw) for raw in requirements]):
+            canonical_key = _capability_key(item.get("canonicalKey"), item.get("category"))
             if not canonical_key:
                 continue
             item["canonicalKey"] = canonical_key
             item["canonicalGroupId"] = _canonical_group_id(canonical_key)
+            item["capabilityName"] = canonical_capability_label(
+                canonical_key,
+                str(item.get("capabilityName") or item.get("label") or ""),
+            )
+            item["requiredProficiency"] = normalize_proficiency(
+                item.get("requiredProficiency"),
+                f"{item.get('label') or ''} {item.get('jdQuote') or ''}",
+            )
             item["verificationMode"] = _verification_mode(item.get("category"), item.get("verificationMode"))
             item["active"] = True
-            requirement_id = str(item.get("requirementId") or "").strip() or _new_id("req")
+            requirement_id = (
+                _stable_requirement_id(str(item.get("sourceKey") or ""), canonical_key)
+                if item.get("atomicizedFrom") and item.get("sourceKey")
+                else str(item.get("requirementId") or "").strip() or _new_id("req")
+            )
             item["requirementId"] = requirement_id
             if requirement_id in by_id:
                 by_id[requirement_id].update(item)
             else:
                 store["requirements"].append(item)
                 by_id[requirement_id] = item
+        _infer_any_of_groups(store)
         _write_store_unlocked(store)
         return _overview(store)
+
+
+def _requirement_units(
+    requirements: list[dict[str, Any]],
+    coverages: list[dict[str, Any]],
+) -> list[tuple[list[dict[str, Any]], list[dict[str, Any]], int]]:
+    coverage_by_id = {
+        str(item.get("requirementId") or ""): item
+        for item in coverages
+        if item.get("requirementId")
+    }
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for requirement in requirements:
+        group_id = str(requirement.get("requirementGroupId") or "")
+        if requirement.get("requirementGroupMode") == "any_of" and group_id:
+            unit_key = f"any_of:{group_id}"
+        else:
+            unit_key = f"single:{requirement.get('requirementId') or requirement.get('canonicalKey')}"
+        grouped.setdefault(unit_key, []).append(requirement)
+
+    units: list[tuple[list[dict[str, Any]], list[dict[str, Any]], int]] = []
+    for related in grouped.values():
+        related_coverages = [
+            coverage_by_id[str(item.get("requirementId") or "")]
+            for item in related
+            if str(item.get("requirementId") or "") in coverage_by_id
+        ]
+        minimum = 1
+        if related[0].get("requirementGroupMode") == "any_of":
+            try:
+                minimum = max(1, int(related[0].get("minimumSatisfied") or 1))
+            except (TypeError, ValueError):
+                minimum = 1
+            minimum = min(minimum, len(related))
+        units.append((related, related_coverages, minimum))
+    return units
 
 
 def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any]]) -> dict[str, Any]:
@@ -310,8 +930,8 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
             if requirement.get("sourceKey") == source_key:
                 requirement["active"] = False
 
-        for assessment in assessments:
-            canonical_key = _normalize_canonical_key(assessment.get("canonicalKey"))
+        for assessment in merge_requirement_assessments(assessments):
+            canonical_key = _capability_key(assessment.get("canonicalKey"), assessment.get("category"))
             if not canonical_key:
                 continue
             key = (source_key, canonical_key)
@@ -324,6 +944,33 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
                 {
                     "canonicalKey": canonical_key,
                     "canonicalGroupId": _canonical_group_id(canonical_key),
+                    "capabilityName": canonical_capability_label(
+                        canonical_key,
+                        str(assessment.get("capabilityName") or assessment.get("label") or ""),
+                    ),
+                    "requiredProficiency": normalize_proficiency(
+                        assessment.get("requiredProficiency"),
+                        f"{assessment.get('label') or ''} {assessment.get('jdQuote') or ''}",
+                    ),
+                    "requiredProficiencySource": str(
+                        assessment.get("requiredProficiencySource") or ""
+                    ).strip(),
+                    "proficiencyApplicable": is_proficiency_applicable(
+                        assessment.get("category"),
+                        assessment.get("requiredProficiency"),
+                        f"{assessment.get('label') or ''} {assessment.get('jdQuote') or ''}",
+                        assessment.get("proficiencyApplicable"),
+                    ),
+                    "requirementGroupId": str(assessment.get("requirementGroupId") or "").strip(),
+                    "requirementGroupMode": (
+                        "any_of"
+                        if str(assessment.get("requirementGroupMode") or "").strip().lower() == "any_of"
+                        else "all_of"
+                    ),
+                    "requirementGroupLabel": str(
+                        assessment.get("requirementGroupLabel") or ""
+                    ).strip(),
+                    "minimumSatisfied": max(1, int(assessment.get("minimumSatisfied") or 1)),
                     "verificationMode": _verification_mode(
                         assessment.get("category"),
                         assessment.get("verificationMode"),
@@ -392,6 +1039,7 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
                             "rationale": str(reusable.get("rationale") or ""),
                             "confidence": reusable.get("confidence", 0),
                             "userClassification": str(reusable.get("userClassification") or "done"),
+                            "userProficiency": normalize_proficiency(reusable.get("userProficiency")),
                             "userDecisionAt": str(reusable.get("userDecisionAt") or assessed_at),
                             "decisionSource": "canonical_reuse",
                             "verificationStatus": "user_confirmed",
@@ -409,6 +1057,7 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
                             "rationale": assessment_patch["assessmentRationale"],
                             "confidence": assessment_patch["assessmentConfidence"],
                             "userClassification": "",
+                            "userProficiency": "unspecified",
                             "userDecisionAt": "",
                             "decisionSource": "assessment",
                             "verificationStatus": "candidate" if assessment_patch["candidateEvidenceRefs"] else "needs_input",
@@ -418,34 +1067,35 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
                     )
             synced_coverages.append(coverage)
 
+        _infer_any_of_groups(store)
         synced_requirement_ids = {item["requirementId"] for item in synced_requirements}
-        required_ids = {
-            item["requirementId"]
-            for item in synced_requirements
-            if item.get("importance") == "required"
-        }
-        supported_count = sum(
-            1
-            for coverage in synced_coverages
-            if coverage.get("coverageStatus") == "supported"
-        )
-        potential_count = sum(
-            1
-            for coverage in synced_coverages
-            if not coverage.get("userDecisionAt")
-            and coverage.get("assessmentStatus") in {"supported", "partial"}
-        )
-        unresolved_count = sum(
-            1
-            for coverage in synced_coverages
-            if coverage.get("coverageStatus") != "supported"
-        )
-        blocking_count = sum(
-            1
-            for coverage in synced_coverages
-            if coverage.get("requirementId") in required_ids
-            and coverage.get("coverageStatus") in {"not_found", "user_confirmed_absent"}
-        )
+        units = _requirement_units(synced_requirements, synced_coverages)
+        supported_count = 0
+        potential_count = 0
+        unresolved_count = 0
+        blocking_count = 0
+        for unit_requirements, unit_coverages, minimum in units:
+            supported = sum(
+                1 for coverage in unit_coverages
+                if coverage.get("coverageStatus") == "supported"
+            )
+            if supported >= minimum:
+                supported_count += 1
+                continue
+            unresolved_count += 1
+            if any(
+                not coverage.get("userDecisionAt")
+                and coverage.get("assessmentStatus") in {"supported", "partial"}
+                for coverage in unit_coverages
+            ):
+                potential_count += 1
+            required = any(item.get("importance") == "required" for item in unit_requirements)
+            unavailable = sum(
+                1 for coverage in unit_coverages
+                if coverage.get("coverageStatus") in {"not_found", "user_confirmed_absent"}
+            )
+            if required and len(unit_requirements) - unavailable < minimum:
+                blocking_count += 1
         _sync_evidence_requirement_links(store)
         _write_store_unlocked(store)
         return {
@@ -457,7 +1107,7 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
                 if item.get("requirementId") in synced_requirement_ids
             ],
             "summary": {
-                "requirementCount": len(synced_requirements),
+                "requirementCount": len(units),
                 "supportedRequirementCount": supported_count,
                 "potentialEvidenceRequirementCount": potential_count,
                 "unresolvedRequirementCount": unresolved_count,
@@ -658,6 +1308,11 @@ def classify_coverage(payload: dict[str, Any]) -> dict[str, Any]:
         }
         coverage = coverages_by_requirement.get(requirement_id)
         decided_at = _now()
+        user_proficiency = (
+            normalize_proficiency(payload.get("userProficiency"))
+            if payload["userClassification"] in {"done", "adjacent"}
+            else "unspecified"
+        )
         next_coverage = {
             "requirementId": requirement_id,
             "evidenceIds": evidence_ids,
@@ -670,6 +1325,7 @@ def classify_coverage(payload: dict[str, Any]) -> dict[str, Any]:
             "rationale": payload.get("rationale", ""),
             "confidence": payload.get("confidence", 0),
             "userClassification": payload["userClassification"],
+            "userProficiency": user_proficiency,
             "userDecisionAt": decided_at,
             "decisionSource": "direct",
             "verificationStatus": "user_confirmed",
@@ -705,6 +1361,10 @@ def classify_coverage(payload: dict[str, Any]) -> dict[str, Any]:
                             peer_evidence_ids,
                             str(peer.get("verificationMode") or ""),
                         )
+                        peer_coverage["userProficiency"] = highest_proficiency([
+                            normalize_proficiency(peer_coverage.get("userProficiency")),
+                            user_proficiency,
+                        ])
                         affected_requirement_ids.add(peer_id)
                     continue
 
@@ -720,6 +1380,7 @@ def classify_coverage(payload: dict[str, Any]) -> dict[str, Any]:
                         "rationale": payload.get("rationale", ""),
                         "confidence": payload.get("confidence", 0),
                         "userClassification": payload["userClassification"],
+                        "userProficiency": user_proficiency,
                         "userDecisionAt": decided_at,
                         "decisionSource": "canonical_reuse",
                         "verificationStatus": "user_confirmed",
@@ -796,6 +1457,16 @@ def create_evidence_task(payload: dict[str, Any]) -> dict[str, Any]:
         store = _read_store_unlocked()
         _requirement(store, str(payload.get("requirementId") or ""))
         now = _now()
+        payload = {
+            **payload,
+            "progressPercent": max(0, min(100, int(payload.get("progressPercent") or 0))),
+            "nextStep": str(payload.get("nextStep") or "").strip(),
+            "progressNotes": [str(item).strip() for item in payload.get("progressNotes") or [] if str(item).strip()],
+            "currentProficiency": normalize_proficiency(payload.get("currentProficiency")),
+            "targetProficiency": normalize_proficiency(payload.get("targetProficiency")) or "working",
+        }
+        if payload["targetProficiency"] == "unspecified":
+            payload["targetProficiency"] = "working"
         active_tasks = [
             task
             for task in store["tasks"]
@@ -827,7 +1498,27 @@ def update_evidence_task(payload: dict[str, Any]) -> dict[str, Any]:
         completion_ids = list(dict.fromkeys(payload.get("completionEvidenceIds") or []))
         for evidence_id in completion_ids:
             _evidence_item(store, evidence_id)
-        task.update({"status": payload["status"], "completionEvidenceIds": completion_ids, "updatedAt": _now()})
+        progress_percent = max(0, min(100, int(payload.get("progressPercent") or 0)))
+        if payload["status"] == "completed":
+            progress_percent = 100
+        task.update(
+            {
+                "status": payload["status"],
+                "completionEvidenceIds": completion_ids,
+                "progressPercent": progress_percent,
+                "nextStep": str(payload.get("nextStep") or "").strip(),
+                "progressNotes": [
+                    str(item).strip()
+                    for item in payload.get("progressNotes") or []
+                    if str(item).strip()
+                ],
+                "currentProficiency": normalize_proficiency(payload.get("currentProficiency")),
+                "targetProficiency": normalize_proficiency(payload.get("targetProficiency")),
+                "updatedAt": _now(),
+            }
+        )
+        if task["targetProficiency"] == "unspecified":
+            task["targetProficiency"] = "working"
         if payload["status"] == "completed":
             task["completedAt"] = task["updatedAt"]
         _write_store_unlocked(store)

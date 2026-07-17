@@ -34,6 +34,7 @@ import type {
   PipelineDeleteResponse,
   PipelineReportResponse,
   PipelineResponse,
+  ProficiencyLevel,
   ProjectListResponse,
   ResumeDraftResponse,
   ResumeItemsResponse,
@@ -362,10 +363,11 @@ export const bossApi = {
     evidenceIds: string[] = [],
     rationale = '',
     confidence = 0,
+    userProficiency: ProficiencyLevel = 'unspecified',
   ) {
     return request<EvidenceMutationResponse>('/api/evidence/coverage/classify', {
       method: 'POST',
-      body: JSON.stringify({ project, requirementId, userClassification, evidenceIds, rationale, confidence }),
+      body: JSON.stringify({ project, requirementId, userClassification, evidenceIds, rationale, confidence, userProficiency }),
     });
   },
 
@@ -397,10 +399,20 @@ export const bossApi = {
     });
   },
 
-  updateEvidenceTask(project: string, taskId: string, status: EvidenceTaskInput['status'], completionEvidenceIds: string[] = []) {
+  updateEvidenceTask(
+    project: string,
+    taskId: string,
+    status: EvidenceTaskInput['status'],
+    completionEvidenceIds: string[] = [],
+    progressPercent = 0,
+    nextStep = '',
+    progressNotes: string[] = [],
+    currentProficiency: ProficiencyLevel = 'unspecified',
+    targetProficiency: ProficiencyLevel = 'working',
+  ) {
     return request<EvidenceMutationResponse>('/api/evidence/tasks', {
       method: 'PUT',
-      body: JSON.stringify({ project, taskId, status, completionEvidenceIds }),
+      body: JSON.stringify({ project, taskId, status, completionEvidenceIds, progressPercent, nextStep, progressNotes, currentProficiency, targetProficiency }),
     });
   },
 

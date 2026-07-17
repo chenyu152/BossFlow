@@ -15,7 +15,6 @@ import type {
   EvidenceMutationResponse,
   EvidenceOverviewResponse,
   EvidenceRequirement,
-  EvidenceTaskInput,
   GreetingDraftResponse,
   GreetingDraftStatus,
   InterviewPrepResponse,
@@ -27,6 +26,7 @@ import type {
   ResumeSuggestionResponse,
 } from '../types';
 import { useAppTranslation } from '../i18n';
+import { buildRequirementUnits } from '../utils/requirementLogic';
 
 function getDecisionLabel(status: DecisionStatus, t: (key: string) => string): string {
   const map: Record<DecisionStatus, string> = {
@@ -128,17 +128,25 @@ function getEvidenceReadiness(
     };
   }
 
-  const supportedCount = requirements.filter(
-    (requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'supported',
-  ).length;
-  const pendingDecisionCount = requirements.filter((requirement) => {
-    const coverage = coverageByRequirement.get(requirement.requirementId);
-    return coverage?.coverageStatus !== 'supported' && !coverage?.userDecisionAt;
-  }).length;
-  const confirmedHardGapCount = requirements.filter((requirement) => {
-    const coverage = coverageByRequirement.get(requirement.requirementId);
-    return requirement.importance === 'required' && coverage?.coverageStatus === 'user_confirmed_absent';
-  }).length;
+  const units = buildRequirementUnits(requirements);
+  const unitStates = units.map((unit) => {
+    const coverages = unit.requirements
+      .map((requirement) => coverageByRequirement.get(requirement.requirementId))
+      .filter((coverage): coverage is EvidenceCoverage => Boolean(coverage));
+    const supported = coverages.filter((coverage) => coverage.coverageStatus === 'supported').length;
+    const confirmedAbsent = coverages.filter(
+      (coverage) => coverage.coverageStatus === 'user_confirmed_absent',
+    ).length;
+    const isSupported = supported >= unit.minimumSatisfied;
+    const isRequired = unit.requirements.some((requirement) => requirement.importance === 'required');
+    const isHardGap = isRequired
+      && !isSupported
+      && unit.requirements.length - confirmedAbsent < unit.minimumSatisfied;
+    return { isSupported, isHardGap };
+  });
+  const supportedCount = unitStates.filter((state) => state.isSupported).length;
+  const pendingDecisionCount = unitStates.filter((state) => !state.isSupported && !state.isHardGap).length;
+  const confirmedHardGapCount = unitStates.filter((state) => state.isHardGap).length;
 
   return {
     status: confirmedHardGapCount
@@ -146,7 +154,7 @@ function getEvidenceReadiness(
       : pendingDecisionCount
         ? 'needs_confirmation'
         : 'ready',
-    requirementCount,
+    requirementCount: units.length,
     supportedCount,
     pendingDecisionCount,
     confirmedHardGapCount,
@@ -171,8 +179,8 @@ export function Pipeline({
   onCreateEvidenceItem,
   onUpdateEvidenceItem,
   onConfirmEvidenceItem,
-  onCreateEvidenceTask,
   onOpenPersonalResume,
+  onOpenEvidenceProfile,
   onRefresh,
   onLlmEvaluate,
   llmEvaluatingKeys,
@@ -209,8 +217,8 @@ export function Pipeline({
   onCreateEvidenceItem: (item: EvidenceItemInput) => Promise<EvidenceMutationResponse | null>;
   onUpdateEvidenceItem: (item: EvidenceItem) => Promise<EvidenceMutationResponse | null>;
   onConfirmEvidenceItem: (evidenceId: string) => Promise<EvidenceMutationResponse | null>;
-  onCreateEvidenceTask: (task: EvidenceTaskInput) => Promise<EvidenceMutationResponse | null>;
   onOpenPersonalResume: () => void;
+  onOpenEvidenceProfile: () => void;
   onRefresh: () => void;
   onLlmEvaluate: (sourceKey: string) => void;
   llmEvaluatingKeys: string[];
@@ -590,8 +598,8 @@ export function Pipeline({
             onCreateEvidenceItem={onCreateEvidenceItem}
             onUpdateEvidenceItem={onUpdateEvidenceItem}
             onConfirmEvidenceItem={onConfirmEvidenceItem}
-            onCreateEvidenceTask={onCreateEvidenceTask}
             onOpenPersonalResume={onOpenPersonalResume}
+            onOpenEvidenceProfile={onOpenEvidenceProfile}
             targetRequirementId={targetRequirementId}
             targetRequestId={targetRequestId}
             evidenceFocusRequestId={evidenceFocus?.sourceKey === selectedItem.sourceKey ? evidenceFocus.requestId : undefined}

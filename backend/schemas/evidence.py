@@ -6,23 +6,33 @@ from pydantic import BaseModel, Field
 RequirementCategory = Literal["skill", "experience", "behavior", "education", "location", "preference", "other"]
 RequirementImportance = Literal["required", "preferred", "context"]
 RequirementVerificationMode = Literal["document_fact", "experience_fact", "preference", "behavior_example", "manual_review"]
+RequirementGroupMode = Literal["all_of", "any_of"]
 EvidenceType = Literal["fact", "project", "metric", "artifact", "story"]
 EvidenceStatus = Literal["draft", "confirmed", "rejected", "archived"]
 EvidenceClassification = Literal["done", "adjacent", "not_done", "unsure"]
 EvidenceTaskType = Literal["extract", "strengthen", "translate", "learn", "project", "accept_risk", "ignore"]
 EvidenceTaskStatus = Literal["pending", "in_progress", "completed", "dismissed"]
+ProficiencyLevel = Literal["unspecified", "awareness", "familiar", "working", "proficient", "expert"]
 
 
 class RequirementPayload(BaseModel):
     requirementId: str = ""
     canonicalKey: str
     canonicalGroupId: str = ""
+    capabilityName: str = ""
     label: str
     category: RequirementCategory = "other"
     verificationMode: RequirementVerificationMode = "manual_review"
     importance: RequirementImportance = "context"
     sourceKey: str
     jdQuote: str = ""
+    requiredProficiency: ProficiencyLevel = "unspecified"
+    requiredProficiencySource: str = ""
+    proficiencyApplicable: bool = False
+    requirementGroupId: str = ""
+    requirementGroupMode: RequirementGroupMode = "all_of"
+    requirementGroupLabel: str = ""
+    minimumSatisfied: int = Field(default=1, ge=1)
     extractionConfidence: float = Field(default=0, ge=0, le=1)
 
 
@@ -68,6 +78,7 @@ class EvidenceCoverageClassifyRequest(BaseModel):
     evidenceIds: list[str] = Field(default_factory=list)
     rationale: str = ""
     confidence: float = Field(default=0, ge=0, le=1)
+    userProficiency: ProficiencyLevel = "unspecified"
 
 
 class EvidenceTaskCreateRequest(BaseModel):
@@ -82,6 +93,11 @@ class EvidenceTaskCreateRequest(BaseModel):
     priorityBand: Literal["high", "medium", "low"] = "medium"
     status: EvidenceTaskStatus = "pending"
     completionEvidenceIds: list[str] = Field(default_factory=list)
+    progressPercent: int = Field(default=0, ge=0, le=100)
+    nextStep: str = ""
+    progressNotes: list[str] = Field(default_factory=list)
+    currentProficiency: ProficiencyLevel = "unspecified"
+    targetProficiency: ProficiencyLevel = "working"
 
 
 class EvidenceTaskUpdateRequest(BaseModel):
@@ -89,3 +105,8 @@ class EvidenceTaskUpdateRequest(BaseModel):
     taskId: str
     status: EvidenceTaskStatus
     completionEvidenceIds: list[str] = Field(default_factory=list)
+    progressPercent: int = Field(default=0, ge=0, le=100)
+    nextStep: str = ""
+    progressNotes: list[str] = Field(default_factory=list)
+    currentProficiency: ProficiencyLevel = "unspecified"
+    targetProficiency: ProficiencyLevel = "working"

@@ -238,7 +238,8 @@ export function Dashboard({
 
   const evidenceTasks = useMemo(() => {
     const activeTasks = (evidenceOverview?.tasks || []).filter(
-      (task) => task.status === 'pending' || task.status === 'in_progress',
+      (task) => (task.status === 'pending' || task.status === 'in_progress')
+        && ['learn', 'project', 'strengthen', 'translate'].includes(task.taskType),
     );
     if (!activeTasks.length) return [];
 
@@ -548,7 +549,7 @@ export function Dashboard({
           <div className="dashboard-launcher-panel__grid">
             <LauncherTile icon={<Search size={17} />} title={t('nav.jobs')} detail={isZh ? '筛选与评估新机会' : 'Filter and assess opportunities'} count={todayCount} onClick={() => setActiveTab('Jobs')} />
             <LauncherTile icon={<Inbox size={17} />} title={t('nav.pipeline')} detail={isZh ? '推进候选与证据' : 'Advance candidates and evidence'} count={pending.length} onClick={() => setActiveTab('Pipeline')} />
-            <LauncherTile icon={<ListChecks size={17} />} title={isZh ? '证据任务' : 'Evidence tasks'} detail={isZh ? '处理能力缺口与确认' : 'Resolve gaps and confirmations'} count={evidenceTaskCount} onClick={() => evidenceTasks[0] ? onOpenTask('Evidence', evidenceTasks[0].target) : setActiveTab('Evidence')} />
+            <LauncherTile icon={<ListChecks size={17} />} title={isZh ? '提升计划' : 'Improvement plans'} detail={isZh ? '推进已选择的能力建设' : 'Advance chosen capability work'} count={evidenceTaskCount} onClick={() => evidenceTasks[0] ? onOpenTask('Evidence', evidenceTasks[0].target) : setActiveTab('Evidence')} />
             <LauncherTile icon={<UserRound size={17} />} title={t('nav.personalResume')} detail={isZh ? '维护可信基础档案' : 'Maintain your verified profile'} onClick={() => setActiveTab('PersonalResume')} />
             <LauncherTile icon={<Layers3 size={17} />} title={t('nav.resume')} detail={isZh ? '查看岗位定制材料' : 'Review tailored materials'} count={materialCount} onClick={() => setActiveTab('Resume')} />
             <LauncherTile icon={<MessageSquareText size={17} />} title={t('nav.interview')} detail={isZh ? '准备面试与故事' : 'Prepare interviews and stories'} count={storyGapCount} onClick={() => setActiveTab('Interview')} />

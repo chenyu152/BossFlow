@@ -597,8 +597,8 @@ export default function App() {
                   onCreateEvidenceItem={boss.createEvidenceItem}
                   onUpdateEvidenceItem={boss.updateEvidenceItem}
                   onConfirmEvidenceItem={boss.confirmEvidenceItem}
-                  onCreateEvidenceTask={boss.createEvidenceTask}
                   onOpenPersonalResume={() => navigateToTab('PersonalResume')}
+                  onOpenEvidenceProfile={() => navigateToTab('Evidence')}
                   onRefresh={() => { void boss.refreshPipeline(); }}
                   onLlmEvaluate={(sourceKey) => { void boss.llmEvaluatePipelineItem(sourceKey); }}
                   llmEvaluatingKeys={boss.llmEvaluatingKeys}
@@ -637,6 +637,8 @@ export default function App() {
                   onCreateEvidenceItem={boss.createEvidenceItem}
                   onUpdateEvidenceItem={boss.updateEvidenceItem}
                   onConfirmEvidenceItem={boss.confirmEvidenceItem}
+                  onClassifyEvidenceCoverage={boss.classifyEvidenceCoverage}
+                  onCreateEvidenceTask={boss.createEvidenceTask}
                   onUpdateEvidenceTask={boss.updateEvidenceTask}
                   targetTaskId={selectedEvidenceTaskId}
                   targetRequestId={dashboardTargetRequestId}

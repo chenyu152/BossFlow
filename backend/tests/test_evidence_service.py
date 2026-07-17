@@ -28,7 +28,7 @@ class EvidenceServiceTest(unittest.TestCase):
     def test_creates_versioned_empty_store(self):
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 3)
+        self.assertEqual(overview["schemaVersion"], 6)
         self.assertEqual(overview["counts"]["requirements"], 0)
         self.assertTrue(Path(overview["path"]).exists())
 
@@ -91,9 +91,108 @@ class EvidenceServiceTest(unittest.TestCase):
             "taskId": task_id,
             "status": "completed",
             "completionEvidenceIds": [evidence_id],
+            "progressPercent": 75,
+            "nextStep": "整理项目说明",
+            "progressNotes": ["完成并发模型复习"],
         })
         self.assertEqual(completed["task"]["status"], "completed")
+        self.assertEqual(completed["task"]["progressPercent"], 100)
+        self.assertEqual(completed["task"]["nextStep"], "整理项目说明")
+        self.assertEqual(completed["task"]["progressNotes"], ["完成并发模型复习"])
         self.assertEqual(completed["overview"]["counts"]["pendingTasks"], 0)
+
+    def test_capability_profile_groups_aliases_and_excludes_constraints(self):
+        evidence_service.upsert_requirements([
+            {
+                "requirementId": "req-python-a",
+                "canonicalKey": "python-proficiency",
+                "label": "熟练使用 Python",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:1",
+            },
+            {
+                "requirementId": "req-python-b",
+                "canonicalKey": "python-programming",
+                "label": "Python 编程",
+                "category": "skill",
+                "importance": "preferred",
+                "sourceKey": "agent:2",
+            },
+            {
+                "requirementId": "req-degree",
+                "canonicalKey": "computer-science-degree",
+                "label": "计算机相关本科学历",
+                "category": "education",
+                "importance": "required",
+                "sourceKey": "agent:1",
+            },
+            {
+                "requirementId": "req-location",
+                "canonicalKey": "location-shenzhen",
+                "label": "工作地点深圳",
+                "category": "location",
+                "importance": "required",
+                "sourceKey": "agent:1",
+            },
+        ])
+        evidence_service.classify_coverage({
+            "requirementId": "req-python-a",
+            "userClassification": "not_done",
+            "evidenceIds": [],
+            "rationale": "用户确认尚未掌握",
+            "confidence": 1,
+        })
+
+        overview = evidence_service.read_evidence_overview()
+        python = next(item for item in overview["capabilities"] if item["canonicalKey"] == "python-programming")
+        degree = next(item for item in overview["capabilities"] if item["canonicalKey"] == "education-background")
+
+        self.assertEqual(python["jobCount"], 2)
+        self.assertEqual(python["requiredCount"], 1)
+        self.assertEqual(python["preferredCount"], 1)
+        self.assertEqual(python["status"], "gap")
+        self.assertEqual(degree["actionability"], "basic")
+        self.assertEqual(overview["counts"]["basicConditions"], 1)
+        self.assertEqual(overview["counts"]["gapCapabilities"], 1)
+        self.assertEqual([item["requirementId"] for item in overview["constraints"]], ["req-location"])
+
+    def test_capability_profile_normalizes_agent_aliases_and_year_baselines(self):
+        evidence_service.upsert_requirements([
+            {
+                "requirementId": "req-agent-a",
+                "canonicalKey": "agent-dev-experience",
+                "label": "Agent 开发经验",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:1",
+            },
+            {
+                "requirementId": "req-agent-b",
+                "canonicalKey": "agent-framework",
+                "label": "智能体框架开发",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:2",
+            },
+            {
+                "requirementId": "req-years",
+                "canonicalKey": "years-experience-3-5",
+                "label": "3-5年工作经验",
+                "category": "experience",
+                "importance": "required",
+                "sourceKey": "agent:1",
+            },
+        ])
+
+        overview = evidence_service.read_evidence_overview()
+        agent = next(item for item in overview["capabilities"] if item["canonicalKey"] == "ai-agent-development")
+        years = next(item for item in overview["capabilities"] if item["canonicalKey"] == "experience-years")
+
+        self.assertEqual(agent["jobCount"], 2)
+        self.assertEqual(agent["requiredCount"], 2)
+        self.assertEqual(years["actionability"], "basic")
+        self.assertEqual(overview["counts"]["basicConditions"], 1)
 
     def test_task_creation_is_idempotent_and_replaces_previous_action(self):
         requirement = evidence_service.upsert_requirements([
@@ -459,6 +558,191 @@ class EvidenceServiceTest(unittest.TestCase):
         self.assertEqual(classified["coverage"]["verificationStatus"], "user_confirmed")
         self.assertEqual(classified["overview"]["evidenceItems"], [])
 
+    def test_atomicizes_compound_capabilities_and_keeps_proficiency_separate(self):
+        overview = evidence_service.upsert_requirements([{
+            "requirementId": "req-compound",
+            "canonicalKey": "rag-vector-db-experience",
+            "label": "熟练掌握 RAG 与向量数据库经验",
+            "category": "skill",
+            "importance": "required",
+            "sourceKey": "agent:80",
+            "jdQuote": "熟练掌握 RAG 与向量数据库相关开发经验",
+        }])
+
+        capabilities = {item["canonicalKey"]: item for item in overview["capabilities"]}
+        self.assertIn("rag-systems", capabilities)
+        self.assertIn("vector-database", capabilities)
+        self.assertEqual(capabilities["rag-systems"]["label"], "RAG")
+        self.assertEqual(capabilities["rag-systems"]["highestRequiredProficiency"], "proficient")
+        self.assertEqual(capabilities["vector-database"]["highestRequiredProficiency"], "proficient")
+        self.assertNotIn("rag-vector-db-experience", capabilities)
+
+    def test_hides_proficiency_for_presence_only_and_non_skill_capabilities(self):
+        overview = evidence_service.upsert_requirements([
+            {
+                "requirementId": "req-evaluation",
+                "canonicalKey": "ai-evaluation-system",
+                "capabilityName": "AI应用评测体系建设",
+                "label": "有AI应用评测体系建设经验",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:90",
+            },
+            {
+                "requirementId": "req-teamwork",
+                "canonicalKey": "teamwork",
+                "capabilityName": "团队协作与自驱力",
+                "label": "具备团队协作与自驱力",
+                "category": "behavior",
+                "importance": "required",
+                "sourceKey": "agent:90",
+                "requiredProficiency": "proficient",
+            },
+        ])
+
+        capabilities = {item["canonicalKey"]: item for item in overview["capabilities"]}
+        self.assertFalse(capabilities["ai-evaluation-system"]["proficiencyApplicable"])
+        self.assertFalse(capabilities["teamwork"]["proficiencyApplicable"])
+        self.assertEqual(capabilities["teamwork"]["highestRequiredProficiency"], "unspecified")
+
+    def test_any_of_group_counts_as_one_requirement_and_one_match_satisfies_it(self):
+        assessments = [
+            {
+                "canonicalKey": language,
+                "capabilityName": label,
+                "label": "熟练掌握 Python、Java 或 C++ 中至少一门",
+                "category": "skill",
+                "importance": "required",
+                "requirementGroupId": "programming-language-choice",
+                "requirementGroupMode": "any_of",
+                "requirementGroupLabel": "Python、Java 或 C++ 中至少一门",
+                "minimumSatisfied": 1,
+                "candidateEvidenceRefs": (
+                    [{"sourceType": "cv", "quote": "Python 项目经验", "locator": "项目经历"}]
+                    if language == "python-programming"
+                    else []
+                ),
+                "coverageStatus": "supported" if language == "python-programming" else "not_found",
+                "confidence": 0.9,
+            }
+            for language, label in (
+                ("python-programming", "Python"),
+                ("java-programming", "Java"),
+                ("cpp-programming", "C++"),
+            )
+        ]
+
+        result = evidence_service.sync_requirement_assessment("agent:91", assessments)
+
+        self.assertEqual(len(result["requirements"]), 3)
+        self.assertTrue(all(
+            item["requirementGroupMode"] == "any_of"
+            for item in result["requirements"]
+        ))
+        self.assertEqual(result["summary"]["requirementCount"], 1)
+        self.assertEqual(result["summary"]["supportedRequirementCount"], 0)
+        self.assertEqual(result["summary"]["blockingGapCount"], 0)
+        python_requirement = next(
+            item for item in result["requirements"]
+            if item["canonicalKey"] == "python-programming"
+        )
+        evidence = evidence_service.create_evidence_item({
+            "title": "Python 项目证据",
+            "evidenceType": "project",
+            "summary": "使用 Python 完成项目开发。",
+            "sourceRefs": [{"type": "project", "ref": "demo", "quote": "Python 项目"}],
+            "requirementIds": [python_requirement["requirementId"]],
+        })["item"]
+        evidence_service.confirm_evidence_item(evidence["evidenceId"])
+        evidence_service.classify_coverage({
+            "requirementId": python_requirement["requirementId"],
+            "userClassification": "done",
+            "evidenceIds": [evidence["evidenceId"]],
+            "rationale": "用户确认掌握 Python。",
+            "confidence": 1,
+        })
+        refreshed = evidence_service.read_evidence_overview()
+        coverage_by_id = {
+            item["requirementId"]: item for item in refreshed["coverages"]
+        }
+        self.assertEqual(
+            coverage_by_id[python_requirement["requirementId"]]["coverageStatus"],
+            "supported",
+        )
+
+    def test_infers_any_of_group_from_shared_at_least_one_requirement(self):
+        quote = "熟练掌握 Python、Java、C++ 中至少一门编程语言"
+        overview = evidence_service.upsert_requirements([
+            {
+                "requirementId": f"req-{key}",
+                "canonicalKey": key,
+                "capabilityName": label,
+                "label": quote,
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:92",
+                "jdQuote": quote,
+                "requiredProficiency": "proficient",
+            }
+            for key, label in (
+                ("python-programming", "Python"),
+                ("java-programming", "Java"),
+                ("cpp-programming", "C++"),
+            )
+        ])
+
+        requirements = [
+            item for item in overview["requirements"]
+            if item["sourceKey"] == "agent:92"
+        ]
+        self.assertEqual(
+            len({item["requirementGroupId"] for item in requirements}),
+            1,
+        )
+        self.assertTrue(all(item["requirementGroupMode"] == "any_of" for item in requirements))
+
+    def test_user_proficiency_is_reused_without_creating_duplicate_capabilities(self):
+        overview = evidence_service.upsert_requirements([
+            {
+                "requirementId": "req-cpp-a",
+                "canonicalKey": "cpp-language",
+                "label": "掌握 C++",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": "agent:81",
+            },
+            {
+                "requirementId": "req-cpp-b",
+                "canonicalKey": "cpp-programming",
+                "label": "精通 C++",
+                "category": "skill",
+                "importance": "preferred",
+                "sourceKey": "agent:82",
+            },
+        ])
+        self.assertEqual(
+            len([item for item in overview["capabilities"] if item["canonicalKey"] == "cpp-programming"]),
+            1,
+        )
+
+        classified = evidence_service.classify_coverage({
+            "requirementId": "req-cpp-a",
+            "userClassification": "done",
+            "userProficiency": "working",
+            "evidenceIds": [],
+            "rationale": "用户确认掌握 C++。",
+            "confidence": 1,
+        })
+        cpp = next(
+            item for item in classified["overview"]["capabilities"]
+            if item["canonicalKey"] == "cpp-programming"
+        )
+        self.assertEqual(cpp["jobCount"], 2)
+        self.assertEqual(cpp["userProficiency"], "working")
+        self.assertEqual(cpp["highestRequiredProficiency"], "expert")
+        self.assertEqual(cpp["requiredProficiencyCounts"]["working"], 1)
+        self.assertEqual(cpp["requiredProficiencyCounts"]["expert"], 1)
+
     def test_migrates_missing_collections_without_losing_requirements(self):
         evidence_service.EVIDENCE_STORE_PATH.write_text(
             json.dumps({
@@ -470,7 +754,7 @@ class EvidenceServiceTest(unittest.TestCase):
 
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 3)
+        self.assertEqual(overview["schemaVersion"], 6)
         self.assertEqual(overview["requirements"][0]["requirementId"], "req-existing")
         self.assertEqual(overview["evidenceItems"], [])
         self.assertEqual(overview["coverages"], [])
@@ -499,7 +783,7 @@ class EvidenceServiceTest(unittest.TestCase):
 
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 3)
+        self.assertEqual(overview["schemaVersion"], 6)
         self.assertEqual(overview["requirements"][0]["canonicalKey"], "python-fastapi")
         self.assertTrue(overview["requirements"][0]["canonicalGroupId"].startswith("cgrp-"))
         self.assertEqual(overview["coverages"][0]["decisionSource"], "direct")

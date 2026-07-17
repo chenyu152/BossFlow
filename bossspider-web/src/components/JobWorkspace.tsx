@@ -27,12 +27,13 @@ import type {
   EvidenceMutationResponse,
   EvidenceOverviewResponse,
   EvidenceRequirement,
-  EvidenceTaskInput,
+  ProficiencyLevel,
   GreetingDraft,
   GreetingDraftStatus,
   Job,
   PipelineItem,
 } from '../types';
+import { buildRequirementUnits } from '../utils/requirementLogic';
 
 type WorkspaceTab = 'overview' | 'evaluation' | 'materials' | 'interview';
 type NextAction = 'llm' | 'evidence_assessment' | 'evidence_gap' | 'evidence_review' | 'resume' | 'draft' | 'interview' | 'confirm' | 'review';
@@ -42,9 +43,28 @@ type EvidenceDecisionTarget = {
   reviewMode?: 'full' | 'candidate';
 };
 
+type JobMatchingResult = {
+  canonicalKey: string;
+  title: string;
+  importance: EvidenceRequirement['importance'];
+  category: EvidenceRequirement['category'];
+  requiredProficiency?: ProficiencyLevel;
+  proficiencyApplicable: boolean;
+  groupMode: 'all_of' | 'any_of';
+  alternatives: string[];
+  status: 'matched' | 'partial' | 'missing' | 'unknown';
+  rationale: string;
+  jdQuote: string;
+};
+
 type StatusOption = {
   value: DecisionStatus;
   label: string;
+};
+
+const PROFICIENCY_LABELS: Record<'zh' | 'en', Record<ProficiencyLevel, string>> = {
+  zh: { unspecified: '未说明', awareness: '了解', familiar: '熟悉', working: '掌握', proficient: '熟练', expert: '精通' },
+  en: { unspecified: 'Not specified', awareness: 'Awareness', familiar: 'Familiar', working: 'Working', proficient: 'Proficient', expert: 'Expert' },
 };
 
 type JobWorkspaceProps = {
@@ -58,12 +78,13 @@ type JobWorkspaceProps = {
     evidenceIds?: string[],
     rationale?: string,
     confidence?: number,
+    userProficiency?: ProficiencyLevel,
   ) => Promise<EvidenceMutationResponse | null>;
   onCreateEvidenceItem: (item: EvidenceItemInput) => Promise<EvidenceMutationResponse | null>;
   onUpdateEvidenceItem: (item: EvidenceItem) => Promise<EvidenceMutationResponse | null>;
   onConfirmEvidenceItem: (evidenceId: string) => Promise<EvidenceMutationResponse | null>;
-  onCreateEvidenceTask: (task: EvidenceTaskInput) => Promise<EvidenceMutationResponse | null>;
   onOpenPersonalResume: () => void;
+  onOpenEvidenceProfile: () => void;
   targetRequirementId?: string;
   targetRequestId?: number;
   evidenceFocusRequestId?: number;
@@ -220,8 +241,8 @@ export function JobWorkspace({
   onCreateEvidenceItem,
   onUpdateEvidenceItem,
   onConfirmEvidenceItem,
-  onCreateEvidenceTask,
   onOpenPersonalResume,
+  onOpenEvidenceProfile,
   targetRequirementId,
   targetRequestId,
   evidenceFocusRequestId,
@@ -251,7 +272,8 @@ export function JobWorkspace({
   jobLabels,
   layout = 'drawer',
 }: JobWorkspaceProps) {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
+  const language = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'zh';
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
   const [greetingText, setGreetingText] = useState('');
   const [decisionTarget, setDecisionTarget] = useState<EvidenceDecisionTarget | null>(null);
@@ -266,6 +288,7 @@ export function JobWorkspace({
     item.resumeDraftPath,
     item.interviewPrepPath,
   ].filter(Boolean).length;
+  const isLegacyEvaluation = Boolean(item.reportPath) && (item.evaluationProfileVersion || 0) < 2;
   const requirements = useMemo(
     () => (evidenceOverview?.requirements || [])
       .filter((requirement) => requirement.sourceKey === item.sourceKey && requirement.active !== false)
@@ -281,6 +304,62 @@ export function JobWorkspace({
     () => new Map((evidenceOverview?.coverages || []).map((coverage) => [coverage.requirementId, coverage])),
     [evidenceOverview?.coverages],
   );
+  const matchingResults = useMemo<JobMatchingResult[]>(() => {
+    const importanceRank = { context: 0, preferred: 1, required: 2 };
+    return buildRequirementUnits(requirements).map((unit) => {
+      const group = unit.requirements;
+      const coverages = group
+        .map((requirement) => coverageByRequirement.get(requirement.requirementId))
+        .filter((coverage): coverage is EvidenceCoverage => Boolean(coverage));
+      const matchedCount = coverages.filter((coverage) => (
+        coverage.userClassification === 'done'
+        || coverage.verificationStatus === 'source_verified'
+        || coverage.coverageStatus === 'supported'
+      )).length;
+      const partialCount = coverages.filter((coverage) => (
+        coverage.userClassification === 'adjacent'
+        || ['supported', 'partial'].includes(coverage.assessmentStatus || '')
+        || coverage.coverageStatus === 'partial'
+      )).length;
+      const confirmedMissingCount = coverages.filter((coverage) => (
+        coverage.userClassification === 'not_done'
+        || coverage.coverageStatus === 'user_confirmed_absent'
+      )).length;
+      const status: JobMatchingResult['status'] = matchedCount >= unit.minimumSatisfied
+        ? 'matched'
+        : partialCount
+          ? 'partial'
+          : group.length - confirmedMissingCount < unit.minimumSatisfied
+            ? 'missing'
+            : 'unknown';
+      const representative = group[0];
+      const importance = group.reduce((current, requirement) => (
+        importanceRank[requirement.importance] > importanceRank[current]
+          ? requirement.importance
+          : current
+      ), representative.importance);
+      const rationale = coverages
+        .map((coverage) => coverage.userDecisionAt ? coverage.rationale : (coverage.assessmentRationale || coverage.rationale))
+        .find(Boolean) || '';
+      return {
+        canonicalKey: unit.unitId,
+        title: unit.mode === 'any_of' ? unit.label : representative.capabilityName || representative.label,
+        importance,
+        category: representative.category,
+        requiredProficiency: representative.requiredProficiency,
+        proficiencyApplicable: unit.mode !== 'any_of' && Boolean(representative.proficiencyApplicable),
+        groupMode: unit.mode,
+        alternatives: group.map((requirement) => requirement.capabilityName || requirement.label),
+        status,
+        rationale,
+        jdQuote: group.map((requirement) => requirement.jdQuote).find(Boolean) || '',
+      };
+    }).sort((left, right) => {
+      const importanceOrder = { required: 0, preferred: 1, context: 2 };
+      return importanceOrder[left.importance] - importanceOrder[right.importance]
+        || left.title.localeCompare(right.title);
+    });
+  }, [coverageByRequirement, requirements]);
   const evidenceById = useMemo(
     () => new Map((evidenceOverview?.evidenceItems || []).map((evidence) => [evidence.evidenceId, evidence])),
     [evidenceOverview?.evidenceItems],
@@ -294,29 +373,43 @@ export function JobWorkspace({
       .filter((evidence): evidence is EvidenceItem => Boolean(evidence));
     return linked.find((evidence) => evidence.status === 'draft') || linked[0] || null;
   }, [coverageByRequirement, decisionTarget, evidenceById]);
-  const requirementCount = requirements.length || item.requirementCount || 0;
+  const requirementUnits = useMemo(() => buildRequirementUnits(requirements), [requirements]);
+  const requirementUnitStates = useMemo(() => requirementUnits.map((unit) => {
+    const coverages = unit.requirements
+      .map((requirement) => coverageByRequirement.get(requirement.requirementId))
+      .filter((coverage): coverage is EvidenceCoverage => Boolean(coverage));
+    const supported = coverages.filter((coverage) => coverage.coverageStatus === 'supported').length;
+    const confirmedAbsent = coverages.filter(
+      (coverage) => coverage.coverageStatus === 'user_confirmed_absent',
+    ).length;
+    const isSupported = supported >= unit.minimumSatisfied;
+    const isRequired = unit.requirements.some((requirement) => requirement.importance === 'required');
+    return {
+      isSupported,
+      isConfirmedGap: !isSupported && unit.requirements.length - confirmedAbsent < unit.minimumSatisfied,
+      isHardGap: isRequired && !isSupported && unit.requirements.length - confirmedAbsent < unit.minimumSatisfied,
+      isPending: !isSupported && (
+        coverages.length < unit.requirements.length
+        || coverages.some((coverage) => !coverage.userDecisionAt)
+      ),
+      hasPotentialEvidence: !isSupported && coverages.some((coverage) => (
+        !coverage.userDecisionAt
+        && (coverage.assessmentStatus === 'supported' || coverage.assessmentStatus === 'partial')
+      )),
+    };
+  }), [coverageByRequirement, requirementUnits]);
+  const requirementCount = requirementUnits.length || item.requirementCount || 0;
   const confirmedCoverageCount = requirements.length
-    ? requirements.filter((requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'supported').length
+    ? requirementUnitStates.filter((state) => state.isSupported).length
     : item.supportedRequirementCount || 0;
   const pendingDecisionCount = requirements.length
-    ? requirements.filter((requirement) => {
-      const coverage = coverageByRequirement.get(requirement.requirementId);
-      return coverage?.coverageStatus !== 'supported' && !coverage?.userDecisionAt;
-    }).length
+    ? requirementUnitStates.filter((state) => state.isPending).length
     : item.unresolvedRequirementCount || 0;
-  const confirmedGapCount = requirements.filter(
-    (requirement) => coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'user_confirmed_absent',
-  ).length;
-  const confirmedHardGapCount = requirements.filter((requirement) => (
-    requirement.importance === 'required'
-      && coverageByRequirement.get(requirement.requirementId)?.coverageStatus === 'user_confirmed_absent'
-  )).length;
+  const confirmedGapCount = requirementUnitStates.filter((state) => state.isConfirmedGap).length;
+  const confirmedHardGapCount = requirementUnitStates.filter((state) => state.isHardGap).length;
   const hasEvidenceAssessment = requirements.length > 0 || Boolean(item.requirementAssessedAt);
   const potentialEvidenceCount = requirements.length
-    ? requirements.filter((requirement) => {
-      const coverage = coverageByRequirement.get(requirement.requirementId);
-      return !coverage?.userDecisionAt && (coverage?.assessmentStatus === 'supported' || coverage?.assessmentStatus === 'partial');
-    }).length
+    ? requirementUnitStates.filter((state) => state.hasPotentialEvidence).length
     : item.potentialEvidenceRequirementCount || 0;
   const averageSalary = (job?.avg ?? item.avg ?? 0).toFixed(1);
   const greetingSourceText = greetingDraft?.editedText || greetingDraft?.draftText || '';
@@ -424,7 +517,7 @@ export function JobWorkspace({
     return { label: t('jobWorkspace.evidence.statuses.unknown'), classes: 'border-zinc-800 bg-zinc-900/60 text-zinc-500' };
   };
 
-  const importanceClasses = (requirement: EvidenceRequirement) => (
+  const importanceClasses = (requirement: Pick<EvidenceRequirement, 'importance'>) => (
     requirement.importance === 'required'
       ? 'border-red-900/60 bg-red-950/30 text-red-300'
       : requirement.importance === 'preferred'
@@ -488,6 +581,7 @@ export function JobWorkspace({
         evidenceIds,
         rationale,
         1,
+        input.proficiency,
       );
       if (!classificationResult) throw new Error(t('jobWorkspace.evidence.errors.classify'));
 
@@ -497,27 +591,6 @@ export function JobWorkspace({
         setDecisionTarget(null);
         return;
       }
-
-      const taskType = input.classification === 'done'
-        ? 'strengthen'
-        : input.classification === 'adjacent'
-          ? 'translate'
-          : input.taskType;
-      if (!taskType) throw new Error(t('jobWorkspace.evidence.errors.action'));
-      const taskInput: EvidenceTaskInput = {
-        requirementId: requirement.requirementId,
-        taskType,
-        affectedSourceKeys: [requirement.sourceKey],
-        recommendedAction: t(`jobWorkspace.evidence.taskRecommendations.${taskType}`),
-        estimatedEffortBand: input.timeBudget || 'under_1_hour',
-        timeBudget: input.timeBudget || 'under_1_hour',
-        userWillingness: input.userWillingness || 'yes',
-        priorityBand: requirement.importance === 'required' ? 'high' : 'medium',
-        status: 'pending',
-        completionEvidenceIds: [],
-      };
-      const taskResult = await onCreateEvidenceTask(taskInput);
-      if (!taskResult) throw new Error(t('jobWorkspace.evidence.errors.saveTask'));
 
       setDecisionTarget(null);
     } catch (error) {
@@ -563,6 +636,9 @@ export function JobWorkspace({
         [created.item.evidenceId],
         t('jobWorkspace.evidence.decisionRationale.candidateConfirmed'),
         1,
+        requirement.requiredProficiency && requirement.requiredProficiency !== 'unspecified'
+          ? requirement.requiredProficiency
+          : 'working',
       );
       if (!classified) throw new Error(t('jobWorkspace.evidence.errors.classify'));
       const confirmed = await onConfirmEvidenceItem(created.item.evidenceId);
@@ -680,13 +756,13 @@ export function JobWorkspace({
                     </ActionButton>
                   )}
                   {nextAction === 'evidence_gap' && (
-                    <ActionButton onClick={() => setActiveTab('evaluation')} tone="red">
+                    <ActionButton onClick={onOpenEvidenceProfile} tone="red">
                       <CheckCircle2 size={13} />
                       {t('jobWorkspace.nextActionButtons.evidenceGap', { count: confirmedHardGapCount })}
                     </ActionButton>
                   )}
                   {nextAction === 'evidence_review' && (
-                    <ActionButton onClick={() => setActiveTab('evaluation')} tone="amber">
+                    <ActionButton onClick={onOpenEvidenceProfile} tone="amber">
                       <CheckCircle2 size={13} />
                       {t('jobWorkspace.nextActionButtons.evidenceReview', { count: pendingDecisionCount })}
                     </ActionButton>
@@ -836,6 +912,15 @@ export function JobWorkspace({
               </div>
               {item.llmFitLevel && <div className="text-xs text-emerald-400">{item.llmFitLevel}</div>}
               {item.llmRecommendation && <div className="text-xs leading-relaxed text-zinc-300">{item.llmRecommendation}</div>}
+              {isLegacyEvaluation && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-amber-900/60 bg-amber-950/25 p-3">
+                  <div className="min-w-0 text-xs leading-relaxed text-amber-200">{t('jobWorkspace.evidence.staleEvaluationHint')}</div>
+                  <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="amber">
+                    {isLlmEvaluating && <Loader2 size={13} className="animate-spin" />}
+                    {t('jobWorkspace.evidence.regenerateAssessment')}
+                  </ActionButton>
+                </div>
+              )}
               {item.reportPath ? (
                 <>
                   <div className="break-all text-[10px] text-zinc-500">{item.reportPath}</div>
@@ -852,6 +937,82 @@ export function JobWorkspace({
               )}
             </Section>
             <Section title={t('jobWorkspace.evidence.requirementsTitle')}>
+              {evidenceLoading ? (
+                <div className="flex items-center gap-2 text-sm text-zinc-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  {t('jobWorkspace.evidence.loading')}
+                </div>
+              ) : matchingResults.length ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-indigo-900/50 bg-indigo-950/20 px-3 py-2.5">
+                    <div>
+                      <div className="text-xs font-medium text-indigo-200">{t('jobWorkspace.evidence.matchingOnlyTitle')}</div>
+                      <div className="mt-1 text-[10px] leading-relaxed text-zinc-500">{t('jobWorkspace.evidence.matchingOnlyHint')}</div>
+                    </div>
+                    <button type="button" onClick={onOpenEvidenceProfile} className="rounded border border-indigo-800/70 px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-950/40">
+                      {t('jobWorkspace.evidence.openCapabilityProfile')}
+                    </button>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {matchingResults.map((result) => {
+                      const statusClasses = {
+                        matched: 'border-emerald-900/60 bg-emerald-950/25 text-emerald-300',
+                        partial: 'border-cyan-900/60 bg-cyan-950/25 text-cyan-300',
+                        missing: 'border-red-900/60 bg-red-950/25 text-red-300',
+                        unknown: 'border-zinc-700 bg-zinc-900 text-zinc-400',
+                      }[result.status];
+                      return (
+                        <article key={result.canonicalKey} className="rounded border border-zinc-800 bg-zinc-900/35 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-zinc-100">{result.title}</div>
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${importanceClasses(result)}`}>
+                                  {t(`jobWorkspace.evidence.importance.${result.importance}`)}
+                                </span>
+                                <span className="rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                                  {t(`jobWorkspace.evidence.categories.${result.category}`)}
+                                </span>
+                                {result.groupMode === 'any_of' && (
+                                  <span className="job-match-any-of-badge rounded border px-1.5 py-0.5 text-[10px]">
+                                    {t('jobWorkspace.evidence.anyOfGroup')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className={`shrink-0 rounded border px-2 py-1 text-[10px] font-medium ${statusClasses}`}>
+                              {t(`jobWorkspace.evidence.matchingStatuses.${result.status}`)}
+                            </span>
+                          </div>
+                          {result.proficiencyApplicable && result.requiredProficiency && result.requiredProficiency !== 'unspecified' && (
+                            <div className="mt-3 text-[10px] text-zinc-500">
+                              {t('jobWorkspace.evidence.requiredProficiency')}：<span className="text-zinc-300">{PROFICIENCY_LABELS[language][result.requiredProficiency]}</span>
+                            </div>
+                          )}
+                          {result.groupMode === 'any_of' && (
+                            <div className="mt-3 text-[10px] leading-relaxed text-zinc-500">
+                              {t('jobWorkspace.evidence.anyOfAlternatives')}：
+                              <span className="text-zinc-300">{result.alternatives.join(' / ')}</span>
+                            </div>
+                          )}
+                          {result.rationale && <p className="mt-2 text-xs leading-relaxed text-zinc-400">{result.rationale}</p>}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : item.reportPath ? (
+                <div className="space-y-3 rounded border border-dashed border-zinc-800 bg-zinc-900/30 p-3">
+                  <div className="text-xs leading-relaxed text-zinc-500">{t('jobWorkspace.evidence.legacyReportHint')}</div>
+                  <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="emerald">
+                    {isLlmEvaluating && <Loader2 size={13} className="animate-spin" />}
+                    {t('jobWorkspace.evidence.regenerateAssessment')}
+                  </ActionButton>
+                </div>
+              ) : (
+                <div className="text-xs leading-relaxed text-zinc-500">{t('jobWorkspace.evidence.noAssessment')}</div>
+              )}
+              {false && (<>
               {evidenceLoading ? (
                 <div className="flex items-center gap-2 text-sm text-zinc-500">
                   <Loader2 size={14} className="animate-spin" />
@@ -1120,6 +1281,7 @@ export function JobWorkspace({
               ) : (
                 <div className="text-xs leading-relaxed text-zinc-500">{t('jobWorkspace.evidence.noAssessment')}</div>
               )}
+              </>)}
             </Section>
           </div>
         )}

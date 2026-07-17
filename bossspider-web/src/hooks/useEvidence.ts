@@ -9,6 +9,7 @@ import type {
   EvidenceRequirement,
   EvidenceTaskInput,
   EvidenceTaskStatus,
+  ProficiencyLevel,
 } from '../types';
 
 export function useEvidence(getProject: () => string) {
@@ -55,6 +56,7 @@ export function useEvidence(getProject: () => string) {
     evidenceIds: string[] = [],
     rationale = '',
     confidence = 0,
+    userProficiency: ProficiencyLevel = 'unspecified',
   ) => {
     try {
       return applyMutation(await bossApi.classifyEvidenceCoverage(
@@ -64,6 +66,7 @@ export function useEvidence(getProject: () => string) {
         evidenceIds,
         rationale,
         confidence,
+        userProficiency,
       ));
     } catch (error) {
       setEvidenceError((error as Error).message);
@@ -111,9 +114,24 @@ export function useEvidence(getProject: () => string) {
     taskId: string,
     status: EvidenceTaskStatus,
     completionEvidenceIds: string[] = [],
+    progressPercent = 0,
+    nextStep = '',
+    progressNotes: string[] = [],
+    currentProficiency: ProficiencyLevel = 'unspecified',
+    targetProficiency: ProficiencyLevel = 'working',
   ) => {
     try {
-      return applyMutation(await bossApi.updateEvidenceTask(getProject(), taskId, status, completionEvidenceIds));
+      return applyMutation(await bossApi.updateEvidenceTask(
+        getProject(),
+        taskId,
+        status,
+        completionEvidenceIds,
+        progressPercent,
+        nextStep,
+        progressNotes,
+        currentProficiency,
+        targetProficiency,
+      ));
     } catch (error) {
       setEvidenceError((error as Error).message);
       return null;

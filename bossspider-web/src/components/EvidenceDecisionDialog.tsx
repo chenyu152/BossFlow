@@ -6,7 +6,7 @@ import type {
   EvidenceCoverage,
   EvidenceItem,
   EvidenceRequirement,
-  EvidenceTaskType,
+  ProficiencyLevel,
 } from '../types';
 
 export type EvidenceDecisionInput = {
@@ -18,47 +18,8 @@ export type EvidenceDecisionInput = {
   source: string;
   transferable: string;
   boundaries: string;
-  timeBudget: string;
-  userWillingness: string;
-  taskType: EvidenceTaskType | '';
+  proficiency: ProficiencyLevel;
 };
-
-type Choice = { value: string; label: string; description?: string };
-
-function ChoiceGroup({
-  label,
-  value,
-  choices,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  choices: Choice[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="text-xs font-medium text-zinc-300">{label}</div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {choices.map((choice) => (
-          <button
-            key={choice.value}
-            type="button"
-            onClick={() => onChange(choice.value)}
-            className={`rounded border px-3 py-2 text-left transition-colors ${
-              value === choice.value
-                ? 'border-indigo-600 bg-indigo-950/40 text-indigo-100'
-                : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900'
-            }`}
-          >
-            <span className="block text-xs font-medium">{choice.label}</span>
-            {choice.description && <span className="mt-1 block text-[10px] leading-relaxed text-zinc-500">{choice.description}</span>}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function TextField({
   label,
@@ -108,7 +69,8 @@ export function EvidenceDecisionDialog({
   onCancel: () => void;
   onSubmit: (input: EvidenceDecisionInput) => void;
 }) {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
+  const isZh = (i18n.resolvedLanguage || i18n.language).startsWith('zh');
   const [experience, setExperience] = useState('');
   const [role, setRole] = useState('');
   const [actions, setActions] = useState('');
@@ -116,9 +78,7 @@ export function EvidenceDecisionDialog({
   const [source, setSource] = useState('');
   const [transferable, setTransferable] = useState('');
   const [boundaries, setBoundaries] = useState('');
-  const [timeBudget, setTimeBudget] = useState('');
-  const [userWillingness, setUserWillingness] = useState('');
-  const [taskType, setTaskType] = useState<EvidenceTaskType | ''>('');
+  const [proficiency, setProficiency] = useState<ProficiencyLevel>('working');
 
   useEffect(() => {
     const candidateSummary = candidateEvidenceRefs.map((source) => source.quote).filter(Boolean).join('\n');
@@ -130,40 +90,24 @@ export function EvidenceDecisionDialog({
     setSource(existingEvidence?.sourceRefs?.[0]?.ref || candidateSource);
     setTransferable(classification === 'adjacent' ? (existingEvidence?.actions || []).join('\n') : '');
     setBoundaries(classification === 'adjacent' ? (existingEvidence?.results || []).join('\n') : '');
-    setTimeBudget('');
-    setUserWillingness('');
-    setTaskType('');
+    setProficiency(
+      classification === 'adjacent'
+        ? 'familiar'
+        : requirement.requiredProficiency && requirement.requiredProficiency !== 'unspecified'
+          ? requirement.requiredProficiency
+          : 'working',
+    );
   }, [candidateEvidenceRefs, classification, existingEvidence?.evidenceId, requirement.requirementId]);
 
   const valid = useMemo(() => {
     if (classification === 'done') {
-      if (compactCandidateReview) return Boolean(experience.trim() && source.trim());
-      return Boolean(experience.trim() && role.trim() && actions.trim() && results.trim() && source.trim());
+      return Boolean(experience.trim() && source.trim());
     }
     if (classification === 'adjacent') {
       return Boolean(experience.trim() && transferable.trim() && boundaries.trim());
     }
-    return Boolean(timeBudget && userWillingness && taskType);
-  }, [actions, boundaries, classification, compactCandidateReview, experience, results, role, source, taskType, timeBudget, transferable, userWillingness]);
-
-  const timeChoices: Choice[] = [
-    { value: 'none', label: t('jobWorkspace.evidence.dialog.time.none') },
-    { value: 'under_1_hour', label: t('jobWorkspace.evidence.dialog.time.underOneHour') },
-    { value: '1_3_days', label: t('jobWorkspace.evidence.dialog.time.oneToThreeDays') },
-    { value: '1_3_weeks', label: t('jobWorkspace.evidence.dialog.time.oneToThreeWeeks') },
-    { value: 'long_term', label: t('jobWorkspace.evidence.dialog.time.longTerm') },
-  ];
-  const willingnessChoices: Choice[] = [
-    { value: 'yes', label: t('jobWorkspace.evidence.dialog.willingness.yes') },
-    { value: 'unsure', label: t('jobWorkspace.evidence.dialog.willingness.unsure') },
-    { value: 'no', label: t('jobWorkspace.evidence.dialog.willingness.no') },
-  ];
-  const actionChoices: Choice[] = [
-    { value: 'accept_risk', label: t('jobWorkspace.evidence.dialog.actions.acceptRisk'), description: t('jobWorkspace.evidence.dialog.actions.acceptRiskDesc') },
-    { value: 'learn', label: t('jobWorkspace.evidence.dialog.actions.learn'), description: t('jobWorkspace.evidence.dialog.actions.learnDesc') },
-    { value: 'project', label: t('jobWorkspace.evidence.dialog.actions.project'), description: t('jobWorkspace.evidence.dialog.actions.projectDesc') },
-    { value: 'ignore', label: t('jobWorkspace.evidence.dialog.actions.ignore'), description: t('jobWorkspace.evidence.dialog.actions.ignoreDesc') },
-  ];
+    return true;
+  }, [actions, boundaries, classification, compactCandidateReview, experience, results, role, source, transferable]);
 
   const submit = () => {
     if (!valid || saving) return;
@@ -176,9 +120,7 @@ export function EvidenceDecisionDialog({
       source: source.trim(),
       transferable: transferable.trim(),
       boundaries: boundaries.trim(),
-      timeBudget,
-      userWillingness,
-      taskType,
+      proficiency,
     });
   };
 
@@ -227,12 +169,46 @@ export function EvidenceDecisionDialog({
             </>
           )}
 
+          {(classification === 'done' || classification === 'adjacent') && (
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-zinc-300">
+                {isZh ? '我的实际熟练度' : 'My proficiency'}
+              </span>
+              <select
+                value={proficiency}
+                onChange={(event) => setProficiency(event.target.value as ProficiencyLevel)}
+                className="h-10 w-full rounded border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none focus:border-indigo-600"
+              >
+                <option value="awareness">{isZh ? '了解' : 'Awareness'}</option>
+                <option value="familiar">{isZh ? '熟悉' : 'Familiar'}</option>
+                <option value="working">{isZh ? '掌握' : 'Working knowledge'}</option>
+                <option value="proficient">{isZh ? '熟练' : 'Proficient'}</option>
+                <option value="expert">{isZh ? '精通' : 'Expert'}</option>
+              </select>
+              {requirement.requiredProficiency && requirement.requiredProficiency !== 'unspecified' && (
+                <small className="text-[10px] text-zinc-500">
+                  {isZh ? '该岗位要求：' : 'Job requirement: '}
+                  {{
+                    awareness: isZh ? '了解' : 'Awareness',
+                    familiar: isZh ? '熟悉' : 'Familiar',
+                    working: isZh ? '掌握' : 'Working knowledge',
+                    proficient: isZh ? '熟练' : 'Proficient',
+                    expert: isZh ? '精通' : 'Expert',
+                    unspecified: isZh ? '未说明' : 'Not specified',
+                  }[requirement.requiredProficiency]}
+                </small>
+              )}
+            </label>
+          )}
+
           {classification === 'done' && !compactCandidateReview && (
             <>
+              <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3 text-xs leading-relaxed text-indigo-200">
+                {t('jobWorkspace.evidence.dialog.capabilityEvidenceHint', {
+                  defaultValue: '这里只确认能够证明该能力的事实和来源。职责、行动与结果属于故事库，不要求在这里重复填写。',
+                })}
+              </div>
               <TextField label={t('jobWorkspace.evidence.dialog.experience')} value={experience} onChange={setExperience} placeholder={t('jobWorkspace.evidence.dialog.experiencePlaceholder')} />
-              <TextField label={t('jobWorkspace.evidence.dialog.role')} value={role} onChange={setRole} placeholder={t('jobWorkspace.evidence.dialog.rolePlaceholder')} rows={2} />
-              <TextField label={t('jobWorkspace.evidence.dialog.actionsLabel')} value={actions} onChange={setActions} placeholder={t('jobWorkspace.evidence.dialog.actionsPlaceholder')} />
-              <TextField label={t('jobWorkspace.evidence.dialog.results')} value={results} onChange={setResults} placeholder={t('jobWorkspace.evidence.dialog.resultsPlaceholder')} />
               <TextField label={t('jobWorkspace.evidence.dialog.source')} value={source} onChange={setSource} placeholder={t('jobWorkspace.evidence.dialog.sourcePlaceholder')} rows={2} />
             </>
           )}
@@ -246,11 +222,13 @@ export function EvidenceDecisionDialog({
           )}
 
           {(classification === 'not_done' || classification === 'unsure') && (
-            <>
-              <ChoiceGroup label={t('jobWorkspace.evidence.dialog.timeBudget')} value={timeBudget} choices={timeChoices} onChange={setTimeBudget} />
-              <ChoiceGroup label={t('jobWorkspace.evidence.dialog.willingnessLabel')} value={userWillingness} choices={willingnessChoices} onChange={setUserWillingness} />
-              <ChoiceGroup label={t('jobWorkspace.evidence.dialog.actionLabel')} value={taskType} choices={actionChoices} onChange={(value) => setTaskType(value as EvidenceTaskType)} />
-            </>
+            <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-4 text-xs leading-relaxed text-indigo-200">
+              {t('jobWorkspace.evidence.dialog.deferPlanningHint', {
+                defaultValue: classification === 'not_done'
+                  ? '这里只记录这项能力目前尚未掌握。系统会先统计它影响多少候选岗位，再由你决定是否加入提升计划。'
+                  : '这里只保留为待确认状态，不会自动创建学习任务。你可以稍后在能力档案中统一处理。',
+              })}
+            </div>
           )}
 
           {error && <div className="rounded border border-red-900/60 bg-red-950/30 p-3 text-xs text-red-300">{error}</div>}
@@ -279,7 +257,9 @@ export function EvidenceDecisionDialog({
                 ? t('jobWorkspace.evidence.dialog.saving')
                 : compactCandidateReview
                   ? t('jobWorkspace.evidence.dialog.confirmAndUse')
-                  : t('jobWorkspace.evidence.dialog.save')}
+                  : (classification === 'not_done' || classification === 'unsure')
+                    ? t('jobWorkspace.evidence.dialog.recordGap', { defaultValue: '记录状态' })
+                    : t('jobWorkspace.evidence.dialog.save')}
             </button>
           </div>
         </div>
