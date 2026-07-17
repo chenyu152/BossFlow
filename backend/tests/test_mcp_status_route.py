@@ -13,8 +13,8 @@ class McpStatusRouteTest(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["name"], "BossFlow MCP Server")
         self.assertEqual(payload["endpoint"], "/mcp/")
-        self.assertEqual(payload["toolCount"], 17)
-        self.assertEqual(payload["resourceCount"], 7)
+        self.assertEqual(payload["toolCount"], 27)
+        self.assertEqual(payload["resourceCount"], 9)
         self.assertIn(payload["status"], {"running", "disabled"})
 
 

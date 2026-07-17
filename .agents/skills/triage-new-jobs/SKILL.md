@@ -11,19 +11,25 @@ Use the BossFlow MCP server as the only source of job and pipeline state.
 
 1. Call `list_projects` when the project is not explicit. Ask for a choice only when multiple projects remain plausible.
 2. Call `get_project_summary` and `get_pipeline` before assessing new jobs.
-3. Call `search_jobs` with a narrow query or page size. Prefer batches of at most 50 and summarize at most 10 jobs at once.
+3. Call `search_jobs` with the narrowest useful filters: city, salary range, score threshold, fit/risk signal, category, freshness, or recruitment status. Prefer batches of at most 50 and summarize at most 10 jobs at once.
 4. Compare each job using stored score signals, salary, location, experience, education, categories, and JD evidence. Do not infer candidate experience that is not present in BossFlow.
 5. Separate results into:
    - recommend adding;
    - worth a manual look;
    - skip, with a short reason.
-6. Call `add_candidate_jobs` without confirmation to obtain the authoritative preview.
-7. Show the preview and request confirmation. Call it again with `confirmed=true` only for the approved IDs.
-8. Report added, skipped-as-duplicate, and missing counts.
+6. Call `add_candidate_jobs` without `confirmation_id` to obtain the authoritative preview.
+7. Show the exact jobs, duplicates, target project, and expiry time from the preview. Ask a direct yes/no question.
+8. Stop and wait. Treat silence, a new request, or an ambiguous answer as no approval.
+9. Only after an explicit yes in a later user message, repeat the unchanged call with the returned `confirmationId`. If IDs change or the ticket expires, discard it and preview again.
+10. Report added, skipped-as-duplicate, and missing counts.
 
 ## Collection
 
-When collection is requested, call `start_collection` without confirmation first. Show the saved keywords, cities, target count, and current queue state. Run with `confirmed=true` only after the user accepts that preview. Poll `get_task_status`; do not start a second crawler task while one is active.
+When collection is requested, call `get_login_state` first. If no usable Cookie exists, stop and direct the user to BossFlow's “登录 / 保存 Cookie” action. Treat `refresh_recommended` as a warning rather than proof of expiry. Then call `start_collection` without `confirmation_id`; show saved keywords, cities, target count, Cookie status, and queue state. Follow the two-turn confirmation protocol above, then poll `get_task_status`. Do not start a second crawler task while one is active.
+
+## Confirmation protocol
+
+Never turn the user's initial task request into approval of a later preview. Never fabricate, reuse, edit, or immediately consume a `confirmationId`. A compliant preview/approval/write sequence always spans two user-visible turns.
 
 ## Output
 

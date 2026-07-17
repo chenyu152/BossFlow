@@ -14,11 +14,13 @@ from fastapi import HTTPException
 from backend.schemas.automation import AutomationScheduleInput
 from backend.schemas.config import CrawlRequest
 from backend.services.project_service import config_payload, resolve_project
+from backend.services.login_state_service import login_state
 from backend.services.task_service import TaskManager
 from backend.storage.paths import BASE_DIR
 
 
 CrawlStarter = Callable[..., dict]
+LoginStateReader = Callable[[str], dict]
 
 
 def _now() -> dt.datetime:
@@ -58,11 +60,13 @@ class AutomationService:
         task_manager: TaskManager,
         db_path: Optional[Path] = None,
         crawl_starter: Optional[CrawlStarter] = None,
+        login_state_reader: Optional[LoginStateReader] = None,
         poll_seconds: float = 2.0,
     ):
         self.task_manager = task_manager
         self.db_path = db_path or (BASE_DIR / "automation.db")
         self.crawl_starter = crawl_starter
+        self.login_state_reader = login_state_reader or login_state
         self.poll_seconds = poll_seconds
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
@@ -235,6 +239,8 @@ class AutomationService:
 
     def create_schedule(self, payload: AutomationScheduleInput) -> dict:
         resolve_project(payload.project)
+        if payload.enabled:
+            self._require_login(payload.project)
         current = _now()
         schedule_id = uuid.uuid4().hex
         timestamp = _iso(current)
@@ -270,6 +276,8 @@ class AutomationService:
 
     def update_schedule(self, schedule_id: str, payload: AutomationScheduleInput) -> dict:
         resolve_project(payload.project)
+        if payload.enabled:
+            self._require_login(payload.project)
         current = _now()
         timestamp = _iso(current)
         next_run_at = _iso(
@@ -332,6 +340,7 @@ class AutomationService:
             ).fetchone()
             if not schedule:
                 raise HTTPException(status_code=404, detail="Automation schedule not found")
+            self._require_login(str(schedule["project"]))
             active = connection.execute(
                 "SELECT * FROM automation_runs WHERE schedule_id = ? AND status IN ('queued', 'running') ORDER BY created_at LIMIT 1",
                 (schedule_id,),
@@ -453,6 +462,12 @@ class AutomationService:
             run_id = run["id"]
             project = run["project"]
 
+        try:
+            self._require_login(project)
+        except HTTPException as error:
+            self._finish_run(run_id, False, str(error.detail))
+            return
+
         def on_complete(success: bool, error: str) -> None:
             self._finish_run(run_id, success, error)
 
@@ -490,3 +505,12 @@ class AutomationService:
                     run_id,
                 ),
             )
+
+    def _require_login(self, project: str) -> dict:
+        state = self.login_state_reader(project)
+        if not state.get("canSchedule"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"{project}: no usable BOSS login Cookie. Open Discover Jobs, choose Login / Save Cookie, then retry.",
+            )
+        return state

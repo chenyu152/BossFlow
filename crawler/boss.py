@@ -429,8 +429,19 @@ class BossCrawler:
         if not confirmed:
             print('[WARN] 用户取消登录')
             return False
-        print('[OK] 用户确认已登录')
-        time.sleep(2)
+        print('[INFO] 用户确认已登录，正在验证 Cookie...')
+        self.page.get(url)
+        time.sleep(3)
+        try:
+            has_jobs = self.page.run_js(
+                'return document.querySelectorAll("li[class*=job-card]").length > 0'
+            )
+        except Exception:
+            has_jobs = False
+        if not has_jobs:
+            print('[WARN] 未能验证登录状态，请确认已完成登录后重试')
+            return False
+        print('[OK] 登录已验证，Cookie 已保存')
         return True
 
     # ========== 核心抓取 ==========

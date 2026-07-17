@@ -1,10 +1,10 @@
-import { CalendarClock, Check, ChevronDown, Clock3, Copy, Eye, EyeOff, KeyRound, Languages, MonitorUp, Pencil, Play, PlugZap, Plus, RefreshCw, Save, Server, Settings2, Trash2 } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, ChevronDown, Clock3, Copy, Eye, EyeOff, KeyRound, Languages, MonitorUp, Pencil, Play, PlugZap, Plus, RefreshCw, Save, Server, Settings2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { ThemeOptions } from '../components/ThemePicker';
 import { useAppTranslation } from '../i18n';
-import type { AgentAccess, AutomationResponse, AutomationSchedule, AutomationScheduleInput, DesktopSettings, LlmSettingsStatus } from '../types';
+import type { AgentAccess, AutomationResponse, AutomationSchedule, AutomationScheduleInput, DesktopSettings, LlmSettingsStatus, LoginState } from '../types';
 
 const defaultSchedule: AutomationScheduleInput = {
   project: '',
@@ -142,6 +142,7 @@ export function Settings({
   const [setupGuideError, setSetupGuideError] = useState('');
   const [automation, setAutomation] = useState<AutomationResponse | null>(null);
   const [projects, setProjects] = useState<string[]>([]);
+  const [loginStates, setLoginStates] = useState<Record<string, LoginState>>({});
   const [scheduleDraft, setScheduleDraft] = useState<AutomationScheduleInput>(defaultSchedule);
   const [editingScheduleId, setEditingScheduleId] = useState('');
   const [automationBusy, setAutomationBusy] = useState('');
@@ -227,6 +228,24 @@ export function Settings({
     return () => window.clearInterval(timer);
   }, []);
 
+  const loadLoginStates = useCallback(async () => {
+    if (!projects.length) return;
+    const entries = await Promise.all(projects.map(async (project) => {
+      try {
+        return [project, await bossApi.getLoginState(project)] as const;
+      } catch {
+        return null;
+      }
+    }));
+    setLoginStates(Object.fromEntries(entries.filter((entry): entry is readonly [string, LoginState] => Boolean(entry))));
+  }, [projects]);
+
+  useEffect(() => {
+    void loadLoginStates();
+    const timer = window.setInterval(() => void loadLoginStates(), 30000);
+    return () => window.clearInterval(timer);
+  }, [loadLoginStates]);
+
   const loadAgentAccess = useCallback(async () => {
     if (!window.bossflowDesktop) {
       setAgentLoading(false);
@@ -267,6 +286,7 @@ export function Settings({
       setEditingScheduleId('');
       setScheduleDraft({ ...defaultSchedule, project: scheduleDraft.project });
       await loadAutomation(true);
+      await loadLoginStates();
     } catch (saveError) {
       setAutomationError((saveError as Error).message);
     } finally {
@@ -285,6 +305,7 @@ export function Settings({
     try {
       await bossApi.updateAutomationSchedule(schedule.id, { ...scheduleInput(schedule), enabled: !schedule.enabled });
       await loadAutomation(true);
+      await loadLoginStates();
     } catch (toggleError) {
       setAutomationError((toggleError as Error).message);
     } finally {
@@ -419,6 +440,13 @@ export function Settings({
     onReturnToMatchingGuide?.();
   };
 
+  const selectedLoginState = loginStates[scheduleDraft.project];
+  const selectedLoginLabel = selectedLoginState?.lastSavedAt
+    ? (selectedLoginState.daysSinceSaved === 0
+      ? (isZh ? '今天已保存' : 'Saved today')
+      : (isZh ? `${selectedLoginState.daysSinceSaved} 天前保存` : `Saved ${selectedLoginState.daysSinceSaved} days ago`))
+    : (isZh ? '尚未保存' : 'Not saved');
+
   return (
     <div className="settings-page mx-auto max-w-5xl space-y-6">
       <div>
@@ -521,6 +549,22 @@ export function Settings({
             <small>{isZh ? '串行执行 · 不会同时启动两个采集任务' : 'Serial execution · never starts two collectors at once'}</small>
           </div>
 
+          {selectedLoginState && (
+            <div className={`automation-login-state is-${selectedLoginState.status}`}>
+              <span><AlertTriangle size={15} /></span>
+              <div>
+                <strong>{isZh ? `${scheduleDraft.project} · 登录 Cookie ${selectedLoginLabel}` : `${scheduleDraft.project} · Login Cookie ${selectedLoginLabel}`}</strong>
+                <p>{selectedLoginState.status === 'available'
+                  ? (isZh ? '当前可用于定时采集；执行前仍会再次检查。' : 'Available for scheduled collection; it will be checked again before execution.')
+                  : selectedLoginState.status === 'refresh_recommended'
+                    ? (isZh ? `已超过 ${selectedLoginState.refreshRecommendedAfterDays} 天刷新建议，建议先重新登录，服务端仍可能提前使 Cookie 失效。` : `Older than the ${selectedLoginState.refreshRecommendedAfterDays}-day refresh recommendation. Sign in again before unattended use.`)
+                    : (isZh ? '无法启动启用状态的定时任务。请前往“发现岗位”点击“登录 / 保存 Cookie”。' : 'An enabled schedule cannot start. Open Discover Jobs and choose Login / Save Cookie.')}</p>
+                {selectedLoginState.earliestClientExpiryAt && <small>{isZh ? '浏览器记录的最早核心 Cookie 到期：' : 'Earliest core Cookie expiry: '}{new Date(selectedLoginState.earliestClientExpiryAt).toLocaleString(currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}</small>}
+              </div>
+              <button type="button" onClick={() => void loadLoginStates()}>{isZh ? '刷新状态' : 'Refresh'}</button>
+            </div>
+          )}
+
           <div className="automation-editor">
             <div className="automation-form-grid">
               <div className="automation-field">
@@ -568,7 +612,7 @@ export function Settings({
             {scheduleDraft.misfirePolicy === 'run_once' && <label className="automation-delay"><span>{isZh ? '最长补跑延迟（分钟）' : 'Maximum catch-up delay (minutes)'}</span><input type="number" min={0} max={10080} value={scheduleDraft.maxDelayMinutes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, maxDelayMinutes: Math.max(0, Number(event.target.value) || 0) })} /></label>}
             <div className="flex justify-end gap-2">
               {editingScheduleId && <button type="button" className="automation-secondary-button" onClick={() => { setEditingScheduleId(''); setScheduleDraft({ ...defaultSchedule, project: scheduleDraft.project }); }}>{isZh ? '取消编辑' : 'Cancel'}</button>}
-              <button type="button" disabled={!scheduleDraft.project || automationBusy === 'save' || (scheduleDraft.cadence === 'weekly' && scheduleDraft.daysOfWeek.length === 0)} className="automation-primary-button" onClick={() => void saveSchedule()}>{editingScheduleId ? <Save size={15} /> : <Plus size={15} />}{editingScheduleId ? (isZh ? '保存计划' : 'Save plan') : (isZh ? '添加计划' : 'Add plan')}</button>
+              <button type="button" disabled={!scheduleDraft.project || automationBusy === 'save' || (scheduleDraft.enabled && selectedLoginState && !selectedLoginState.canSchedule) || (scheduleDraft.cadence === 'weekly' && scheduleDraft.daysOfWeek.length === 0)} className="automation-primary-button" onClick={() => void saveSchedule()}>{editingScheduleId ? <Save size={15} /> : <Plus size={15} />}{editingScheduleId ? (isZh ? '保存计划' : 'Save plan') : (isZh ? '添加计划' : 'Add plan')}</button>
             </div>
           </div>
 
@@ -579,7 +623,7 @@ export function Settings({
               <article key={schedule.id} className={!schedule.enabled ? 'is-disabled' : ''}>
                 <button type="button" role="switch" aria-checked={schedule.enabled} aria-label={schedule.enabled ? (isZh ? '停用计划' : 'Disable plan') : (isZh ? '启用计划' : 'Enable plan')} className={`automation-switch ${schedule.enabled ? 'is-on' : ''}`} onClick={() => void toggleSchedule(schedule)} disabled={automationBusy === schedule.id}><span /></button>
                 <div><strong>{schedule.project}</strong><p>{schedule.cadence === 'daily' ? (isZh ? '每天' : 'Daily') : schedule.cadence === 'weekdays' ? (isZh ? '工作日' : 'Weekdays') : (isZh ? `每周 ${schedule.daysOfWeek.map((day) => '一二三四五六日'[day]).join('、')}` : `Weekly · ${schedule.daysOfWeek.join(', ')}`)} · {schedule.timeOfDay}</p><small>{isZh ? '下次：' : 'Next: '}{new Date(schedule.nextRunAt).toLocaleString(currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}</small></div>
-                <div className="automation-row-actions"><button title={isZh ? '立即运行' : 'Run now'} onClick={() => void runSchedule(schedule)} disabled={automationBusy === schedule.id}><Play size={15} /></button><button title={isZh ? '编辑' : 'Edit'} onClick={() => editSchedule(schedule)}><Pencil size={15} /></button><button title={isZh ? '删除' : 'Delete'} onClick={() => void deleteSchedule(schedule)} disabled={automationBusy === schedule.id}><Trash2 size={15} /></button></div>
+                <div className="automation-row-actions"><button title={isZh ? '立即运行' : 'Run now'} onClick={() => void runSchedule(schedule)} disabled={automationBusy === schedule.id || (loginStates[schedule.project] && !loginStates[schedule.project].canSchedule)}><Play size={15} /></button><button title={isZh ? '编辑' : 'Edit'} onClick={() => editSchedule(schedule)}><Pencil size={15} /></button><button title={isZh ? '删除' : 'Delete'} onClick={() => void deleteSchedule(schedule)} disabled={automationBusy === schedule.id}><Trash2 size={15} /></button></div>
               </article>
             )) : <div className="automation-empty">{isZh ? '还没有定时计划。先选择求职目标和执行时间。' : 'No scheduled plans yet. Choose a job target and run time to begin.'}</div>}
           </div>

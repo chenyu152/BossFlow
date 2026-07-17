@@ -38,11 +38,15 @@ python -m uvicorn backend.app:app --port 8000
 | --- | --- |
 | `list_projects` | 列出求职方向 |
 | `get_project_summary` | 读取采集配置摘要、岗位和证据计数 |
-| `search_jobs` | 分页搜索已采集岗位 |
+| `search_jobs` | 按城市、薪资、分类、评分、匹配/风险、更新时间和在招观测状态筛选岗位 |
 | `get_job` | 读取单个岗位完整记录 |
 | `get_pipeline` | 读取候选岗位及工作流状态 |
 | `get_task_status` | 读取当前采集状态和日志尾部 |
 | `get_evidence` | 读取证据概览 |
+| `get_evidence_requirements` | 读取岗位要求与证据覆盖要求 |
+| `get_evidence_tasks` | 读取证据补齐任务 |
+| `get_application_context` | 一次读取岗位、精评、简历、证据、故事和已有材料上下文 |
+| `get_login_state` | 读取登录 Cookie 保存时间、浏览器到期时间和定时任务可用性 |
 | `get_story_bank` | 读取已确认故事 |
 | `get_story_drafts` | 读取待确认故事草稿 |
 
@@ -56,10 +60,20 @@ python -m uvicorn backend.app:app --port 8000
 | `run_fine_review` | 执行 LLM 精评 |
 | `create_resume_suggestions` | 生成证据绑定的简历建议 |
 | `create_interview_prep` | 生成面试准备 |
+| `stage_evidence_item` | 保存待用户核验的证据草稿 |
+| `confirm_evidence` | 确认事实证据可复用 |
+| `classify_evidence_requirement` | 保存用户对岗位要求的证据判断 |
+| `set_evidence_task_status` | 更新证据任务状态 |
+| `save_agent_resume_suggestions` | 保存外部 Agent 生成的证据绑定简历建议，不调用 BossFlow LLM |
+| `save_agent_interview_preparation` | 保存外部 Agent 生成的面试准备，不调用 BossFlow LLM |
 | `save_imported_story_drafts` | 保存外部项目提取的故事草稿 |
 | `confirm_story_draft` | 将指定草稿提升为已确认故事 |
 
-每个写入或付费工具第一次以 `confirmed=false` 返回预览，不修改数据。Agent 展示预览并取得用户许可后，才可用相同参数和 `confirmed=true` 重试。执行结果写入 `logs/agent-audit.log`，日志不记录令牌或 LLM 密钥。
+每个写入或付费工具第一次不传 `confirmation_id`，服务端返回绑定动作、目标和完整参数哈希的短期一次性 `confirmationId`，且不修改数据。Agent 必须展示准确预览并结束当前轮次；只有用户在后续消息中明确同意，才可用相同参数和该凭证重试。参数变化、超时、重复使用或未知凭证均被服务端拒绝。执行结果写入 `logs/agent-audit.log`，日志不记录令牌或 LLM 密钥。
+
+Skill 约束可让合规 Agent 询问用户，但不能证明回答者一定是人。一次性参数绑定凭证提供服务端防误用；若未来需要不可绕过的“真人审批”，应增加 BossFlow 内置审批队列，由 UI 签发执行凭证。
+
+文本生成默认由用户当前连接的 Agent 完成：BossFlow 提供结构化可信上下文、证据边界和落盘工具。`run_fine_review`、`create_resume_suggestions`、`create_interview_prep` 继续保留为使用 BossFlow API Key 的可选兼容路径，必须单独披露成本并确认。
 
 ## 4. Resources v1
 
@@ -67,6 +81,8 @@ python -m uvicorn backend.app:app --port 8000
 - `bossflow://project/{project}/summary`
 - `bossflow://project/{project}/pipeline`
 - `bossflow://project/{project}/evidence`
+- `bossflow://project/{project}/evidence-requirements`
+- `bossflow://project/{project}/login-state`
 - `bossflow://project/{project}/story-bank`
 - `bossflow://project/{project}/story-drafts`
 - `bossflow://job/{project}/{job_id}`

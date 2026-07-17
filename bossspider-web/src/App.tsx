@@ -8,6 +8,7 @@ import {
   Crosshair,
   Cpu,
   Database,
+  FileCheck2,
   FileText,
   Inbox,
   MessageSquareText,
@@ -36,6 +37,7 @@ import type { ResumeNavigationTarget, Tab } from './types';
 type RailMenu = 'discovery' | 'materials' | 'interview';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const Evidence = lazy(() => import('./pages/Evidence').then((module) => ({ default: module.Evidence })));
 const Interview = lazy(() => import('./pages/Interview').then((module) => ({ default: module.Interview })));
 const Jobs = lazy(() => import('./pages/Jobs').then((module) => ({ default: module.Jobs })));
 const Logs = lazy(() => import('./pages/Logs').then((module) => ({ default: module.Logs })));
@@ -92,6 +94,7 @@ export default function App() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [selectedPipelineKey, setSelectedPipelineKey] = useState('');
   const [selectedEvidenceRequirementId, setSelectedEvidenceRequirementId] = useState('');
+  const [selectedEvidenceTaskId, setSelectedEvidenceTaskId] = useState('');
   const [selectedResumeKey, setSelectedResumeKey] = useState('');
   const [selectedResumeTarget, setSelectedResumeTarget] = useState<ResumeNavigationTarget | null>(null);
   const [selectedStoryDraftId, setSelectedStoryDraftId] = useState('');
@@ -112,7 +115,7 @@ export default function App() {
   const [activeRailMenu, setActiveRailMenu] = useState<RailMenu | null>(null);
   const railRef = useRef<HTMLElement>(null);
   const boss = useBossSpider();
-  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
+  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
   const hasUnsavedChanges = boss.isConfigDirty || personalResumeDirty;
 
@@ -185,6 +188,7 @@ export default function App() {
     setSelectedJobId(tab === 'Jobs' ? target?.jobId ?? null : null);
     setSelectedPipelineKey(tab === 'Pipeline' ? target?.sourceKey ?? '' : '');
     setSelectedEvidenceRequirementId(tab === 'Pipeline' ? target?.requirementId ?? '' : '');
+    setSelectedEvidenceTaskId(tab === 'Evidence' ? target?.evidenceTaskId ?? '' : '');
     setSelectedResumeKey(tab === 'Resume' ? target?.sourceKey ?? '' : '');
     setSelectedResumeTarget(tab === 'Resume' ? { sourceKey: target?.sourceKey ?? '' } : null);
     setSelectedStoryDraftId(tab === 'Story' ? target?.draftId ?? '' : '');
@@ -264,11 +268,11 @@ export default function App() {
   const pageTitleByTab: Record<Tab, string> = {
     Dashboard: t('nav.dashboard'), Scope: t('nav.scope'), MatchingRules: t('nav.matchingRules'),
     ScoringRules: t('nav.scoringRules'), Jobs: t('nav.jobs'), Pipeline: t('nav.pipeline'),
-    PersonalResume: t('nav.personalResume'), Resume: t('nav.resume'), Story: t('nav.story'),
+    Evidence: t('nav.evidence'), PersonalResume: t('nav.personalResume'), Resume: t('nav.resume'), Story: t('nav.story'),
     Interview: t('nav.interview'), Logs: t('nav.logs'), Settings: t('nav.settings'),
   };
   const discoveryActive = activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'ScoringRules' || activeTab === 'Jobs' || activeTab === 'Logs';
-  const materialsActive = activeTab === 'PersonalResume' || activeTab === 'Resume';
+  const materialsActive = activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume';
   const interviewActive = activeTab === 'Interview' || activeTab === 'Story';
 
   const renderRailFlyout = (menu: RailMenu) => {
@@ -286,6 +290,7 @@ export default function App() {
       materials: {
         title: t('nav.stages.materials'),
         items: [
+          { tab: 'Evidence' as Tab, icon: <FileCheck2 size={16} />, label: t('nav.evidence') },
           { tab: 'PersonalResume' as Tab, icon: <UserRound size={16} />, label: t('nav.personalResume') },
           { tab: 'Resume' as Tab, icon: <FileText size={16} />, label: t('nav.resume') },
         ],
@@ -620,6 +625,20 @@ export default function App() {
                   }}
                   targetSourceKey={selectedPipelineKey}
                   targetRequirementId={selectedEvidenceRequirementId}
+                  targetRequestId={dashboardTargetRequestId}
+                />
+              )}
+              {activeTab === 'Evidence' && (
+                <Evidence
+                  overview={boss.evidenceOverview}
+                  loading={boss.evidenceLoading}
+                  error={boss.evidenceError}
+                  onRefresh={() => { void boss.refreshEvidenceOverview(); }}
+                  onCreateEvidenceItem={boss.createEvidenceItem}
+                  onUpdateEvidenceItem={boss.updateEvidenceItem}
+                  onConfirmEvidenceItem={boss.confirmEvidenceItem}
+                  onUpdateEvidenceTask={boss.updateEvidenceTask}
+                  targetTaskId={selectedEvidenceTaskId}
                   targetRequestId={dashboardTargetRequestId}
                 />
               )}

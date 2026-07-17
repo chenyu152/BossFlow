@@ -4,6 +4,7 @@ from pathlib import Path
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.services.project_service import find_free_port, save_form_config
+from backend.services.login_state_service import record_login_verified
 from backend.services.task_service import TaskManager, capture_task_output
 from crawler.boss import BossCrawler
 from crawler.db import save_run, upsert_jobs
@@ -31,7 +32,11 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager, on_comple
                 partial_file=paths["partialPath"],
                 scroll_max_scrolls=int(limits.get("scroll_max_scrolls", payload.scrollMax)),
             )
-            crawler.set_crawl_started_callback(task_manager.mark_crawl_authenticated)
+            def mark_authenticated():
+                record_login_verified(project_dir.name)
+                task_manager.mark_crawl_authenticated()
+
+            crawler.set_crawl_started_callback(mark_authenticated)
             task_manager.current_crawler = crawler
             raw_jobs = crawler.run(
                 keywords=keywords,
@@ -84,7 +89,9 @@ def start_login_task(payload: ConfigUpdate, task_manager: TaskManager) -> dict:
             task_manager.current_crawler = crawler
             crawler.start_browser(headless=False)
             first_city = next(iter(config.get("cities") or {"北京": "101010100"}.values()))
-            crawler.ensure_login(first_city)
+            if not crawler.ensure_login(first_city):
+                raise RuntimeError("BOSS login was not verified; Cookie was not saved")
+            record_login_verified(project_dir.name)
             if crawler.page:
                 crawler.page.quit()
 

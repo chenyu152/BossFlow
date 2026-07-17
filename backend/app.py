@@ -63,6 +63,7 @@ from backend.services.interview_service import (
 )
 from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
 from backend.services.live_status_service import start_live_status_update_task
+from backend.services.login_state_service import login_state
 from backend.services.matching_suggestion_service import suggest_matching_rules
 from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
 from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
@@ -188,6 +189,11 @@ def test_llm_settings(payload: LlmSettingsUpdate):
 @app.get("/api/automation")
 def get_automation():
     return automation_service.snapshot()
+
+
+@app.get("/api/login-state")
+def get_login_state(project: Optional[str] = None):
+    return login_state(project or default_project_name())
 
 
 @app.post("/api/automation/schedules")

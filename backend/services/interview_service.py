@@ -638,6 +638,61 @@ def generate_interview_prep(source_key: str, user_notes: str = "") -> dict[str, 
     }
 
 
+def save_agent_interview_prep(source_key: str, content: str, user_notes: str = "") -> dict[str, Any]:
+    """Persist interview preparation authored by the connected Agent without a BossFlow LLM call."""
+    item, job = _load_pipeline_job(source_key)
+    normalized = str(content or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        raise HTTPException(status_code=422, detail="Interview preparation content cannot be empty")
+    evidence_context = _interview_evidence_context(source_key)
+    prep_id = _next_interview_id()
+    now = dt.datetime.now()
+    filename = (
+        f"{prep_id}-{_slug(job.get('company'))}-{_slug(job.get('title'))}-"
+        f"interview-prep-{now.strftime('%Y-%m-%d')}.md"
+    )
+    prep_path = INTERVIEW_OUTPUT_DIR / filename
+    INTERVIEW_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    prep_path.write_text(normalized + "\n", encoding="utf-8")
+    meta = {
+        "interviewPrepId": prep_id,
+        "sourceKey": source_key,
+        "generatedAt": now.isoformat(),
+        "generationMode": "connected_agent",
+        "job": job,
+        "pipelineItem": item,
+        "prepPath": str(prep_path),
+        "storyBankPath": str(STORY_BANK_PATH),
+        "userNotes": user_notes,
+        "evidenceBindingVersion": 1,
+        "evidenceContext": evidence_context,
+    }
+    json_path = prep_path.with_suffix(".json")
+    json_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    update_pipeline_item_metadata(
+        source_key,
+        {
+            "interviewPrepId": prep_id,
+            "interviewPrepPath": str(prep_path),
+            "interviewPrepJsonPath": str(json_path),
+            "interviewPreparedAt": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "interviewPrepGenerationMode": "connected_agent",
+        },
+    )
+    return {
+        "ok": True,
+        "sourceKey": source_key,
+        "interviewPrepId": prep_id,
+        "prepPath": str(prep_path),
+        "jsonPath": str(json_path),
+        "content": normalized + "\n",
+        "generationMode": "connected_agent",
+        "evidenceBindingVersion": 1,
+        "evidenceContext": evidence_context,
+        "pipeline": read_pipeline(),
+    }
+
+
 def read_interview_prep(source_key: str) -> dict[str, Any]:
     item = find_pipeline_item(source_key)
     if not item:

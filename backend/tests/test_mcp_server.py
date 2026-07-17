@@ -51,8 +51,30 @@ class McpServerTest(unittest.TestCase):
             preview = self.call("add_candidate_jobs", {"project": "agent", "job_ids": [7]})
 
         self.assertTrue(preview["requiresConfirmation"])
+        self.assertTrue(preview["confirmationId"])
         self.assertEqual(preview["details"]["jobs"][0]["sourceKey"], "agent:7")
         add.assert_not_called()
+
+    def test_confirmation_is_bound_to_parameters_and_one_use(self):
+        project_dir = Path("projects/agent")
+        jobs = [{"id": 7, "company": "Example", "title": "Agent Engineer"}]
+        pipeline = {"pending": [], "processed": [], "counts": {"pending": 0, "processed": 0}}
+        with (
+            patch("backend.mcp_server.resolve_project", return_value=project_dir),
+            patch("backend.mcp_server.project_workspace", return_value=nullcontext(project_dir)),
+            patch("backend.mcp_server.get_jobs_by_ids", return_value=jobs),
+            patch("backend.mcp_server.read_pipeline", return_value=pipeline),
+            patch("backend.mcp_server.add_jobs_to_pipeline", return_value={"ok": True}) as add,
+        ):
+            preview = self.call("add_candidate_jobs", {"project": "agent", "job_ids": [7]})
+            with self.assertRaises(Exception):
+                self.call("add_candidate_jobs", {"project": "agent", "job_ids": [8], "confirmation_id": preview["confirmationId"]})
+            second_preview = self.call("add_candidate_jobs", {"project": "agent", "job_ids": [7]})
+            result = self.call("add_candidate_jobs", {"project": "agent", "job_ids": [7], "confirmation_id": second_preview["confirmationId"]})
+            self.assertTrue(result["ok"])
+            with self.assertRaises(Exception):
+                self.call("add_candidate_jobs", {"project": "agent", "job_ids": [7], "confirmation_id": second_preview["confirmationId"]})
+        add.assert_called_once()
 
     def test_task_status_limits_log_tail(self):
         result = self.call("get_task_status", {})

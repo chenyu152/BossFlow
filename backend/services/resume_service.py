@@ -580,6 +580,67 @@ def generate_resume_suggestions(source_key: str) -> dict[str, Any]:
     }
 
 
+def save_agent_resume_suggestions(
+    source_key: str,
+    content: str,
+    evidence_map: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Persist suggestions authored by the connected Agent without calling BossFlow's LLM API."""
+    item, job = _load_pipeline_job(source_key)
+    normalized_content = str(content or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized_content:
+        raise HTTPException(status_code=422, detail="Resume suggestion content cannot be empty")
+    bound_map = _bind_evidence_map(
+        [_clean_evidence_claim(entry) for entry in evidence_map if isinstance(entry, dict)],
+        _resume_evidence_context(source_key),
+    )
+    resume_id = _next_resume_id()
+    now = dt.datetime.now()
+    filename = (
+        f"{resume_id}-{_slug(job.get('company'))}-{_slug(job.get('title'))}-"
+        f"suggestions-{now.strftime('%Y-%m-%d')}.md"
+    )
+    suggestion_path = RESUME_OUTPUT_DIR / filename
+    RESUME_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    suggestion_path.write_text(normalized_content + "\n", encoding="utf-8")
+    meta = {
+        "resumeSuggestionId": resume_id,
+        "sourceKey": source_key,
+        "generatedAt": now.isoformat(),
+        "generationMode": "connected_agent",
+        "job": job,
+        "pipelineItem": item,
+        "suggestionPath": str(suggestion_path),
+        "sourceReportPath": item.get("reportPath", ""),
+        "evidenceBindingVersion": 1,
+        "evidenceMap": bound_map,
+    }
+    json_path = suggestion_path.with_suffix(".json")
+    json_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    update_pipeline_item_metadata(
+        source_key,
+        {
+            "resumeSuggestionId": resume_id,
+            "resumeSuggestionPath": str(suggestion_path),
+            "resumeSuggestionJsonPath": str(json_path),
+            "resumeSuggestedAt": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "resumeSuggestionGenerationMode": "connected_agent",
+        },
+    )
+    return {
+        "ok": True,
+        "sourceKey": source_key,
+        "resumeSuggestionId": resume_id,
+        "suggestionPath": str(suggestion_path),
+        "jsonPath": str(json_path),
+        "content": normalized_content + "\n",
+        "generationMode": "connected_agent",
+        "evidenceBindingVersion": 1,
+        "evidenceMap": bound_map,
+        "pipeline": read_pipeline(),
+    }
+
+
 def list_resume_items() -> dict[str, Any]:
     pipeline = read_pipeline()
     items = [

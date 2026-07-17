@@ -29,6 +29,7 @@ import type {
   JobsResponse,
   LlmEvaluatePipelineResponse,
   LlmSettingsStatus,
+  LoginState,
   MatchingRulesSuggestionResponse,
   PipelineDeleteResponse,
   PipelineReportResponse,
@@ -72,6 +73,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const bossApi = {
+  getLoginState(project: string) {
+    return request<LoginState>(`/api/login-state?project=${encodeURIComponent(project)}`);
+  },
+
   getAutomation() {
     return request<AutomationResponse>('/api/automation');
   },

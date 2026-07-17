@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
+export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'Evidence' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
 
 export type LlmSettingsStatus = {
   configured: boolean;
@@ -55,6 +55,20 @@ export type AutomationResponse = {
     schedulerRunning: boolean;
     lastError: string;
   };
+};
+
+export type LoginState = {
+  project: string;
+  status: 'missing' | 'expired' | 'refresh_recommended' | 'available';
+  canSchedule: boolean;
+  hasCookieDatabase: boolean;
+  authCookieCount: number;
+  lastSavedAt: string;
+  daysSinceSaved: number | null;
+  earliestClientExpiryAt: string;
+  refreshRecommendedAfterDays: number;
+  message: string;
+  validityNote: string;
 };
 
 export type DesktopSettings = {

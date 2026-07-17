@@ -32,6 +32,7 @@ class AutomationServiceTest(unittest.TestCase):
             self.manager,
             db_path=Path(self.temp_dir.name) / "automation.db",
             crawl_starter=start_crawl,
+            login_state_reader=lambda _project: {"canSchedule": True},
             poll_seconds=0.01,
         )
         self.resolve_project = patch(
@@ -92,6 +93,11 @@ class AutomationServiceTest(unittest.TestCase):
         self.assertEqual(first["id"], second["id"])
         self.assertEqual(len(self.service.list_runs()), 1)
         self.assertEqual(self.started_projects, ["agent"])
+
+    def test_enabled_schedule_requires_saved_login(self):
+        self.service.login_state_reader = lambda _project: {"canSchedule": False}
+        with self.assertRaisesRegex(Exception, "no usable BOSS login Cookie"):
+            self.service.create_schedule(self.schedule("agent"))
 
 
 if __name__ == "__main__":
