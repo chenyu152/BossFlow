@@ -1037,6 +1037,10 @@ html[data-desktop-platform="linux"] .desktop-titlebar { padding-right: 9.5rem; }
 .capability-status--adjacent { border-color: color-mix(in srgb, var(--status-info) 40%, transparent); background: var(--status-info-surface); color: var(--status-info); }
 .capability-status--pending { border-color: color-mix(in srgb, var(--status-warning) 35%, transparent); background: var(--status-warning-surface); color: var(--status-warning); }
 .capability-status--gap { border-color: color-mix(in srgb, var(--status-blocked) 35%, transparent); background: var(--status-blocked-surface); color: var(--status-blocked); }
+.capability-proof { display: inline-flex; width: fit-content; align-items: center; gap: .25rem; margin-top: .48rem; border-radius: 999px; padding: .18rem .38rem; background: var(--surface-subtle); color: var(--text-secondary); font-size: .47rem; font-weight: 650; }
+.capability-proof--source_backed, .capability-proof--external_verified { background: var(--status-confirmed-surface); color: var(--status-confirmed); }
+.capability-proof--resume_recorded { background: var(--status-info-surface); color: var(--status-info); }
+.capability-proof--self_reported { background: var(--status-warning-surface); color: var(--status-warning); }
 .capability-card__body { flex: 1; padding: .65rem .1rem .45rem; }
 .capability-card__category { color: var(--text-muted); font-size: .52rem; font-weight: 650; }
 .capability-card__body h3 { display: -webkit-box; overflow: hidden; margin: .25rem 0 .3rem; color: var(--text-primary); font-size: .76rem; line-height: 1.45; font-weight: 720; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -1157,6 +1161,31 @@ html[data-desktop-platform="linux"] .desktop-titlebar { padding-right: 9.5rem; }
 .evidence-compact-form > div { display: grid; grid-template-columns: 1fr 1fr; gap: .48rem; }
 .evidence-compact-form > p { margin: 0; color: var(--status-blocked); font-size: .5rem; }
 .evidence-compact-modal > footer { display: flex; justify-content: flex-end; gap: .4rem; border-top: 1px solid var(--border-subtle); padding: .65rem 1.1rem; }
+.evidence-workflow { width: min(58rem, 92vw); height: min(46rem, 88vh); }
+.evidence-workflow > header > div > span { color: var(--status-info); font-size: .5rem; font-weight: 700; }
+.evidence-workflow__content { display: grid; align-content: start; gap: .8rem; }
+.evidence-workflow__content > label, .evidence-workflow__form label { display: grid; gap: .28rem; }
+.evidence-workflow__content label > span, .evidence-workflow__source > strong { color: var(--text-secondary); font-size: .53rem; font-weight: 680; }
+.evidence-workflow__content input:not([type="checkbox"]), .evidence-workflow__content select, .evidence-workflow__content textarea { width: 100%; border: 1px solid var(--border-subtle); border-radius: .45rem; outline: 0; background: var(--surface-panel); padding: .48rem .55rem; color: var(--text-primary); font-size: .56rem; }
+.evidence-workflow__content input:not([type="checkbox"]), .evidence-workflow__content select { min-height: 2rem; }
+.evidence-workflow__content textarea { resize: vertical; }
+.evidence-workflow__back { display: inline-flex; width: fit-content; align-items: center; gap: .28rem; color: var(--status-info); font-size: .52rem; font-weight: 650; }
+.evidence-workflow__source { display: grid; gap: .38rem; }
+.evidence-workflow__source > div { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .42rem; }
+.evidence-workflow__source button { display: grid; min-height: 5.2rem; align-content: start; gap: .28rem; border: 1px solid var(--border-subtle); border-radius: .5rem; background: var(--surface-subtle); padding: .58rem; color: var(--text-secondary); text-align: left; }
+.evidence-workflow__source button:hover { border-color: color-mix(in srgb, var(--action-primary) 38%, var(--border-subtle)); }
+.evidence-workflow__source button.is-active { border-color: var(--action-primary); background: var(--status-info-surface); color: var(--action-primary); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--action-primary) 15%, transparent); }
+.evidence-workflow__source button span { color: var(--text-primary); font-size: .55rem; font-weight: 700; }
+.evidence-workflow__source button small { color: var(--text-muted); font-size: .45rem; line-height: 1.45; }
+.evidence-workflow__form { display: grid; grid-template-columns: 1fr 1fr; gap: .58rem; }
+.evidence-workflow__form > label:nth-child(2), .evidence-workflow__form > label:nth-child(4), .evidence-workflow__mastery, .evidence-workflow__form > p { grid-column: 1 / -1; }
+.evidence-workflow__mastery { display: flex !important; align-items: flex-start; gap: .45rem !important; border: 1px solid var(--border-subtle); border-radius: .48rem; background: var(--surface-subtle); padding: .58rem; cursor: pointer; }
+.evidence-workflow__mastery > input { margin-top: .15rem; accent-color: var(--action-primary); }
+.evidence-workflow__mastery > span { display: grid; gap: .14rem; }
+.evidence-workflow__mastery strong { color: var(--text-primary); font-size: .54rem; }
+.evidence-workflow__mastery small { color: var(--text-muted); font-size: .47rem; font-weight: 400; line-height: 1.5; }
+.evidence-workflow__form > p { margin: 0; color: var(--status-blocked); font-size: .5rem; }
+.evidence-workflow__footer { display: flex; justify-content: flex-end; gap: .4rem; border-top: 1px solid var(--border-subtle); padding: .65rem 1.1rem; }
 @media (max-width: 900px) {
   .capability-summary { grid-template-columns: 1fr 1fr; }
   .plan-layout { grid-template-columns: 1fr; }
@@ -1172,4 +1201,7 @@ html[data-desktop-platform="linux"] .desktop-titlebar { padding-right: 9.5rem; }
   .capability-modal { width: 100%; height: 94vh; }
   .capability-decision-panel__choices { grid-template-columns: 1fr 1fr; }
   .capability-decision-panel__level { grid-template-columns: 1fr; }
+  .evidence-workflow__source > div { grid-template-columns: 1fr 1fr; }
+  .evidence-workflow__form { grid-template-columns: 1fr; }
+  .evidence-workflow__form > label:nth-child(2), .evidence-workflow__form > label:nth-child(4), .evidence-workflow__mastery, .evidence-workflow__form > p { grid-column: auto; }
 }

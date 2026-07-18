@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
+  ArrowLeft,
   BookOpenCheck,
+  BriefcaseBusiness,
   Check,
   CheckCircle2,
   ChevronRight,
   CircleHelp,
   Filter,
   FolderKanban,
+  FileText,
   GraduationCap,
   Layers3,
+  Link2,
   Loader2,
   Plus,
   RefreshCw,
@@ -18,6 +22,7 @@ import {
   Sparkles,
   Target,
   TrendingUp,
+  UserRoundPen,
   X,
 } from 'lucide-react';
 import { useAppTranslation } from '../i18n';
@@ -46,7 +51,10 @@ type EvidenceDraft = {
   sourceRef: string;
   sourceQuote: string;
   tags: string;
+  markAsMastered: boolean;
 };
+
+type EvidenceSourceKind = 'resume' | 'project' | 'file' | 'link' | 'statement';
 
 const EMPTY_EVIDENCE_DRAFT: EvidenceDraft = {
   title: '',
@@ -55,6 +63,15 @@ const EMPTY_EVIDENCE_DRAFT: EvidenceDraft = {
   sourceRef: '',
   sourceQuote: '',
   tags: '',
+  markAsMastered: false,
+};
+
+const SOURCE_TYPE_BY_KIND: Record<EvidenceSourceKind, string> = {
+  resume: 'cv',
+  project: 'project',
+  file: 'file',
+  link: 'url',
+  statement: 'user_statement',
 };
 
 const IMPROVEMENT_TYPES = new Set(['learn', 'project', 'strengthen', 'translate']);
@@ -101,6 +118,7 @@ function CapabilityCard({
 }) {
   const StatusIcon = statusIcons[capability.status];
   const TierIcon = tierIcons[capability.impactTier];
+  const statusLabel = capability.actionability === 'basic' ? copy.recorded : copy.statuses[capability.status];
   return (
     <button
       type="button"
@@ -114,7 +132,7 @@ function CapabilityCard({
         </span>
         <span className={`capability-status capability-status--${capability.status}`}>
           <StatusIcon size={12} />
-          {copy.statuses[capability.status]}
+          {statusLabel}
         </span>
       </div>
       <div className="capability-card__body">
@@ -136,8 +154,11 @@ function CapabilityCard({
         <span><strong>{capability.evidenceCount}</strong>{copy.evidenceCount}</span>
         <span><strong>{capability.sourceCount}</strong>{copy.sources}</span>
       </div>
+      <div className={`capability-proof capability-proof--${capability.proofStatus}`}>
+        <ShieldCheck size={12} />{copy.proofStatuses[capability.proofStatus]}
+      </div>
       <div className="capability-card__footer">
-        <span>{capability.status === 'pending' ? copy.confirmCapability : capability.planIds.length ? copy.inPlan : copy.viewDetails}</span>
+        <span>{capability.actionability === 'basic' ? copy.viewCondition : capability.status === 'pending' ? copy.confirmCapability : capability.planIds.length ? copy.inPlan : copy.viewDetails}</span>
         <ChevronRight size={14} />
       </div>
     </button>
@@ -151,7 +172,7 @@ function createCopy(isZh: boolean) {
     title: '能力档案',
     description: '把岗位要求归一化为可复用能力，查看覆盖岗位、依据来源与提升价值。',
     refresh: '刷新',
-    addEvidence: '新增能力依据',
+    addEvidence: '添加证明材料',
     search: '搜索能力、要求或来源',
     all: '全部',
     abilities: '我的能力',
@@ -166,6 +187,8 @@ function createCopy(isZh: boolean) {
     jobs: '岗位',
     evidenceCount: '项依据',
     sources: '个来源',
+    recorded: '已记录',
+    viewCondition: '查看条件与来源',
     inPlan: '已加入提升计划',
     viewDetails: '查看覆盖与依据',
     emptyAbilities: '当前还没有用户已确认的能力。你在岗位精评中确认后，会自动归入这里。',
@@ -182,6 +205,13 @@ function createCopy(isZh: boolean) {
       pending: '待确认',
       gap: '已确认缺口',
     } as Record<CapabilityStatus, string>,
+    proofStatuses: {
+      none: '暂无证明材料',
+      self_reported: '本人补充',
+      resume_recorded: '简历有记录',
+      source_backed: '有材料佐证',
+      external_verified: '外部凭证',
+    } as Record<CapabilityProfile['proofStatus'], string>,
     tiers: {
       core: '核心',
       high_value: '高收益',
@@ -199,13 +229,15 @@ function createCopy(isZh: boolean) {
     } as Record<string, string>,
     coverageSummary: (jobs: number, required: number, preferred: number) => `覆盖 ${jobs} 个岗位 · ${required} 个硬性要求 · ${preferred} 个加分项`,
     detailCoverage: '岗位覆盖',
-    detailEvidence: '能力依据',
+    detailEvidence: '证明材料',
     requirementSource: '岗位要求来源',
     anyOfRequirement: '满足任一项即可',
     noEvidence: '还没有已保存的能力依据。',
-    addForCapability: '为此能力补充依据',
+    noLinkedRequirements: '这项能力来自个人简历或用户补充，暂未关联到已精评岗位的要求。',
+    addForCapability: '添加证明材料',
     createPlan: '加入提升计划',
     planExists: '该能力已有进行中的提升计划',
+    planRequiresRequirement: '当精评岗位出现相关缺口后，才需要根据岗位影响创建提升计划。',
     myProficiency: '我的熟练度',
     jobRequires: '岗位最高要求',
     confirmCapability: '确认这项能力',
@@ -243,19 +275,33 @@ function createCopy(isZh: boolean) {
     addNote: '添加记录',
     saveProgress: '保存进度',
     completionHint: '完成计划后请新增本次产生的项目、作品、证书或事实依据，系统会把它关联到对应能力。',
-    evidenceModalTitle: '能力依据',
+    evidenceModalTitle: '证明材料',
     linkCapability: '归属能力',
     selectCapability: '请选择该依据要证明的能力',
-    evidenceTitle: '依据标题',
-    evidenceSummary: '事实摘要',
-    sourceType: '来源类型',
-    sourceRef: '文件或位置',
-    sourceQuote: '原文或说明',
+    evidenceTitle: '材料标题',
+    evidenceSummary: '这份材料能证明什么',
+    sourceType: '材料来自哪里',
+    sourceRef: '来源名称或位置',
+    sourceQuote: '关键内容',
     tags: '标签',
-    saveEvidence: '保存并确认',
-    editEvidence: '编辑依据',
+    saveEvidence: '保存材料',
+    editEvidence: '编辑材料',
     saveChanges: '保存修改',
-    validationEvidence: '请选择归属能力，并填写标题、事实摘要和来源位置。',
+    validationEvidence: '请选择归属能力，并填写材料标题、证明内容和来源信息。',
+    materialSaved: '材料已确认',
+    backToCapability: '返回能力详情',
+    sourceKinds: {
+      resume: ['个人简历', '引用简历中已经写明的经历或技能'],
+      project: ['项目或工作经历', '记录项目、职责、行动与结果'],
+      file: ['本地文件', '选择作品、文档或其他本地材料'],
+      link: ['链接或证书', '添加作品链接、证书或公开页面'],
+      statement: ['本人补充', '暂时没有材料时先记录个人说明'],
+    } as Record<EvidenceSourceKind, [string, string]>,
+    markMastered: '同时将这项能力标记为“已掌握”',
+    markMasteredHint: '保存材料不会默认改变能力状态；只有你明确勾选后才会更新。',
+    sourceRefLabels: {
+      resume: '简历位置', project: '项目或经历名称', file: '已选择文件', link: '链接地址', statement: '说明来源',
+    } as Record<EvidenceSourceKind, string>,
     validationPlan: '请选择目标熟练度。',
     saved: '已保存',
     impactExplanation: '等级依据',
@@ -266,7 +312,7 @@ function createCopy(isZh: boolean) {
     title: 'Capability profile',
     description: 'Normalize job requirements into reusable capabilities and compare coverage, sources, and improvement value.',
     refresh: 'Refresh',
-    addEvidence: 'Add capability evidence',
+    addEvidence: 'Add proof material',
     search: 'Search capabilities, requirements, or sources',
     all: 'All',
     abilities: 'My capabilities',
@@ -281,6 +327,8 @@ function createCopy(isZh: boolean) {
     jobs: 'jobs',
     evidenceCount: 'evidence',
     sources: 'sources',
+    recorded: 'Recorded',
+    viewCondition: 'View condition and sources',
     inPlan: 'In an improvement plan',
     viewDetails: 'View coverage and evidence',
     emptyAbilities: 'No user-confirmed capability is available in this scope yet.',
@@ -292,17 +340,20 @@ function createCopy(isZh: boolean) {
       ? `Aggregated from ${count} fine-reviewed jobs.`
       : `Only ${count} fine-reviewed jobs. Review at least 3 before prioritizing learning.`,
     statuses: { mastered: 'Mastered', adjacent: 'Transferable', pending: 'Needs confirmation', gap: 'Confirmed gap' } as Record<CapabilityStatus, string>,
+    proofStatuses: { none: 'No proof material', self_reported: 'Self-reported', resume_recorded: 'Recorded in resume', source_backed: 'Source-backed', external_verified: 'External credential' } as Record<CapabilityProfile['proofStatus'], string>,
     tiers: { core: 'Core', high_value: 'High value', common: 'Common', specialized: 'Specialized' } as Record<CapabilityImpactTier, string>,
     categories: { skill: 'Skill', experience: 'Experience', behavior: 'Behavior', education: 'Education', other: 'Other', location: 'Location', preference: 'Preference' } as Record<string, string>,
     coverageSummary: (jobs: number, required: number, preferred: number) => `${jobs} jobs · ${required} required · ${preferred} preferred`,
     detailCoverage: 'Job coverage',
-    detailEvidence: 'Capability evidence',
+    detailEvidence: 'Proof materials',
     requirementSource: 'Requirement sources',
     anyOfRequirement: 'Any one option satisfies this requirement',
     noEvidence: 'No saved evidence yet.',
-    addForCapability: 'Add evidence for this capability',
+    noLinkedRequirements: 'This capability comes from the resume or user input and is not yet linked to a fine-reviewed job requirement.',
+    addForCapability: 'Add proof material',
     createPlan: 'Add to improvement plans',
     planExists: 'An active plan already exists',
+    planRequiresRequirement: 'Create an improvement plan after fine-reviewed jobs expose a related gap and its impact.',
     myProficiency: 'My proficiency',
     jobRequires: 'Highest job requirement',
     confirmCapability: 'Confirm this capability',
@@ -340,19 +391,31 @@ function createCopy(isZh: boolean) {
     addNote: 'Add note',
     saveProgress: 'Save progress',
     completionHint: 'When the plan is complete, add the project, artifact, certificate, or fact it produced.',
-    evidenceModalTitle: 'Capability evidence',
+    evidenceModalTitle: 'Proof material',
     linkCapability: 'Capability',
     selectCapability: 'Select the capability this evidence supports',
-    evidenceTitle: 'Title',
-    evidenceSummary: 'Fact summary',
-    sourceType: 'Source type',
-    sourceRef: 'File or location',
-    sourceQuote: 'Excerpt or explanation',
+    evidenceTitle: 'Material title',
+    evidenceSummary: 'What this material proves',
+    sourceType: 'Where it comes from',
+    sourceRef: 'Source name or location',
+    sourceQuote: 'Key content',
     tags: 'Tags',
-    saveEvidence: 'Save and confirm',
-    editEvidence: 'Edit evidence',
+    saveEvidence: 'Save material',
+    editEvidence: 'Edit material',
     saveChanges: 'Save changes',
-    validationEvidence: 'Select a capability and enter a title, fact summary, and source location.',
+    validationEvidence: 'Select a capability and enter a title, what it proves, and source details.',
+    materialSaved: 'Material confirmed',
+    backToCapability: 'Back to capability',
+    sourceKinds: {
+      resume: ['Resume', 'Reference an experience or skill already written in your resume'],
+      project: ['Project or work', 'Record a project, responsibility, action, and result'],
+      file: ['Local file', 'Choose a work sample, document, or local material'],
+      link: ['Link or certificate', 'Add a portfolio link, certificate, or public page'],
+      statement: ['Self statement', 'Record a statement when no other material is available yet'],
+    } as Record<EvidenceSourceKind, [string, string]>,
+    markMastered: 'Also mark this capability as mastered',
+    markMasteredHint: 'Saving material does not change capability status unless you explicitly select this.',
+    sourceRefLabels: { resume: 'Resume location', project: 'Project or experience name', file: 'Selected file', link: 'URL', statement: 'Statement source' } as Record<EvidenceSourceKind, string>,
     validationPlan: 'Select a target proficiency.',
     saved: 'Saved',
     impactExplanation: 'Why this tier',
@@ -368,7 +431,7 @@ export function Evidence({
   onCreateEvidenceItem,
   onUpdateEvidenceItem,
   onConfirmEvidenceItem,
-  onClassifyEvidenceCoverage,
+  onClassifyCapability,
   onCreateEvidenceTask,
   onUpdateEvidenceTask,
   targetTaskId,
@@ -381,8 +444,8 @@ export function Evidence({
   onCreateEvidenceItem: (item: EvidenceItemInput) => Promise<EvidenceMutationResponse | null>;
   onUpdateEvidenceItem: (item: EvidenceItem) => Promise<EvidenceMutationResponse | null>;
   onConfirmEvidenceItem: (evidenceId: string) => Promise<EvidenceMutationResponse | null>;
-  onClassifyEvidenceCoverage: (
-    requirementId: string,
+  onClassifyCapability: (
+    capabilityId: string,
     classification: EvidenceClassification,
     evidenceIds?: string[],
     rationale?: string,
@@ -418,6 +481,7 @@ export function Evidence({
   const [decisionChoice, setDecisionChoice] = useState<EvidenceClassification>('unsure');
   const [decisionProficiency, setDecisionProficiency] = useState<ProficiencyLevel>('working');
   const [evidenceModal, setEvidenceModal] = useState<{ capabilityId?: string; evidenceId?: string } | null>(null);
+  const [evidenceSourceKind, setEvidenceSourceKind] = useState<EvidenceSourceKind>('resume');
   const [evidenceCapabilityId, setEvidenceCapabilityId] = useState('');
   const [evidenceDraft, setEvidenceDraft] = useState<EvidenceDraft>(EMPTY_EVIDENCE_DRAFT);
   const [busy, setBusy] = useState(false);
@@ -491,8 +555,10 @@ export function Evidence({
     setEvidenceDraft({
       ...EMPTY_EVIDENCE_DRAFT,
       title: capability?.label || '',
-      tags: capability?.canonicalKey || '',
+      sourceType: 'cv',
+      sourceRef: 'cv.md',
     });
+    setEvidenceSourceKind('resume');
     setEvidenceModal({ capabilityId: capability?.capabilityId });
     setEvidenceCapabilityId(capability?.capabilityId || '');
     setFeedback('');
@@ -500,6 +566,16 @@ export function Evidence({
 
   const openEvidenceEdit = (item: EvidenceItem) => {
     const source = item.sourceRefs?.[0] || { type: 'user_statement', ref: '', quote: '' };
+    const sourceKind: EvidenceSourceKind = ['cv', 'resume', 'resume_import'].includes(source.type)
+      ? 'resume'
+      : ['project', 'work', 'work_experience'].includes(source.type)
+        ? 'project'
+        : ['url', 'link', 'certificate', 'credential'].includes(source.type)
+          ? 'link'
+          : ['file', 'artifact', 'code', 'repository'].includes(source.type)
+            ? 'file'
+            : 'statement';
+    setEvidenceSourceKind(sourceKind);
     setEvidenceDraft({
       title: item.title,
       summary: item.summary,
@@ -507,6 +583,7 @@ export function Evidence({
       sourceRef: source.ref,
       sourceQuote: source.quote,
       tags: item.tags.join(', '),
+      markAsMastered: false,
     });
     setEvidenceModal({ evidenceId: item.evidenceId });
     setEvidenceCapabilityId('');
@@ -514,10 +591,12 @@ export function Evidence({
   };
 
   const saveEvidence = async () => {
+    const effectiveSourceRef = evidenceDraft.sourceRef.trim()
+      || (evidenceSourceKind === 'statement' ? (isZh ? '用户本人补充' : 'User statement') : '');
     if (
       !evidenceDraft.title.trim()
       || !evidenceDraft.summary.trim()
-      || !evidenceDraft.sourceRef.trim()
+      || !effectiveSourceRef
       || (!evidenceModal?.evidenceId && !evidenceCapabilityId)
     ) {
       setFeedback(copy.validationEvidence);
@@ -526,8 +605,8 @@ export function Evidence({
     setBusy(true);
     try {
       const sourceRefs: EvidenceSourceRef[] = [{
-        type: evidenceDraft.sourceType.trim() || 'user_statement',
-        ref: evidenceDraft.sourceRef.trim(),
+        type: SOURCE_TYPE_BY_KIND[evidenceSourceKind],
+        ref: effectiveSourceRef,
         quote: evidenceDraft.sourceQuote.trim() || evidenceDraft.summary.trim(),
       }];
       if (evidenceModal?.evidenceId) {
@@ -538,7 +617,10 @@ export function Evidence({
           title: evidenceDraft.title.trim(),
           summary: evidenceDraft.summary.trim(),
           sourceRefs,
-          tags: splitTags(evidenceDraft.tags),
+          tags: Array.from(new Set([
+            ...splitTags(evidenceDraft.tags),
+            `source:${evidenceSourceKind}`,
+          ])),
         });
       } else {
         const capability = capabilityById.get(evidenceCapabilityId) || null;
@@ -550,21 +632,35 @@ export function Evidence({
           actions: [],
           results: [],
           sourceRefs,
-          tags: splitTags(evidenceDraft.tags),
+          tags: [
+            `source:${evidenceSourceKind}`,
+            ...(capability ? [`capability:${capability.canonicalKey}`] : []),
+          ],
           requirementIds: capability?.requirementIds || [],
+          capabilityIds: capability ? [capability.capabilityId] : [],
         });
-        if (result?.item && capability?.requirementIds[0]) {
-          await onClassifyEvidenceCoverage(
-            capability.requirementIds[0],
-            'done',
-            [result.item.evidenceId],
-            isZh ? '用户在能力档案中补充并确认了能力依据' : 'User added and confirmed capability evidence',
-            1,
-          );
-          await onConfirmEvidenceItem(result.item.evidenceId);
+        if (!result?.item) return;
+        if (capability) {
+          const confirmed = await onConfirmEvidenceItem(result.item.evidenceId);
+          if (!confirmed) {
+            setEvidenceModal(null);
+            return;
+          }
+          if (evidenceDraft.markAsMastered && capability.actionability === 'developable') {
+            const classified = await onClassifyCapability(
+              capability.capabilityId,
+              'done',
+              [result.item.evidenceId],
+              isZh ? '用户在保存证明材料时明确将能力标记为已掌握' : 'User explicitly marked the capability as mastered while saving proof material',
+              1,
+              capability.proficiencyApplicable ? capability.userProficiency : 'unspecified',
+            );
+            if (!classified) return;
+          }
         }
       }
       setEvidenceModal(null);
+      if (!selectedCapabilityId) setEvidenceCapabilityId('');
       setFeedback(copy.saved);
     } finally {
       setBusy(false);
@@ -611,11 +707,11 @@ export function Evidence({
   };
 
   const confirmCapabilityDecision = async () => {
-    if (!selectedCapability?.requirementIds[0]) return;
+    if (!selectedCapability) return;
     setBusy(true);
     try {
-      await onClassifyEvidenceCoverage(
-        selectedCapability.requirementIds[0],
+      const result = await onClassifyCapability(
+        selectedCapability.capabilityId,
         decisionChoice,
         [],
         isZh ? '用户在能力档案中确认了当前掌握情况' : 'User confirmed the current capability state in Capability Profile',
@@ -624,6 +720,7 @@ export function Evidence({
           ? decisionProficiency
           : 'unspecified',
       );
+      if (!result) return;
       setFeedback(copy.saved);
       setSelectedCapabilityId('');
     } finally {
@@ -664,6 +761,22 @@ export function Evidence({
     { key: 'gaps', label: copy.gaps, count: counts?.gapCapabilities || 0, icon: Target },
     { key: 'plans', label: copy.plans, count: counts?.activePlans || 0, icon: BookOpenCheck },
   ];
+  const evidenceSourceOptions: Array<{ key: EvidenceSourceKind; icon: typeof FileText }> = [
+    { key: 'resume', icon: FileText },
+    { key: 'project', icon: BriefcaseBusiness },
+    { key: 'file', icon: FolderKanban },
+    { key: 'link', icon: Link2 },
+    { key: 'statement', icon: UserRoundPen },
+  ];
+
+  const chooseEvidenceSource = (kind: EvidenceSourceKind) => {
+    setEvidenceSourceKind(kind);
+    setEvidenceDraft((current) => ({
+      ...current,
+      sourceType: SOURCE_TYPE_BY_KIND[kind],
+      sourceRef: kind === 'resume' ? 'cv.md' : kind === 'statement' ? (isZh ? '用户本人补充' : 'User statement') : '',
+    }));
+  };
 
   return (
     <div className="capability-page">
@@ -774,14 +887,19 @@ export function Evidence({
         </div>
       </section>
 
-      {selectedCapability && (
+      {selectedCapability && !evidenceModal && (
         <div className="capability-modal-backdrop" onClick={() => setSelectedCapabilityId('')}>
           <article className="capability-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <header>
               <div>
                 <div className="capability-modal__badges">
                   <span className={`capability-tier capability-tier--${selectedCapability.impactTier}`}>{copy.tiers[selectedCapability.impactTier]}</span>
-                  <span className={`capability-status capability-status--${selectedCapability.status}`}>{copy.statuses[selectedCapability.status]}</span>
+                  <span className={`capability-status capability-status--${selectedCapability.status}`}>
+                    {selectedCapability.actionability === 'basic' ? copy.recorded : copy.statuses[selectedCapability.status]}
+                  </span>
+                  <span className={`capability-proof capability-proof--${selectedCapability.proofStatus}`}>
+                    <ShieldCheck size={12} />{copy.proofStatuses[selectedCapability.proofStatus]}
+                  </span>
                 </div>
                 <h2>{selectedCapability.label}</h2>
                 <p>{copy.coverageSummary(selectedCapability.jobCount, selectedCapability.requiredCount, selectedCapability.preferredCount)}</p>
@@ -839,14 +957,14 @@ export function Evidence({
                   {selectedCapability.evidenceIds.length ? selectedCapability.evidenceIds.map((evidenceId) => {
                     const item = evidenceById.get(evidenceId);
                     if (!item) return null;
-                    return <button type="button" key={evidenceId} onClick={() => openEvidenceEdit(item)}><div><strong>{item.title}</strong><span>{item.status === 'confirmed' ? copy.statuses.mastered : item.status}</span></div><p>{item.summary}</p><footer>{item.sourceRefs.slice(0, 2).map((source) => source.ref).filter(Boolean).join(' · ')}</footer></button>;
+                    return <button type="button" key={evidenceId} onClick={() => openEvidenceEdit(item)}><div><strong>{item.title}</strong><span>{item.status === 'confirmed' ? copy.materialSaved : item.status}</span></div><p>{item.summary}</p><footer>{item.sourceRefs.slice(0, 2).map((source) => source.ref).filter(Boolean).join(' · ')}</footer></button>;
                   }) : <p className="capability-section-empty">{copy.noEvidence}</p>}
                 </div>
               </section>
               <section>
                 <div className="capability-section-heading"><div><Target size={16} /><strong>{copy.requirementSource}</strong><span>{selectedCapability.requirements.length}</span></div></div>
                 <div className="capability-requirement-list">
-                  {selectedCapability.requirements.map((requirement) => (
+                  {selectedCapability.requirements.length ? selectedCapability.requirements.map((requirement) => (
                     <div key={requirement.requirementId}>
                       <span className={`requirement-importance requirement-importance--${requirement.importance}`}>{copy[requirement.importance]}</span>
                       <div>
@@ -863,12 +981,14 @@ export function Evidence({
                         </small>
                       </div>
                     </div>
-                  ))}
+                  )) : <p className="capability-section-empty">{copy.noLinkedRequirements}</p>}
                 </div>
               </section>
               {selectedCapability.status === 'gap' && selectedCapability.actionability === 'developable' && (
                 <section className="capability-plan-entry">
-                  {!showPlanForm ? (
+                  {!selectedCapability.requirementIds.length ? (
+                    <p className="capability-section-empty">{copy.planRequiresRequirement}</p>
+                  ) : !showPlanForm ? (
                     <div><div><BookOpenCheck size={17} /><span>{selectedCapability.planIds.length ? copy.planExists : copy.createPlan}</span></div>{!selectedCapability.planIds.length && <button type="button" className="evidence-button evidence-button--primary" onClick={() => setShowPlanForm(true)}><Plus size={15} />{copy.createPlan}</button>}</div>
                   ) : (
                     <div className="capability-plan-form">
@@ -890,10 +1010,22 @@ export function Evidence({
       )}
 
       {evidenceModal && (
-        <div className="capability-modal-backdrop capability-modal-backdrop--front" onClick={() => setEvidenceModal(null)}>
-          <article className="evidence-compact-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <header><div><span>{copy.evidenceModalTitle}</span><h2>{evidenceModal.evidenceId ? copy.editEvidence : copy.addEvidence}</h2></div><button type="button" onClick={() => setEvidenceModal(null)}><X size={18} /></button></header>
-            <div className="evidence-compact-form">
+        <div className="capability-modal-backdrop" onClick={() => setEvidenceModal(null)}>
+          <article className="capability-modal evidence-workflow" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <header>
+              <div>
+                <span>{copy.evidenceModalTitle}</span>
+                <h2>{evidenceModal.evidenceId ? copy.editEvidence : copy.addEvidence}</h2>
+                <p>{capabilityById.get(evidenceCapabilityId)?.label || copy.selectCapability}</p>
+              </div>
+              <button type="button" aria-label={copy.close} onClick={() => setEvidenceModal(null)}><X size={18} /></button>
+            </header>
+            <div className="capability-modal__content evidence-workflow__content">
+              {selectedCapability && (
+                <button type="button" className="evidence-workflow__back" onClick={() => setEvidenceModal(null)}>
+                  <ArrowLeft size={14} />{copy.backToCapability}
+                </button>
+              )}
               {!evidenceModal.evidenceId && (
                 <label>
                   <span>{copy.linkCapability}</span>
@@ -907,17 +1039,51 @@ export function Evidence({
                   </select>
                 </label>
               )}
-              <label><span>{copy.evidenceTitle}</span><input value={evidenceDraft.title} onChange={(event) => setEvidenceDraft((current) => ({ ...current, title: event.target.value }))} /></label>
-              <label><span>{copy.evidenceSummary}</span><textarea rows={4} value={evidenceDraft.summary} onChange={(event) => setEvidenceDraft((current) => ({ ...current, summary: event.target.value }))} /></label>
-              <div>
-                <label><span>{copy.sourceType}</span><input value={evidenceDraft.sourceType} onChange={(event) => setEvidenceDraft((current) => ({ ...current, sourceType: event.target.value }))} /></label>
-                <label><span>{copy.sourceRef}</span><input value={evidenceDraft.sourceRef} onChange={(event) => setEvidenceDraft((current) => ({ ...current, sourceRef: event.target.value }))} /></label>
+              <section className="evidence-workflow__source">
+                <strong>{copy.sourceType}</strong>
+                <div>
+                  {evidenceSourceOptions.map(({ key, icon: Icon }) => (
+                    <button type="button" key={key} className={evidenceSourceKind === key ? 'is-active' : ''} onClick={() => chooseEvidenceSource(key)}>
+                      <Icon size={17} />
+                      <span>{copy.sourceKinds[key][0]}</span>
+                      <small>{copy.sourceKinds[key][1]}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <div className="evidence-workflow__form">
+                <label><span>{copy.evidenceTitle}</span><input value={evidenceDraft.title} onChange={(event) => setEvidenceDraft((current) => ({ ...current, title: event.target.value }))} /></label>
+                <label><span>{copy.evidenceSummary}</span><textarea rows={4} value={evidenceDraft.summary} onChange={(event) => setEvidenceDraft((current) => ({ ...current, summary: event.target.value }))} /></label>
+                <label>
+                  <span>{copy.sourceRefLabels[evidenceSourceKind]}</span>
+                  {evidenceSourceKind === 'file' ? (
+                    <input
+                      type="file"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) setEvidenceDraft((current) => ({ ...current, sourceRef: file.name }));
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type={evidenceSourceKind === 'link' ? 'url' : 'text'}
+                      value={evidenceDraft.sourceRef}
+                      disabled={evidenceSourceKind === 'statement'}
+                      onChange={(event) => setEvidenceDraft((current) => ({ ...current, sourceRef: event.target.value }))}
+                    />
+                  )}
+                </label>
+                <label><span>{copy.sourceQuote}</span><textarea rows={3} value={evidenceDraft.sourceQuote} onChange={(event) => setEvidenceDraft((current) => ({ ...current, sourceQuote: event.target.value }))} /></label>
+                {!evidenceModal.evidenceId && capabilityById.get(evidenceCapabilityId)?.actionability === 'developable' && (
+                  <label className="evidence-workflow__mastery">
+                    <input type="checkbox" checked={evidenceDraft.markAsMastered} onChange={(event) => setEvidenceDraft((current) => ({ ...current, markAsMastered: event.target.checked }))} />
+                    <span><strong>{copy.markMastered}</strong><small>{copy.markMasteredHint}</small></span>
+                  </label>
+                )}
+                {feedback && <p>{feedback}</p>}
               </div>
-              <label><span>{copy.sourceQuote}</span><textarea rows={3} value={evidenceDraft.sourceQuote} onChange={(event) => setEvidenceDraft((current) => ({ ...current, sourceQuote: event.target.value }))} /></label>
-              <label><span>{copy.tags}</span><input value={evidenceDraft.tags} onChange={(event) => setEvidenceDraft((current) => ({ ...current, tags: event.target.value }))} /></label>
-              {feedback && <p>{feedback}</p>}
             </div>
-            <footer><button type="button" className="evidence-button evidence-button--secondary" onClick={() => setEvidenceModal(null)}>{copy.cancel}</button><button type="button" className="evidence-button evidence-button--primary" onClick={() => void saveEvidence()} disabled={busy}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}{evidenceModal.evidenceId ? copy.saveChanges : copy.saveEvidence}</button></footer>
+            <footer className="evidence-workflow__footer"><button type="button" className="evidence-button evidence-button--secondary" onClick={() => setEvidenceModal(null)}>{copy.cancel}</button><button type="button" className="evidence-button evidence-button--primary" onClick={() => void saveEvidence()} disabled={busy}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}{evidenceModal.evidenceId ? copy.saveChanges : copy.saveEvidence}</button></footer>
           </article>
         </div>
       )}

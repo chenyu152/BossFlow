@@ -37,6 +37,9 @@ import type {
   ProficiencyLevel,
   ProjectListResponse,
   ResumeDraftResponse,
+  ResumeCapabilityImportPreview,
+  ResumeCapabilityImportResult,
+  ResumeCapabilityImportSelection,
   ResumeItemsResponse,
   ResumeSuggestionResponse,
   ScoringKeywordSuggestionResponse,
@@ -168,6 +171,23 @@ export const bossApi = {
     return request<CvDocumentResponse>('/api/cv', {
       method: 'PUT',
       body: JSON.stringify({ project, content }),
+    });
+  },
+
+  previewCvCapabilityImport(project: string) {
+    return request<ResumeCapabilityImportPreview>(
+      `/api/cv/capability-import-preview?project=${encodeURIComponent(project)}`,
+    );
+  },
+
+  applyCvCapabilityImport(
+    project: string,
+    sourceRevision: string,
+    selections: ResumeCapabilityImportSelection[],
+  ) {
+    return request<ResumeCapabilityImportResult>('/api/cv/capability-import', {
+      method: 'POST',
+      body: JSON.stringify({ project, sourceRevision, selections }),
     });
   },
 
@@ -368,6 +388,29 @@ export const bossApi = {
     return request<EvidenceMutationResponse>('/api/evidence/coverage/classify', {
       method: 'POST',
       body: JSON.stringify({ project, requirementId, userClassification, evidenceIds, rationale, confidence, userProficiency }),
+    });
+  },
+
+  classifyCapability(
+    project: string,
+    capabilityId: string,
+    classification: EvidenceClassification,
+    evidenceIds: string[] = [],
+    rationale = '',
+    confidence = 1,
+    userProficiency: ProficiencyLevel = 'unspecified',
+  ) {
+    return request<EvidenceMutationResponse>('/api/evidence/capabilities/classify', {
+      method: 'POST',
+      body: JSON.stringify({
+        project,
+        capabilityId,
+        classification,
+        evidenceIds,
+        rationale,
+        confidence,
+        userProficiency,
+      }),
     });
   },
 

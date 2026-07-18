@@ -11,6 +11,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from backend.schemas.config import CrawlRequest
+from backend.schemas.cv import CapabilityDecisionRequest, ResumeCapabilityImportSelection
 from backend.schemas.evidence import EvidenceCoverageClassifyRequest, EvidenceItemCreateRequest, EvidenceTaskUpdateRequest
 from backend.schemas.interview import InterviewStoryDraftPayload
 from backend.services.agent_audit_service import record_agent_action
@@ -18,11 +19,15 @@ from backend.services.agent_confirmation_service import AgentConfirmationService
 from backend.services.crawler_service import start_crawl_task
 from backend.services.cv_service import read_cv_document
 from backend.services.evidence_service import (
+    apply_resume_capability_import,
+    classify_capability,
     classify_coverage,
     confirm_evidence_item,
     create_evidence_item,
+    list_capabilities,
     list_evidence_tasks,
     list_requirements,
+    preview_resume_capability_import as build_resume_capability_import_preview,
     read_evidence_overview,
     update_evidence_task,
 )
@@ -249,9 +254,63 @@ def create_bossflow_mcp(task_manager: TaskManager) -> FastMCP:
 
     @mcp.tool(annotations=READ_ONLY)
     def get_evidence(project: str) -> dict[str, Any]:
-        """Read the project's evidence overview without exposing secrets or source files."""
+        """Read the project's capability profile, requirements, evidence, and improvement tasks."""
         with project_workspace(project):
             return read_evidence_overview()
+
+    @mcp.tool(annotations=READ_ONLY)
+    def get_capabilities(
+        project: str,
+        status: str = "",
+        category: str = "",
+        source_key: str = "",
+        limit: int = 200,
+    ) -> dict[str, Any]:
+        """List normalized capabilities. any_of members are alternatives, not separate mandatory gaps."""
+        with project_workspace(project):
+            return list_capabilities(status, category, source_key, limit)
+
+    @mcp.tool(annotations=READ_ONLY)
+    def get_requirement_groups(project: str, source_key: str = "") -> dict[str, Any]:
+        """List effective requirement units while preserving any_of alternative groups."""
+        with project_workspace(project):
+            payload = list_requirements(source_key)
+        grouped: dict[str, dict[str, Any]] = {}
+        for requirement in payload.get("requirements", []):
+            is_any = (
+                requirement.get("requirementGroupMode") == "any_of"
+                and requirement.get("requirementGroupId")
+            )
+            group_id = (
+                str(requirement.get("requirementGroupId"))
+                if is_any
+                else f"single:{requirement.get('requirementId')}"
+            )
+            group = grouped.setdefault(group_id, {
+                "groupId": group_id,
+                "mode": "any_of" if is_any else "all_of",
+                "label": (
+                    requirement.get("requirementGroupLabel")
+                    if is_any
+                    else requirement.get("label")
+                ),
+                "minimumSatisfied": int(requirement.get("minimumSatisfied") or 1),
+                "requirements": [],
+            })
+            group["requirements"].append(requirement)
+        return {
+            "ok": True,
+            "sourceKey": source_key,
+            "groups": list(grouped.values()),
+            "guidance": "For any_of groups, one satisfied alternative can satisfy the group.",
+        }
+
+    @mcp.tool(annotations=READ_ONLY)
+    def preview_resume_capability_import(project: str) -> dict[str, Any]:
+        """Preview atomic base-resume capabilities as new, merged, or already synchronized."""
+        with project_workspace(project):
+            document = read_cv_document()
+            return build_resume_capability_import_preview(document.get("content", ""))
 
     @mcp.tool(annotations=READ_ONLY)
     def get_login_state(project: str) -> dict[str, Any]:
@@ -449,7 +508,7 @@ def create_bossflow_mcp(task_manager: TaskManager) -> FastMCP:
 
     @mcp.tool(annotations=SAFE_WRITE)
     def stage_evidence_item(project: str, item: dict[str, Any], confirmation_id: str = "") -> dict[str, Any]:
-        """Preview or stage a source-grounded evidence item as a draft; confirmation is a separate action."""
+        """Preview or stage source-grounded draft evidence linked to capabilities or requirements."""
         resolve_project(project)
         validated = EvidenceItemCreateRequest.model_validate({"project": project, **item}).model_dump()
         confirmation_payload = {"item": validated}
@@ -458,6 +517,7 @@ def create_bossflow_mcp(task_manager: TaskManager) -> FastMCP:
             "evidenceType": validated["evidenceType"],
             "sourceRefs": validated["sourceRefs"],
             "requirementIds": validated["requirementIds"],
+            "capabilityIds": validated["capabilityIds"],
             "status": "draft",
         }
         if not confirmation_id:
@@ -524,6 +584,91 @@ def create_bossflow_mcp(task_manager: TaskManager) -> FastMCP:
                 "classify_evidence_requirement",
                 requirement_id,
                 lambda: classify_coverage(validated),
+            )
+
+    @mcp.tool(annotations=SAFE_WRITE)
+    def decide_capability(
+        project: str,
+        capability_id: str,
+        classification: str,
+        evidence_ids: list[str] | None = None,
+        rationale: str = "",
+        user_proficiency: str = "unspecified",
+        confirmation_id: str = "",
+    ) -> dict[str, Any]:
+        """Preview or record one reusable capability decision across matching job requirements."""
+        validated = CapabilityDecisionRequest.model_validate({
+            "project": project,
+            "capabilityId": capability_id,
+            "classification": classification,
+            "evidenceIds": evidence_ids or [],
+            "rationale": rationale,
+            "confidence": 1,
+            "userProficiency": user_proficiency,
+        }).model_dump()
+        confirmation_payload = {
+            key: value
+            for key, value in validated.items()
+            if key != "project"
+        }
+        if not confirmation_id:
+            return _confirmation_preview(
+                "decide_capability",
+                capability_id,
+                confirmation_payload,
+                classification=classification,
+                evidenceIds=evidence_ids or [],
+                userProficiency=user_proficiency,
+            )
+        _require_confirmation(confirmation_id, "decide_capability", capability_id, confirmation_payload)
+        with project_workspace(project):
+            return audited_write(
+                "decide_capability",
+                capability_id,
+                lambda: classify_capability(confirmation_payload),
+            )
+
+    @mcp.tool(annotations=SAFE_WRITE)
+    def import_resume_capabilities(
+        project: str,
+        source_revision: str,
+        selections: list[dict[str, Any]],
+        confirmation_id: str = "",
+    ) -> dict[str, Any]:
+        """Preview or import selected base-resume capabilities as confirmed personal-claim evidence."""
+        normalized_selections = [
+            ResumeCapabilityImportSelection.model_validate(item).model_dump()
+            for item in selections
+        ]
+        confirmation_payload = {
+            "sourceRevision": source_revision,
+            "selections": normalized_selections,
+        }
+        if not confirmation_id:
+            return _confirmation_preview(
+                "import_resume_capabilities",
+                project,
+                confirmation_payload,
+                selectedCount=sum(1 for item in normalized_selections if item["selected"]),
+                sourceRevision=source_revision,
+                evidenceStrength="personal_resume_claim",
+            )
+        _require_confirmation(
+            confirmation_id,
+            "import_resume_capabilities",
+            project,
+            confirmation_payload,
+        )
+        with project_workspace(project):
+            document = read_cv_document()
+            return audited_write(
+                "import_resume_capabilities",
+                project,
+                lambda: apply_resume_capability_import(
+                    document.get("content", ""),
+                    normalized_selections,
+                    source_revision,
+                ),
             )
 
     @mcp.tool(annotations=SAFE_WRITE)
@@ -688,8 +833,13 @@ def create_bossflow_mcp(task_manager: TaskManager) -> FastMCP:
 
     @mcp.resource("bossflow://project/{project}/evidence", mime_type="application/json")
     def project_evidence_resource(project: str) -> str:
-        """Read the project's confirmed and pending evidence overview."""
+        """Read the project's capability, evidence, requirement, and improvement overview."""
         return _json_resource(get_evidence(project))
+
+    @mcp.resource("bossflow://project/{project}/capabilities", mime_type="application/json")
+    def project_capabilities_resource(project: str) -> str:
+        """Read normalized standalone and job-derived capability profiles."""
+        return _json_resource(get_capabilities(project))
 
     @mcp.resource("bossflow://project/{project}/login-state", mime_type="application/json")
     def project_login_state_resource(project: str) -> str:

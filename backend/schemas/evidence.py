@@ -58,6 +58,7 @@ class EvidenceItemCreateRequest(BaseModel):
     sourceRefs: list[EvidenceSourceRefPayload] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     requirementIds: list[str] = Field(default_factory=list)
+    capabilityIds: list[str] = Field(default_factory=list)
     status: Literal["draft"] = "draft"
 
 

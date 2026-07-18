@@ -228,6 +228,51 @@
     "importFailed": "读取导入文件失败：{{error}}",
     "unsavedSwitchConfirm": "当前简历有未保存修改，切换后会丢失。确定继续吗？",
     "help": "帮助引导",
+    "capabilitySync": {
+      "button": "同步到能力档案",
+      "title": "将简历能力同步到能力档案",
+      "subtitle": "系统已拆分并归一化简历中的能力。确认后只导入选中项，不会删除既有能力。",
+      "saveFirst": "请先保存基础简历，再同步能力档案。",
+      "previewFailed": "分析简历能力失败：{{error}}",
+      "applyFailed": "同步能力失败：{{error}}",
+      "applied": "已将 {{count}} 项简历能力同步到能力档案。",
+      "viewProfile": "查看能力档案",
+      "close": "关闭",
+      "normalizedCapability": "归一化能力",
+      "proficiency": "我的熟练度",
+      "empty": "暂未从简历中识别到可导入的能力。可以在技能、项目或工作经历中补充明确的技术名称。",
+      "stale": "有 {{count}} 项以前从简历导入的能力本次未再识别。为避免误删，系统会继续保留它们。",
+      "confirmHint": "简历导入会保存为“个人简历声明”证据，可继续补充项目或作品证据。",
+      "cancel": "取消",
+      "apply": "导入 {{count}} 项",
+      "counts": {
+        "total": "识别总数",
+        "new": "新增能力",
+        "merge": "合并已有",
+        "alreadyImported": "已同步",
+        "needsReview": "需要判断"
+      },
+      "actions": {
+        "new": "新增能力",
+        "merge": "合并已有能力",
+        "already_imported": "已同步"
+      },
+      "categories": {
+        "skill": "技能",
+        "experience": "经验",
+        "behavior": "行为能力",
+        "education": "学历",
+        "other": "其他"
+      },
+      "levels": {
+        "unspecified": "不显示熟练度",
+        "awareness": "了解",
+        "familiar": "熟悉",
+        "working": "掌握",
+        "proficient": "熟练",
+        "expert": "精通"
+      }
+    },
     "tour": {
       "importTitle": "导入已有基础简历",
       "importBody": "点击这里选择简历文件。Markdown 或文本会直接载入；PDF 会自动解析。无论哪种方式，内容都要先在编辑器检查后再保存。",

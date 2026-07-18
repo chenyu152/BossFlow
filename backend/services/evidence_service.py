@@ -20,7 +20,9 @@ from backend.services.capability_service import (
     canonicalize_capability_key,
     compact_requirement_text,
     highest_proficiency,
+    infer_proficiency,
     is_proficiency_applicable,
+    matching_capability_definitions,
     merge_requirement_assessments,
     normalize_canonical_key,
     normalize_proficiency,
@@ -32,7 +34,7 @@ from backend.services.workspace_service import workspace_path
 DATA_DIR = workspace_path("data")
 EVIDENCE_STORE_PATH = workspace_path("data/evidence-store.json")
 EVIDENCE_LOCK_PATH = workspace_path("data/.evidence-store.lock")
-EVIDENCE_SCHEMA_VERSION = 6
+EVIDENCE_SCHEMA_VERSION = 7
 
 VERIFICATION_MODES = {"document_fact", "experience_fact", "preference", "behavior_example", "manual_review"}
 IMPROVEMENT_TASK_TYPES = {"learn", "project", "strengthen", "translate"}
@@ -82,6 +84,7 @@ def _verification_mode(category: Any, value: Any = "") -> str:
 def _empty_store() -> dict[str, Any]:
     return {
         "schemaVersion": EVIDENCE_SCHEMA_VERSION,
+        "capabilityRecords": [],
         "requirements": [],
         "evidenceItems": [],
         "coverages": [],
@@ -333,7 +336,7 @@ def _normalize_store(raw: Any) -> tuple[dict[str, Any], bool]:
     store = dict(raw)
     changed = version != EVIDENCE_SCHEMA_VERSION
     store["schemaVersion"] = EVIDENCE_SCHEMA_VERSION
-    for key in ("requirements", "evidenceItems", "coverages", "tasks"):
+    for key in ("capabilityRecords", "requirements", "evidenceItems", "coverages", "tasks"):
         if not isinstance(store.get(key), list):
             store[key] = []
             changed = True
@@ -477,6 +480,14 @@ def _normalize_store(raw: Any) -> tuple[dict[str, Any], bool]:
         requirement_ids = sorted({str(value) for value in current_ids if value} | linked_requirement_ids.get(evidence_id, set()))
         if item.get("requirementIds") != requirement_ids:
             item["requirementIds"] = requirement_ids
+            changed = True
+        capability_ids = sorted({
+            str(value)
+            for value in (item.get("capabilityIds") if isinstance(item.get("capabilityIds"), list) else [])
+            if value
+        })
+        if item.get("capabilityIds") != capability_ids:
+            item["capabilityIds"] = capability_ids
             changed = True
     for task in store["tasks"]:
         if not isinstance(task, dict):
@@ -622,6 +633,36 @@ def _impact_tier(job_count: int, required_count: int, preferred_count: int) -> s
     return "specialized"
 
 
+def _proof_status(evidence_items: list[dict[str, Any]]) -> str:
+    """Describe evidence strength independently from the user's capability decision."""
+    rank = {
+        "none": 0,
+        "self_reported": 1,
+        "resume_recorded": 2,
+        "source_backed": 3,
+        "external_verified": 4,
+    }
+    strongest = "none"
+    for item in evidence_items:
+        if item.get("status") == "archived":
+            continue
+        for source in item.get("sourceRefs") or []:
+            source_type = str(source.get("type") or "").strip().lower()
+            if source_type in {"certificate", "credential", "url", "link"}:
+                candidate = "external_verified"
+            elif source_type in {
+                "project", "work", "work_experience", "file", "artifact", "code", "repository",
+            }:
+                candidate = "source_backed"
+            elif source_type in {"cv", "resume", "resume_import"}:
+                candidate = "resume_recorded"
+            else:
+                candidate = "self_reported"
+            if rank[candidate] > rank[strongest]:
+                strongest = candidate
+    return strongest
+
+
 def _source_metadata() -> dict[str, dict[str, str]]:
     try:
         from backend.services.pipeline_service import read_pipeline
@@ -659,6 +700,13 @@ def _capability_summary(store: dict[str, Any]) -> dict[str, Any]:
         for item in store["evidenceItems"]
         if isinstance(item, dict) and item.get("evidenceId")
     }
+    records_by_key = {
+        str(item.get("canonicalKey") or ""): item
+        for item in store.get("capabilityRecords", [])
+        if isinstance(item, dict)
+        and item.get("canonicalKey")
+        and item.get("status", "active") != "archived"
+    }
     source_metadata = _source_metadata()
     groups: dict[str, list[dict[str, Any]]] = {}
     constraints: list[dict[str, Any]] = []
@@ -669,9 +717,13 @@ def _capability_summary(store: dict[str, Any]) -> dict[str, Any]:
         key = _capability_key(requirement.get("canonicalKey"), requirement.get("category"))
         if key:
             groups.setdefault(key, []).append(requirement)
+    for canonical_key in records_by_key:
+        groups.setdefault(canonical_key, [])
 
     capabilities: list[dict[str, Any]] = []
     for canonical_key, related in groups.items():
+        record = records_by_key.get(canonical_key, {})
+        capability_id = str(record.get("capabilityId") or _canonical_group_id(canonical_key))
         requirement_ids = [str(item.get("requirementId") or "") for item in related]
         related_coverages = [
             coverages_by_requirement[requirement_id]
@@ -679,12 +731,20 @@ def _capability_summary(store: dict[str, Any]) -> dict[str, Any]:
             if requirement_id in coverages_by_requirement
         ]
         source_keys = sorted({str(item.get("sourceKey") or "") for item in related if item.get("sourceKey")})
-        evidence_ids = sorted({
+        evidence_ids = {
             str(evidence_id)
             for coverage in related_coverages
             for evidence_id in (coverage.get("evidenceIds") or [])
             if evidence_id
-        })
+        }
+        evidence_ids.update(
+            str(item.get("evidenceId") or "")
+            for item in store["evidenceItems"]
+            if capability_id in (item.get("capabilityIds") or [])
+            and item.get("evidenceId")
+            and item.get("status") != "archived"
+        )
+        evidence_ids = sorted(evidence_ids)
         evidence_items = [evidence_by_id[evidence_id] for evidence_id in evidence_ids if evidence_id in evidence_by_id]
         active_plans = [
             task for task in store["tasks"]
@@ -700,28 +760,50 @@ def _capability_summary(store: dict[str, Any]) -> dict[str, Any]:
             if item.get("capabilityName")
         )
         label = (
-            sorted(label_counts, key=lambda value: (-label_counts[value], len(value)))[0]
-            if label_counts
-            else canonical_capability_label(canonical_key, str(related[0].get("label") or ""))
+            str(record.get("label") or "").strip()
+            or (
+                sorted(label_counts, key=lambda value: (-label_counts[value], len(value)))[0]
+                if label_counts
+                else canonical_capability_label(canonical_key)
+            )
         )
         category_counts = Counter(str(item.get("category") or "other") for item in related)
-        category = category_counts.most_common(1)[0][0]
-        status = _capability_status(related, related_coverages)
-        actionability = "basic" if _is_basic_condition(related) else "developable"
-        proficiency_applicable = any(bool(item.get("proficiencyApplicable")) for item in related)
+        category = str(record.get("category") or (
+            category_counts.most_common(1)[0][0] if category_counts else "other"
+        ))
+        record_classification = str(record.get("userClassification") or "")
+        status = (
+            "mastered" if record_classification == "done"
+            else "adjacent" if record_classification == "adjacent"
+            else "gap" if record_classification == "not_done"
+            else _capability_status(related, related_coverages)
+        )
+        actionability = (
+            str(record.get("actionability"))
+            if record.get("actionability") in {"basic", "developable"}
+            else "basic" if _is_basic_condition(related) or category == "education" or canonical_key == "experience-years"
+            else "developable"
+        )
+        proficiency_applicable = actionability == "developable" and (
+            bool(record.get("proficiencyApplicable"))
+            or any(bool(item.get("proficiencyApplicable")) for item in related)
+        )
         required_proficiency_counts = Counter(
             normalize_proficiency(item.get("requiredProficiency"))
             for item in related
             if item.get("proficiencyApplicable")
         )
         user_proficiency = highest_proficiency([
-            normalize_proficiency(item.get("userProficiency"))
-            for item in related_coverages
-            if item.get("userDecisionAt") and item.get("userClassification") in {"done", "adjacent"}
-        ])
+            normalize_proficiency(record.get("userProficiency")),
+            *[
+                normalize_proficiency(item.get("userProficiency"))
+                for item in related_coverages
+                if item.get("userDecisionAt") and item.get("userClassification") in {"done", "adjacent"}
+            ],
+        ]) if proficiency_applicable else "unspecified"
         capabilities.append(
             {
-                "capabilityId": _canonical_group_id(canonical_key),
+                "capabilityId": capability_id,
                 "canonicalKey": canonical_key,
                 "label": label,
                 "category": category,
@@ -744,10 +826,13 @@ def _capability_summary(store: dict[str, Any]) -> dict[str, Any]:
                 "preferredCount": preferred_count,
                 "evidenceCount": len(evidence_items),
                 "sourceCount": sum(len(item.get("sourceRefs") or []) for item in evidence_items),
+                "proofStatus": _proof_status(evidence_items),
                 "requirementIds": requirement_ids,
                 "sourceKeys": source_keys,
                 "evidenceIds": evidence_ids,
                 "planIds": [str(item.get("taskId") or "") for item in active_plans],
+                "origin": str(record.get("origin") or ("resume" if not related else "job_requirement")),
+                "userConfirmedAt": str(record.get("userConfirmedAt") or ""),
                 "requirements": [
                     {
                         "requirementId": item.get("requirementId"),
@@ -820,6 +905,425 @@ def read_capability_catalog(limit: int = 80) -> list[dict[str, str]]:
         for item in capabilities[:max(1, min(limit, 120))]
         if item.get("canonicalKey") and item.get("label")
     ]
+
+
+def list_capabilities(
+    status: str = "",
+    category: str = "",
+    source_key: str = "",
+    limit: int = 200,
+) -> dict[str, Any]:
+    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
+        overview = _overview(_read_store_unlocked())
+    capabilities = overview["capabilities"]
+    if status:
+        capabilities = [item for item in capabilities if item.get("status") == status]
+    if category:
+        capabilities = [item for item in capabilities if item.get("category") == category]
+    if source_key:
+        capabilities = [item for item in capabilities if source_key in (item.get("sourceKeys") or [])]
+    bounded_limit = max(1, min(int(limit or 200), 500))
+    return {
+        "ok": True,
+        "capabilities": capabilities[:bounded_limit],
+        "returned": min(len(capabilities), bounded_limit),
+        "total": len(capabilities),
+    }
+
+
+def _resume_source_revision(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def _resume_lines(content: str) -> list[tuple[int, str, str]]:
+    heading = ""
+    result: list[tuple[int, str, str]] = []
+    for line_number, raw in enumerate(content.splitlines(), start=1):
+        stripped = raw.strip()
+        heading_match = re.match(r"^#{1,6}\s+(.+?)\s*$", stripped)
+        if heading_match:
+            heading = re.sub(r"[*_`]", "", heading_match.group(1)).strip()
+            continue
+        cleaned = re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", stripped)
+        cleaned = re.sub(r"[*_`>\[\]]", "", cleaned).strip()
+        if cleaned:
+            result.append((line_number, heading, cleaned))
+    return result
+
+
+def _excluded_resume_context(heading: str, text: str) -> bool:
+    source = f"{heading} {text}".lower()
+    return any(token in source for token in (
+        "意向城市",
+        "期望城市",
+        "工作地点偏好",
+        "工作偏好",
+        "求职意向",
+        "期望薪资",
+        "preferred location",
+        "job preference",
+        "salary expectation",
+    ))
+
+
+def _resume_capability_candidates(content: str, store: dict[str, Any]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    known_profiles = {
+        str(item.get("canonicalKey") or ""): item
+        for item in _capability_summary(store)["capabilities"]
+        if item.get("canonicalKey")
+    }
+
+    def add_candidate(
+        canonical_key: str,
+        label: str,
+        category: str,
+        line_number: int,
+        heading: str,
+        quote: str,
+        proficiency: str = "unspecified",
+        confidence: float = 0.95,
+    ) -> None:
+        key = _capability_key(canonical_key, category)
+        if not key or category in {"location", "preference"}:
+            return
+        capability_id = _canonical_group_id(key)
+        item = grouped.setdefault(
+            key,
+            {
+                "canonicalKey": key,
+                "capabilityId": capability_id,
+                "label": canonical_capability_label(key, label),
+                "category": category,
+                "proficiencyApplicable": False,
+                "userProficiency": "unspecified",
+                "confidence": confidence,
+                "sourceRefs": [],
+            },
+        )
+        item["confidence"] = max(float(item["confidence"]), confidence)
+        item["userProficiency"] = highest_proficiency([
+            str(item.get("userProficiency") or "unspecified"),
+            normalize_proficiency(proficiency),
+        ])
+        if item["userProficiency"] != "unspecified" and category == "skill":
+            item["proficiencyApplicable"] = True
+        ref = {
+            "type": "cv",
+            "ref": f"cv.md#L{line_number}",
+            "quote": quote,
+            "heading": heading,
+        }
+        if not any(existing["ref"] == ref["ref"] and existing["quote"] == quote for existing in item["sourceRefs"]):
+            item["sourceRefs"].append(ref)
+
+    for line_number, heading, text in _resume_lines(content):
+        if _excluded_resume_context(heading, text):
+            continue
+        for definition, span in matching_capability_definitions(text):
+            local_start = max(0, span[0] - 12)
+            local_end = min(len(text), span[1] + 12)
+            proficiency = infer_proficiency(text[local_start:local_end])
+            add_candidate(
+                definition.key,
+                definition.label,
+                "skill",
+                line_number,
+                heading,
+                text,
+                proficiency,
+            )
+
+        lower_text = text.lower()
+        for canonical_key, profile in known_profiles.items():
+            label = str(profile.get("label") or "").strip()
+            if len(label) < 2 or canonical_key in grouped:
+                continue
+            if label.lower() in lower_text:
+                category = str(profile.get("category") or "other")
+                add_candidate(
+                    canonical_key,
+                    label,
+                    category,
+                    line_number,
+                    heading,
+                    text,
+                    infer_proficiency(text),
+                    0.88,
+                )
+
+        if re.search(r"(?:本科|学士|硕士|研究生|博士|大专|专科|bachelor|master|phd)", text, re.IGNORECASE):
+            add_candidate(
+                "education-background",
+                "学历背景",
+                "education",
+                line_number,
+                heading,
+                text,
+                "unspecified",
+                0.9,
+            )
+        if re.search(
+            r"(?:\d+(?:\.\d+)?|[一二两三四五六七八九十]+)\s*年(?:以上)?(?:工作|开发|研发|行业)?经验|"
+            r"(?:工作经验|工作年限|开发经验|研发经验)\s*[:：]?\s*"
+            r"(?:\d+(?:\.\d+)?|[一二两三四五六七八九十]+)\s*年(?:以上)?|"
+            r"\d+(?:\.\d+)?\s*years?\s+of\s+(?:work|development|engineering)?\s*experience",
+            text,
+            re.IGNORECASE,
+        ):
+            add_candidate(
+                "experience-years",
+                "工作年限",
+                "experience",
+                line_number,
+                heading,
+                text,
+                "unspecified",
+                0.9,
+            )
+    return list(grouped.values())
+
+
+def preview_resume_capability_import(content: str) -> dict[str, Any]:
+    source_revision = _resume_source_revision(content)
+    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
+        store = _read_store_unlocked()
+        overview = _overview(store)
+        existing_by_key = {
+            str(item.get("canonicalKey") or ""): item
+            for item in overview["capabilities"]
+            if item.get("canonicalKey")
+        }
+        evidence_by_capability: dict[str, list[dict[str, Any]]] = {}
+        for item in store["evidenceItems"]:
+            if "resume-import" not in (item.get("tags") or []):
+                continue
+            for capability_id in item.get("capabilityIds") or []:
+                evidence_by_capability.setdefault(str(capability_id), []).append(item)
+        proposals = []
+        extracted_ids: set[str] = set()
+        for candidate in _resume_capability_candidates(content, store):
+            capability_id = candidate["capabilityId"]
+            extracted_ids.add(capability_id)
+            existing_capability = existing_by_key.get(candidate["canonicalKey"])
+            if existing_capability:
+                candidate = {
+                    **candidate,
+                    "label": str(existing_capability.get("label") or candidate["label"]),
+                    "category": str(existing_capability.get("category") or candidate["category"]),
+                    "proficiencyApplicable": bool(
+                        candidate["proficiencyApplicable"]
+                        or existing_capability.get("proficiencyApplicable")
+                    ),
+                    "userProficiency": highest_proficiency([
+                        candidate["userProficiency"],
+                        str(existing_capability.get("userProficiency") or "unspecified"),
+                    ]),
+                }
+            imported_items = evidence_by_capability.get(capability_id, [])
+            already_imported = any(
+                item.get("sourceRevision") == source_revision
+                for item in imported_items
+            )
+            action = (
+                "already_imported" if already_imported
+                else "merge" if candidate["canonicalKey"] in existing_by_key
+                else "new"
+            )
+            proposal_id = "rcp-" + hashlib.sha1(
+                f"{source_revision}|{candidate['canonicalKey']}".encode("utf-8")
+            ).hexdigest()[:12]
+            proposals.append({
+                **candidate,
+                "proposalId": proposal_id,
+                "action": action,
+                "selected": action != "already_imported" and float(candidate["confidence"]) >= 0.9,
+                "existingCapability": existing_capability,
+            })
+        stale = [
+            {
+                "capabilityId": item.get("capabilityId"),
+                "canonicalKey": item.get("canonicalKey"),
+                "label": item.get("label"),
+            }
+            for item in store.get("capabilityRecords", [])
+            if item.get("origin") == "resume"
+            and item.get("status", "active") != "archived"
+            and item.get("capabilityId") not in extracted_ids
+        ]
+    return {
+        "ok": True,
+        "sourceRevision": source_revision,
+        "proposals": proposals,
+        "staleImports": stale,
+        "counts": {
+            "total": len(proposals),
+            "new": sum(1 for item in proposals if item["action"] == "new"),
+            "merge": sum(1 for item in proposals if item["action"] == "merge"),
+            "alreadyImported": sum(1 for item in proposals if item["action"] == "already_imported"),
+            "needsReview": sum(1 for item in proposals if not item["selected"] and item["action"] != "already_imported"),
+            "stale": len(stale),
+        },
+    }
+
+
+def apply_resume_capability_import(
+    content: str,
+    selections: list[dict[str, Any]],
+    source_revision: str,
+) -> dict[str, Any]:
+    current_revision = _resume_source_revision(content)
+    if source_revision != current_revision:
+        raise HTTPException(status_code=409, detail="Resume changed after preview; refresh the import preview")
+    preview = preview_resume_capability_import(content)
+    proposals_by_id = {item["proposalId"]: item for item in preview["proposals"]}
+    selected = [item for item in selections if item.get("selected", True)]
+    unknown_ids = [
+        str(item.get("proposalId") or "")
+        for item in selected
+        if str(item.get("proposalId") or "") not in proposals_by_id
+    ]
+    if unknown_ids:
+        raise HTTPException(status_code=409, detail="Resume import proposal is stale or invalid")
+
+    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
+        store = _read_store_unlocked()
+        records_by_id = {
+            str(item.get("capabilityId") or ""): item
+            for item in store["capabilityRecords"]
+            if item.get("capabilityId")
+        }
+        imported: list[dict[str, Any]] = []
+        now = _now()
+        for selection in selected:
+            proposal = proposals_by_id[str(selection.get("proposalId") or "")]
+            if proposal["action"] == "already_imported":
+                continue
+            capability_id = proposal["capabilityId"]
+            proficiency = normalize_proficiency(
+                selection.get("userProficiency") or proposal.get("userProficiency")
+            )
+            label = str(selection.get("label") or proposal["label"]).strip() or proposal["label"]
+            record = records_by_id.get(capability_id)
+            next_record = {
+                "capabilityId": capability_id,
+                "canonicalKey": proposal["canonicalKey"],
+                "label": label,
+                "category": proposal["category"],
+                "actionability": (
+                    "basic"
+                    if proposal["category"] == "education" or proposal["canonicalKey"] == "experience-years"
+                    else "developable"
+                ),
+                "proficiencyApplicable": bool(
+                    proposal["proficiencyApplicable"]
+                    and proposal["category"] != "education"
+                    and proposal["canonicalKey"] != "experience-years"
+                ),
+                "userProficiency": (
+                    proficiency
+                    if proposal["proficiencyApplicable"]
+                    and proposal["category"] != "education"
+                    and proposal["canonicalKey"] != "experience-years"
+                    else "unspecified"
+                ),
+                "userClassification": "done",
+                "origin": "resume",
+                "status": "active",
+                "sourceRevision": current_revision,
+                "userConfirmedAt": now,
+                "updatedAt": now,
+            }
+            if record:
+                next_record["origin"] = str(record.get("origin") or "resume")
+                record.update({
+                    **next_record,
+                    "userProficiency": highest_proficiency([
+                        normalize_proficiency(record.get("userProficiency")),
+                        next_record["userProficiency"],
+                    ]),
+                    "createdAt": record.get("createdAt") or now,
+                })
+            else:
+                record = {**next_record, "createdAt": now}
+                store["capabilityRecords"].append(record)
+                records_by_id[capability_id] = record
+
+            evidence = next(
+                (
+                    item for item in store["evidenceItems"]
+                    if "resume-import" in (item.get("tags") or [])
+                    and capability_id in (item.get("capabilityIds") or [])
+                    and item.get("status") != "archived"
+                ),
+                None,
+            )
+            source_refs = [
+                {key: value for key, value in ref.items() if key in {"type", "ref", "quote"}}
+                for ref in proposal["sourceRefs"]
+            ]
+            if evidence:
+                existing_refs = {
+                    (str(ref.get("type") or ""), str(ref.get("ref") or ""), str(ref.get("quote") or "")): ref
+                    for ref in evidence.get("sourceRefs") or []
+                    if ref.get("type") != "cv"
+                }
+                for ref in source_refs:
+                    existing_refs[(ref["type"], ref["ref"], ref["quote"])] = ref
+                evidence.update({
+                    "title": label,
+                    "summary": f"个人简历声明：{label}",
+                    "sourceRefs": list(existing_refs.values()),
+                    "status": "confirmed",
+                    "sourceRevision": current_revision,
+                    "updatedAt": now,
+                    "confirmedAt": evidence.get("confirmedAt") or now,
+                    "lastValidatedAt": now,
+                })
+            else:
+                evidence = {
+                    "evidenceId": _new_id("ev"),
+                    "title": label,
+                    "evidenceType": "fact",
+                    "summary": f"个人简历声明：{label}",
+                    "userRole": "",
+                    "actions": [],
+                    "results": [],
+                    "sourceRefs": source_refs,
+                    "tags": ["resume-import", f"capability:{proposal['canonicalKey']}"],
+                    "requirementIds": [],
+                    "capabilityIds": [capability_id],
+                    "status": "confirmed",
+                    "sourceRevision": current_revision,
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "confirmedAt": now,
+                    "lastValidatedAt": now,
+                }
+                store["evidenceItems"].append(evidence)
+            imported.append({
+                "proposalId": proposal["proposalId"],
+                "capabilityId": capability_id,
+                "label": label,
+                "action": proposal["action"],
+                "evidenceId": evidence["evidenceId"],
+            })
+        _write_store_unlocked(store)
+        overview = _overview(store)
+    return {
+        "ok": True,
+        "sourceRevision": current_revision,
+        "imported": imported,
+        "staleImports": preview["staleImports"],
+        "overview": overview,
+        "affectedSourceKeys": sorted({
+            source_key
+            for item in imported
+            for capability in overview["capabilities"]
+            if capability["capabilityId"] == item["capabilityId"]
+            for source_key in capability.get("sourceKeys") or []
+        }),
+    }
 
 
 def list_requirements(source_key: str = "") -> dict[str, Any]:
@@ -1404,6 +1908,89 @@ def classify_coverage(payload: dict[str, Any]) -> dict[str, Any]:
             "affectedSourceKeys": affected_source_keys,
             "affectedRequirementIds": sorted(affected_requirement_ids),
         }
+
+
+def classify_capability(payload: dict[str, Any]) -> dict[str, Any]:
+    capability_id = str(payload.get("capabilityId") or "").strip()
+    classification = str(payload.get("classification") or "").strip()
+    if classification not in {"done", "adjacent", "not_done", "unsure"}:
+        raise HTTPException(status_code=422, detail="Unsupported capability classification")
+    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
+        store = _read_store_unlocked()
+        summary = _capability_summary(store)
+        capability = next(
+            (item for item in summary["capabilities"] if item.get("capabilityId") == capability_id),
+            None,
+        )
+        if not capability:
+            raise HTTPException(status_code=404, detail=f"Capability not found: {capability_id}")
+        evidence_ids = list(dict.fromkeys(payload.get("evidenceIds") or []))
+        for evidence_id in evidence_ids:
+            _evidence_item(store, evidence_id)
+        records_by_id = {
+            str(item.get("capabilityId") or ""): item
+            for item in store["capabilityRecords"]
+            if item.get("capabilityId")
+        }
+        now = _now()
+        record = records_by_id.get(capability_id)
+        record_update = {
+            "capabilityId": capability_id,
+            "canonicalKey": capability["canonicalKey"],
+            "label": capability["label"],
+            "category": capability["category"],
+            "actionability": capability["actionability"],
+            "proficiencyApplicable": bool(
+                capability["actionability"] == "developable"
+                and (
+                    capability["proficiencyApplicable"]
+                or (
+                    capability["category"] == "skill"
+                    and normalize_proficiency(payload.get("userProficiency")) != "unspecified"
+                )
+                )
+            ),
+            "userProficiency": (
+                normalize_proficiency(payload.get("userProficiency"))
+                if (
+                    capability["category"] == "skill"
+                    and classification in {"done", "adjacent"}
+                )
+                else "unspecified"
+            ),
+            "userClassification": classification,
+            "origin": str((record or {}).get("origin") or "user"),
+            "status": "active",
+            "userConfirmedAt": now,
+            "updatedAt": now,
+        }
+        if record:
+            record.update(record_update)
+        else:
+            record = {**record_update, "createdAt": now}
+            store["capabilityRecords"].append(record)
+        _write_store_unlocked(store)
+        requirement_ids = list(capability.get("requirementIds") or [])
+
+    affected_source_keys: set[str] = set()
+    affected_requirement_ids: set[str] = set()
+    for requirement_id in requirement_ids:
+        result = classify_coverage({
+            "requirementId": requirement_id,
+            "userClassification": classification,
+            "evidenceIds": evidence_ids,
+            "rationale": payload.get("rationale", ""),
+            "confidence": payload.get("confidence", 1),
+            "userProficiency": payload.get("userProficiency", "unspecified"),
+        })
+        affected_source_keys.update(result.get("affectedSourceKeys") or [])
+        affected_requirement_ids.update(result.get("affectedRequirementIds") or [])
+    return {
+        "ok": True,
+        "overview": read_evidence_overview(),
+        "affectedSourceKeys": sorted(affected_source_keys),
+        "affectedRequirementIds": sorted(affected_requirement_ids),
+    }
 
 
 def _refresh_coverages_for_evidence(store: dict[str, Any], evidence_id: str) -> None:

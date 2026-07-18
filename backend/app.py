@@ -13,7 +13,11 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from backend.schemas.automation import AutomationScheduleInput, AutomationScheduleUpdate
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
-from backend.schemas.cv import CvSaveRequest
+from backend.schemas.cv import (
+    CapabilityDecisionRequest,
+    CvSaveRequest,
+    ResumeCapabilityImportRequest,
+)
 from backend.schemas.evidence import (
     EvidenceCoverageClassifyRequest,
     EvidenceItemConfirmRequest,
@@ -38,12 +42,16 @@ from backend.services.automation_service import AutomationService
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.cv_service import create_cv_from_template, cv_status, read_cv_document, save_cv_document
 from backend.services.evidence_service import (
+    apply_resume_capability_import,
+    classify_capability,
     classify_coverage,
     confirm_evidence_item,
     create_evidence_item,
     create_evidence_task,
+    list_capabilities,
     list_evidence_tasks,
     list_requirements,
+    preview_resume_capability_import,
     read_evidence_overview,
     update_evidence_item,
     update_evidence_task,
@@ -113,6 +121,7 @@ if not _desktop_mode:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+        allow_origin_regex=r"^http://(?:127\.0\.0\.1|localhost):\d+$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -250,6 +259,24 @@ def get_cv_document(project: Optional[str] = None):
 def update_cv_document(payload: CvSaveRequest):
     with project_workspace(_workspace_project(payload.project)):
         return save_cv_document(payload.content)
+
+
+@app.get("/api/cv/capability-import-preview")
+def get_cv_capability_import_preview(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        document = read_cv_document()
+        return preview_resume_capability_import(document.get("content", ""))
+
+
+@app.post("/api/cv/capability-import")
+def import_cv_capabilities(payload: ResumeCapabilityImportRequest):
+    with project_workspace(_workspace_project(payload.project)):
+        document = read_cv_document()
+        return apply_resume_capability_import(
+            document.get("content", ""),
+            [item.model_dump() for item in payload.selections],
+            payload.sourceRevision,
+        )
 
 
 @app.post("/api/cv/from-template")
@@ -396,6 +423,18 @@ def get_evidence_overview(project: Optional[str] = None):
         return read_evidence_overview()
 
 
+@app.get("/api/evidence/capabilities")
+def get_capabilities(
+    status: str = "",
+    category: str = "",
+    sourceKey: str = "",
+    limit: int = Query(default=200, ge=1, le=500),
+    project: Optional[str] = None,
+):
+    with project_workspace(_workspace_project(project, sourceKey)):
+        return list_capabilities(status, category, sourceKey, limit)
+
+
 @app.get("/api/evidence/requirements")
 def get_evidence_requirements(sourceKey: str = "", project: Optional[str] = None):
     with project_workspace(_workspace_project(project, sourceKey)):
@@ -419,6 +458,12 @@ def get_evidence_tasks(status: str = "", sourceKey: str = "", project: Optional[
 def classify_evidence_coverage(payload: EvidenceCoverageClassifyRequest):
     with project_workspace(_workspace_project(payload.project)):
         return classify_coverage(payload.model_dump())
+
+
+@app.post("/api/evidence/capabilities/classify")
+def classify_capability_profile(payload: CapabilityDecisionRequest):
+    with project_workspace(_workspace_project(payload.project)):
+        return classify_capability(payload.model_dump())
 
 
 @app.post("/api/evidence/items")

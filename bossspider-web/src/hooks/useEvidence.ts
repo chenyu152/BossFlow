@@ -74,6 +74,30 @@ export function useEvidence(getProject: () => string) {
     }
   }, [applyMutation, getProject]);
 
+  const classifyCapability = useCallback(async (
+    capabilityId: string,
+    classification: EvidenceClassification,
+    evidenceIds: string[] = [],
+    rationale = '',
+    confidence = 1,
+    userProficiency: ProficiencyLevel = 'unspecified',
+  ) => {
+    try {
+      return applyMutation(await bossApi.classifyCapability(
+        getProject(),
+        capabilityId,
+        classification,
+        evidenceIds,
+        rationale,
+        confidence,
+        userProficiency,
+      ));
+    } catch (error) {
+      setEvidenceError((error as Error).message);
+      return null;
+    }
+  }, [applyMutation, getProject]);
+
   const createEvidenceItem = useCallback(async (item: EvidenceItemInput) => {
     try {
       return applyMutation(await bossApi.createEvidenceItem(getProject(), item));
@@ -145,6 +169,7 @@ export function useEvidence(getProject: () => string) {
     refreshEvidenceOverview,
     upsertEvidenceRequirements,
     classifyEvidenceCoverage,
+    classifyCapability,
     createEvidenceItem,
     updateEvidenceItem,
     confirmEvidenceItem,

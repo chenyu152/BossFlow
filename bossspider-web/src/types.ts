@@ -637,6 +637,8 @@ export type EvidenceItem = {
   sourceRefs: EvidenceSourceRef[];
   tags: string[];
   requirementIds?: string[];
+  capabilityIds?: string[];
+  sourceRevision?: string;
   status: EvidenceItemStatus;
   createdAt: string;
   updatedAt: string;
@@ -693,6 +695,7 @@ export type EvidenceTask = {
 
 export type CapabilityStatus = 'mastered' | 'adjacent' | 'pending' | 'gap';
 export type CapabilityImpactTier = 'core' | 'high_value' | 'common' | 'specialized';
+export type CapabilityProofStatus = 'none' | 'self_reported' | 'resume_recorded' | 'source_backed' | 'external_verified';
 
 export type CapabilityProfile = {
   capabilityId: string;
@@ -711,6 +714,7 @@ export type CapabilityProfile = {
   preferredCount: number;
   evidenceCount: number;
   sourceCount: number;
+  proofStatus: CapabilityProofStatus;
   requirementIds: string[];
   sourceKeys: string[];
   evidenceIds: string[];
@@ -733,6 +737,8 @@ export type CapabilityProfile = {
     importance: EvidenceRequirementImportance;
     jdQuote: string;
   }>;
+  origin?: 'resume' | 'job_requirement' | 'user' | string;
+  userConfirmedAt?: string;
 };
 
 export type EvidenceOverviewResponse = {
@@ -864,4 +870,58 @@ export type CvStatusResponse = {
 
 export type CvDocumentResponse = CvStatusResponse & {
   content: string;
+};
+
+export type ResumeCapabilityImportAction = 'new' | 'merge' | 'already_imported';
+
+export type ResumeCapabilityImportProposal = {
+  proposalId: string;
+  canonicalKey: string;
+  capabilityId: string;
+  label: string;
+  category: EvidenceRequirementCategory;
+  proficiencyApplicable: boolean;
+  userProficiency: ProficiencyLevel;
+  confidence: number;
+  sourceRefs: Array<EvidenceSourceRef & { heading?: string }>;
+  action: ResumeCapabilityImportAction;
+  selected: boolean;
+  existingCapability?: CapabilityProfile | null;
+};
+
+export type ResumeCapabilityImportPreview = {
+  ok: boolean;
+  sourceRevision: string;
+  proposals: ResumeCapabilityImportProposal[];
+  staleImports: Array<Pick<CapabilityProfile, 'capabilityId' | 'canonicalKey' | 'label'>>;
+  counts: {
+    total: number;
+    new: number;
+    merge: number;
+    alreadyImported: number;
+    needsReview: number;
+    stale: number;
+  };
+};
+
+export type ResumeCapabilityImportSelection = {
+  proposalId: string;
+  selected: boolean;
+  label: string;
+  userProficiency: ProficiencyLevel;
+};
+
+export type ResumeCapabilityImportResult = {
+  ok: boolean;
+  sourceRevision: string;
+  imported: Array<{
+    proposalId: string;
+    capabilityId: string;
+    label: string;
+    action: ResumeCapabilityImportAction;
+    evidenceId: string;
+  }>;
+  staleImports: ResumeCapabilityImportPreview['staleImports'];
+  overview: EvidenceOverviewResponse;
+  affectedSourceKeys: string[];
 };

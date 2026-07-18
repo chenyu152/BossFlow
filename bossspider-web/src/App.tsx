@@ -637,7 +637,7 @@ export default function App() {
                   onCreateEvidenceItem={boss.createEvidenceItem}
                   onUpdateEvidenceItem={boss.updateEvidenceItem}
                   onConfirmEvidenceItem={boss.confirmEvidenceItem}
-                  onClassifyEvidenceCoverage={boss.classifyEvidenceCoverage}
+                  onClassifyCapability={boss.classifyCapability}
                   onCreateEvidenceTask={boss.createEvidenceTask}
                   onUpdateEvidenceTask={boss.updateEvidenceTask}
                   targetTaskId={selectedEvidenceTaskId}
@@ -670,6 +670,7 @@ export default function App() {
                   onLoadDraft={boss.loadResumeDraft}
                   onSaveDraft={boss.saveResumeDraft}
                   onDirtyChange={setPersonalResumeDirty}
+                  onOpenCapabilityProfile={() => navigateToTab('Evidence')}
                   autoStartGuide={resumeGuideAutoStartPending}
                   onAutoStartGuideHandled={() => setResumeGuideAutoStartPending(false)}
                 />

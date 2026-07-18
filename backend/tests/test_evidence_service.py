@@ -28,9 +28,209 @@ class EvidenceServiceTest(unittest.TestCase):
     def test_creates_versioned_empty_store(self):
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 6)
+        self.assertEqual(overview["schemaVersion"], 7)
         self.assertEqual(overview["counts"]["requirements"], 0)
         self.assertTrue(Path(overview["path"]).exists())
+
+    def test_resume_capability_import_creates_standalone_confirmed_capabilities(self):
+        content = """# 个人简历
+
+## 技术栈
+- 熟练使用 Python、LangGraph 和 RAG 开发智能体应用
+- 熟悉 Linux
+
+## 教育经历
+- 本科，计算机科学与技术
+"""
+        preview = evidence_service.preview_resume_capability_import(content)
+        proposals = {item["canonicalKey"]: item for item in preview["proposals"]}
+
+        self.assertIn("python-programming", proposals)
+        self.assertIn("langgraph-framework", proposals)
+        self.assertIn("rag-systems", proposals)
+        self.assertIn("linux-development", proposals)
+        self.assertIn("education-background", proposals)
+        self.assertTrue(proposals["python-programming"]["selected"])
+
+        result = evidence_service.apply_resume_capability_import(
+            content,
+            [
+                {
+                    "proposalId": item["proposalId"],
+                    "selected": True,
+                    "label": "Python 自动化" if item["canonicalKey"] == "python-programming" else item["label"],
+                    "userProficiency": item["userProficiency"],
+                }
+                for item in preview["proposals"]
+            ],
+            preview["sourceRevision"],
+        )
+        capabilities = {
+            item["canonicalKey"]: item
+            for item in result["overview"]["capabilities"]
+        }
+        self.assertEqual(capabilities["python-programming"]["status"], "mastered")
+        self.assertEqual(capabilities["python-programming"]["jobCount"], 0)
+        self.assertEqual(capabilities["python-programming"]["origin"], "resume")
+        self.assertEqual(capabilities["python-programming"]["evidenceCount"], 1)
+        self.assertEqual(capabilities["python-programming"]["userProficiency"], "proficient")
+        self.assertEqual(capabilities["python-programming"]["label"], "Python 自动化")
+        self.assertFalse(capabilities["education-background"]["proficiencyApplicable"])
+        self.assertEqual(capabilities["education-background"]["userProficiency"], "unspecified")
+        self.assertEqual(capabilities["education-background"]["proofStatus"], "resume_recorded")
+        self.assertEqual(capabilities["python-programming"]["proofStatus"], "resume_recorded")
+        self.assertTrue(all(
+            item["status"] == "confirmed"
+            for item in result["overview"]["evidenceItems"]
+        ))
+
+        repeated = evidence_service.preview_resume_capability_import(content)
+        self.assertTrue(all(
+            item["action"] == "already_imported"
+            for item in repeated["proposals"]
+        ))
+
+        changed_resume = evidence_service.preview_resume_capability_import(content + "\n## 其他\n- 可立即到岗\n")
+        changed_python = next(
+            item for item in changed_resume["proposals"]
+            if item["canonicalKey"] == "python-programming"
+        )
+        self.assertEqual(changed_python["action"], "merge")
+        self.assertEqual(changed_python["label"], "Python 自动化")
+        self.assertEqual(changed_python["userProficiency"], "proficient")
+
+    def test_resume_import_merges_existing_requirement_capability(self):
+        existing = evidence_service.upsert_requirements([{
+            "requirementId": "req-python-resume",
+            "canonicalKey": "python-programming",
+            "label": "掌握 Python",
+            "category": "skill",
+            "importance": "required",
+            "sourceKey": "agent:501",
+            "jdQuote": "熟练使用 Python",
+            "requiredProficiency": "proficient",
+        }])
+        capability_id = next(
+            item["capabilityId"]
+            for item in existing["capabilities"]
+            if item["canonicalKey"] == "python-programming"
+        )
+        evidence_service.classify_capability({
+            "capabilityId": capability_id,
+            "classification": "done",
+            "userProficiency": "working",
+        })
+        content = "## 技能\n- 熟练使用 Python\n"
+        preview = evidence_service.preview_resume_capability_import(content)
+        python = next(
+            item for item in preview["proposals"]
+            if item["canonicalKey"] == "python-programming"
+        )
+        self.assertEqual(python["action"], "merge")
+
+        result = evidence_service.apply_resume_capability_import(
+            content,
+            [{"proposalId": python["proposalId"], "selected": True, "userProficiency": "proficient"}],
+            preview["sourceRevision"],
+        )
+        capabilities = [
+            item for item in result["overview"]["capabilities"]
+            if item["canonicalKey"] == "python-programming"
+        ]
+        self.assertEqual(len(capabilities), 1)
+        self.assertEqual(capabilities[0]["jobCount"], 1)
+        self.assertEqual(capabilities[0]["evidenceCount"], 1)
+        self.assertEqual(capabilities[0]["origin"], "user")
+
+    def test_resume_preview_includes_work_years_but_excludes_preferences(self):
+        content = """# 个人简历
+
+## 个人信息
+- 意向城市：深圳
+- 期望薪资：30-50K
+- 工作经验：三年
+
+## 求职意向
+- 希望远程办公
+
+## 技术栈
+- 熟练使用 Python
+"""
+        preview = evidence_service.preview_resume_capability_import(content)
+        proposals = {
+            item["canonicalKey"]: item
+            for item in preview["proposals"]
+        }
+
+        self.assertIn("experience-years", proposals)
+        self.assertIn("python-programming", proposals)
+        self.assertFalse(any(
+            item["category"] in {"location", "preference"}
+            or any(token in item["label"] for token in ("深圳", "薪资", "远程"))
+            for item in preview["proposals"]
+        ))
+
+    def test_resume_import_rejects_a_stale_preview_revision(self):
+        content = "## 技能\n- Python\n"
+        preview = evidence_service.preview_resume_capability_import(content)
+
+        with self.assertRaises(HTTPException) as raised:
+            evidence_service.apply_resume_capability_import(
+                content + "- Linux\n",
+                [{
+                    "proposalId": preview["proposals"][0]["proposalId"],
+                    "selected": True,
+                }],
+                preview["sourceRevision"],
+            )
+
+        self.assertEqual(raised.exception.status_code, 409)
+
+    def test_classify_standalone_capability(self):
+        content = "## Skills\n- Python\n"
+        preview = evidence_service.preview_resume_capability_import(content)
+        proposal = next(item for item in preview["proposals"] if item["canonicalKey"] == "python-programming")
+        imported = evidence_service.apply_resume_capability_import(
+            content,
+            [{"proposalId": proposal["proposalId"], "selected": True}],
+            preview["sourceRevision"],
+        )
+        capability = next(
+            item for item in imported["overview"]["capabilities"]
+            if item["canonicalKey"] == "python-programming"
+        )
+        result = evidence_service.classify_capability({
+            "capabilityId": capability["capabilityId"],
+            "classification": "adjacent",
+            "evidenceIds": [],
+            "rationale": "仅有基础使用经验",
+            "confidence": 1,
+            "userProficiency": "familiar",
+        })
+        updated = next(
+            item for item in result["overview"]["capabilities"]
+            if item["capabilityId"] == capability["capabilityId"]
+        )
+        self.assertEqual(updated["status"], "adjacent")
+        self.assertEqual(updated["userProficiency"], "familiar")
+
+        added_evidence = evidence_service.create_evidence_item({
+            "title": "Python 项目依据",
+            "evidenceType": "project",
+            "summary": "独立完成 Python 自动化项目。",
+            "userRole": "开发者",
+            "actions": ["实现核心流程"],
+            "results": ["项目可运行"],
+            "sourceRefs": [{"type": "project", "ref": "demo", "quote": "Python"}],
+            "tags": ["python"],
+            "capabilityIds": [capability["capabilityId"]],
+        })
+        confirmed = evidence_service.confirm_evidence_item(added_evidence["item"]["evidenceId"])
+        with_direct_evidence = next(
+            item for item in confirmed["overview"]["capabilities"]
+            if item["capabilityId"] == capability["capabilityId"]
+        )
+        self.assertEqual(with_direct_evidence["evidenceCount"], 2)
 
     def test_requirement_evidence_coverage_and_task_flow(self):
         overview = evidence_service.upsert_requirements([
@@ -754,7 +954,7 @@ class EvidenceServiceTest(unittest.TestCase):
 
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 6)
+        self.assertEqual(overview["schemaVersion"], 7)
         self.assertEqual(overview["requirements"][0]["requirementId"], "req-existing")
         self.assertEqual(overview["evidenceItems"], [])
         self.assertEqual(overview["coverages"], [])
@@ -783,7 +983,7 @@ class EvidenceServiceTest(unittest.TestCase):
 
         overview = evidence_service.read_evidence_overview()
 
-        self.assertEqual(overview["schemaVersion"], 6)
+        self.assertEqual(overview["schemaVersion"], 7)
         self.assertEqual(overview["requirements"][0]["canonicalKey"], "python-fastapi")
         self.assertTrue(overview["requirements"][0]["canonicalGroupId"].startswith("cgrp-"))
         self.assertEqual(overview["coverages"][0]["decisionSource"], "direct")

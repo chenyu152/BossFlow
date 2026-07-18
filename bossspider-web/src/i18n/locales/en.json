@@ -228,6 +228,51 @@
     "importFailed": "Read imported file failed: {{error}}",
     "unsavedSwitchConfirm": "This resume has unsaved changes. Switching will discard them. Continue?",
     "help": "Help tour",
+    "capabilitySync": {
+      "button": "Sync to Capability Profile",
+      "title": "Sync resume capabilities",
+      "subtitle": "BossFlow split and normalized the capabilities in your resume. Only selected items will be imported; existing capabilities are never deleted.",
+      "saveFirst": "Save the base resume before syncing capabilities.",
+      "previewFailed": "Resume capability analysis failed: {{error}}",
+      "applyFailed": "Capability sync failed: {{error}}",
+      "applied": "Synced {{count}} resume capabilities to the capability profile.",
+      "viewProfile": "View capability profile",
+      "close": "Close",
+      "normalizedCapability": "Normalized capability",
+      "proficiency": "My proficiency",
+      "empty": "No importable capabilities were detected. Add explicit technologies to skills, projects, or work experience.",
+      "stale": "{{count}} previously imported capabilities were not detected this time. They are kept to avoid accidental deletion.",
+      "confirmHint": "Imported items are marked as personal resume claims. You can strengthen them later with project or artifact evidence.",
+      "cancel": "Cancel",
+      "apply": "Import {{count}}",
+      "counts": {
+        "total": "Detected",
+        "new": "New",
+        "merge": "Merge",
+        "alreadyImported": "Synced",
+        "needsReview": "Review"
+      },
+      "actions": {
+        "new": "New capability",
+        "merge": "Merge existing",
+        "already_imported": "Already synced"
+      },
+      "categories": {
+        "skill": "Skill",
+        "experience": "Experience",
+        "behavior": "Behavior",
+        "education": "Education",
+        "other": "Other"
+      },
+      "levels": {
+        "unspecified": "Do not show proficiency",
+        "awareness": "Awareness",
+        "familiar": "Familiar",
+        "working": "Working",
+        "proficient": "Proficient",
+        "expert": "Expert"
+      }
+    },
     "tour": {
       "importTitle": "Import an existing base resume",
       "importBody": "Choose a resume file here. Markdown and text load directly; PDFs are parsed automatically. In either case, review it in the editor before saving.",

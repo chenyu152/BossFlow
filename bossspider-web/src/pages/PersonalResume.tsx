@@ -8,13 +8,22 @@ import {
   Loader2,
   RefreshCw,
   Save,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { MarkdownEditor } from '../components/MarkdownEditor';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { useAppTranslation } from '../i18n';
-import type { CvDocumentResponse, ResumeDraftResponse, ResumeItem } from '../types';
+import type {
+  CvDocumentResponse,
+  ProficiencyLevel,
+  ResumeCapabilityImportPreview,
+  ResumeCapabilityImportSelection,
+  ResumeDraftResponse,
+  ResumeItem,
+} from '../types';
 
 const checkKeys = [
   'hasContent',
@@ -34,6 +43,7 @@ export function PersonalResume({
   onLoadDraft,
   onSaveDraft,
   onDirtyChange,
+  onOpenCapabilityProfile,
   autoStartGuide = false,
   onAutoStartGuideHandled,
 }: {
@@ -43,6 +53,7 @@ export function PersonalResume({
   onLoadDraft: (sourceKey: string) => Promise<ResumeDraftResponse | null>;
   onSaveDraft: (sourceKey: string, content: string) => Promise<ResumeDraftResponse | null>;
   onDirtyChange: (dirty: boolean) => void;
+  onOpenCapabilityProfile?: () => void;
   autoStartGuide?: boolean;
   onAutoStartGuideHandled?: () => void;
 }) {
@@ -59,6 +70,12 @@ export function PersonalResume({
   const [message, setMessage] = useState('');
   const [guideStep, setGuideStep] = useState<number | null>(null);
   const [parseStatus, setParseStatus] = useState<'idle' | 'processing' | 'done' | 'failed'>('idle');
+  const [capabilityPreview, setCapabilityPreview] = useState<ResumeCapabilityImportPreview | null>(null);
+  const [capabilitySelections, setCapabilitySelections] = useState<Record<string, ResumeCapabilityImportSelection>>({});
+  const [capabilityPreviewLoading, setCapabilityPreviewLoading] = useState(false);
+  const [capabilityApplying, setCapabilityApplying] = useState(false);
+  const [capabilitySyncError, setCapabilitySyncError] = useState('');
+  const [showCapabilityProfileLink, setShowCapabilityProfileLink] = useState(false);
   const parsePollRef = useRef<ReturnType<typeof setInterval>>();
 
   const tailoredItems = useMemo(
@@ -69,6 +86,7 @@ export function PersonalResume({
   const completedChecks = cvDocument
     ? checkKeys.filter((key) => cvDocument.checks[key]).length
     : 0;
+  const selectedCapabilityCount = Object.values(capabilitySelections).filter((item) => item.selected).length;
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -225,6 +243,65 @@ export function PersonalResume({
       setError(t('personalResume.saveFailed', { error: (saveError as Error).message }));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openCapabilitySync = async () => {
+    if (dirty) {
+      setError(t('personalResume.capabilitySync.saveFirst'));
+      return;
+    }
+    setCapabilityPreviewLoading(true);
+    setError('');
+    setCapabilitySyncError('');
+    setShowCapabilityProfileLink(false);
+    try {
+      const preview = await bossApi.previewCvCapabilityImport(project);
+      setCapabilityPreview(preview);
+      setCapabilitySelections(Object.fromEntries(preview.proposals.map((proposal) => [
+        proposal.proposalId,
+        {
+          proposalId: proposal.proposalId,
+          selected: proposal.selected,
+          label: proposal.label,
+          userProficiency: proposal.userProficiency,
+        },
+      ])));
+    } catch (syncError) {
+      setError(t('personalResume.capabilitySync.previewFailed', { error: (syncError as Error).message }));
+    } finally {
+      setCapabilityPreviewLoading(false);
+    }
+  };
+
+  const updateCapabilitySelection = (
+    proposalId: string,
+    patch: Partial<ResumeCapabilityImportSelection>,
+  ) => {
+    setCapabilitySelections((current) => ({
+      ...current,
+      [proposalId]: { ...current[proposalId], ...patch },
+    }));
+  };
+
+  const applyCapabilitySync = async () => {
+    if (!capabilityPreview || selectedCapabilityCount === 0) return;
+    setCapabilityApplying(true);
+    setError('');
+    try {
+      const result = await bossApi.applyCvCapabilityImport(
+        project,
+        capabilityPreview.sourceRevision,
+        Object.values(capabilitySelections),
+      );
+      setCapabilityPreview(null);
+      setCapabilitySelections({});
+      setMessage(t('personalResume.capabilitySync.applied', { count: result.imported.length }));
+      setShowCapabilityProfileLink(true);
+    } catch (syncError) {
+      setCapabilitySyncError(t('personalResume.capabilitySync.applyFailed', { error: (syncError as Error).message }));
+    } finally {
+      setCapabilityApplying(false);
     }
   };
 
@@ -426,6 +503,17 @@ export function PersonalResume({
 
             {target.kind === 'base' && (
               <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => void openCapabilitySync()}
+                  disabled={loading || saving || capabilityPreviewLoading || !cvDocument?.exists}
+                  className="inline-flex items-center gap-2 rounded border border-indigo-400/40 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-indigo-200"
+                  title={dirty ? t('personalResume.capabilitySync.saveFirst') : undefined}
+                >
+                  {capabilityPreviewLoading
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : <Sparkles size={13} />}
+                  {t('personalResume.capabilitySync.button')}
+                </button>
                 <input
                   ref={importInputRef}
                   type="file"
@@ -468,9 +556,18 @@ export function PersonalResume({
               error
                 ? 'border-red-900/60 bg-red-950/20 text-red-300'
                 : 'border-emerald-900/60 bg-emerald-950/20 text-emerald-300'
-            }`}>
+              }`}>
               {error ? <AlertTriangle size={14} /> : <Check size={14} />}
-              {error || message}
+              <span className="min-w-0 flex-1">{error || message}</span>
+              {!error && showCapabilityProfileLink && onOpenCapabilityProfile && (
+                <button
+                  type="button"
+                  onClick={onOpenCapabilityProfile}
+                  className="shrink-0 rounded border border-emerald-700/60 px-2.5 py-1 font-medium text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-200"
+                >
+                  {t('personalResume.capabilitySync.viewProfile')}
+                </button>
+              )}
             </div>
           )}
 
@@ -506,6 +603,184 @@ export function PersonalResume({
           skipLabel={t('personalResume.tour.skip')}
           progressLabel={(current, total) => t('personalResume.tour.progress', { current, total })}
         />
+      )}
+      {capabilityPreview && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-950/55 p-6 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="capability-sync-title"
+        >
+          <div className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-950">
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5 dark:border-zinc-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-indigo-500" />
+                  <h2 id="capability-sync-title" className="text-lg font-semibold text-zinc-950 dark:text-zinc-100">
+                    {t('personalResume.capabilitySync.title')}
+                  </h2>
+                </div>
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  {t('personalResume.capabilitySync.subtitle')}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setCapabilityPreview(null);
+                  setCapabilitySyncError('');
+                }}
+                disabled={capabilityApplying}
+                className="rounded-md border border-zinc-200 p-2 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                aria-label={t('personalResume.capabilitySync.close')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-zinc-200 bg-zinc-50 px-6 py-3 sm:grid-cols-5 dark:border-zinc-800 dark:bg-zinc-900/40">
+              {([
+                ['total', capabilityPreview.counts.total],
+                ['new', capabilityPreview.counts.new],
+                ['merge', capabilityPreview.counts.merge],
+                ['alreadyImported', capabilityPreview.counts.alreadyImported],
+                ['needsReview', capabilityPreview.counts.needsReview],
+              ] as const).map(([key, value]) => (
+                <div key={key} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+                  <div className="text-[11px] text-zinc-500">{t(`personalResume.capabilitySync.counts.${key}`)}</div>
+                  <div className="mt-0.5 text-lg font-semibold text-zinc-950 dark:text-zinc-100">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+              {capabilityPreview.proposals.length ? (
+                <div className="space-y-3">
+                  {capabilityPreview.proposals.map((proposal) => {
+                    const selection = capabilitySelections[proposal.proposalId];
+                    const disabled = proposal.action === 'already_imported';
+                    return (
+                      <div
+                        key={proposal.proposalId}
+                        className={`rounded-lg border p-4 transition-colors ${
+                          selection?.selected
+                            ? 'border-indigo-300 bg-indigo-50/70 dark:border-indigo-700 dark:bg-indigo-950/20'
+                            : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(selection?.selected)}
+                            disabled={disabled}
+                            onChange={(event) => updateCapabilitySelection(proposal.proposalId, { selected: event.target.checked })}
+                            className="mt-1 h-4 w-4 rounded border-zinc-300 accent-indigo-600"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                proposal.action === 'new'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
+                                  : proposal.action === 'merge'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                              }`}>
+                                {t(`personalResume.capabilitySync.actions.${proposal.action}`)}
+                              </span>
+                              <span className="text-[11px] text-zinc-500">
+                                {t(`personalResume.capabilitySync.categories.${proposal.category}`, { defaultValue: proposal.category })}
+                              </span>
+                              <span className="text-[11px] text-zinc-400">
+                                {Math.round(proposal.confidence * 100)}%
+                              </span>
+                            </div>
+                            <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_190px]">
+                              <label className="block">
+                                <span className="mb-1 block text-[11px] text-zinc-500">
+                                  {t('personalResume.capabilitySync.normalizedCapability')}
+                                </span>
+                                <input
+                                  value={selection?.label || ''}
+                                  disabled={disabled}
+                                  onChange={(event) => updateCapabilitySelection(proposal.proposalId, { label: event.target.value })}
+                                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="mb-1 block text-[11px] text-zinc-500">
+                                  {t('personalResume.capabilitySync.proficiency')}
+                                </span>
+                                <select
+                                  value={selection?.userProficiency || 'unspecified'}
+                                  disabled={disabled || !proposal.proficiencyApplicable}
+                                  onChange={(event) => updateCapabilitySelection(proposal.proposalId, {
+                                    userProficiency: event.target.value as ProficiencyLevel,
+                                  })}
+                                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-indigo-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                                >
+                                  {(['unspecified', 'awareness', 'familiar', 'working', 'proficient', 'expert'] as const).map((level) => (
+                                    <option key={level} value={level}>
+                                      {t(`personalResume.capabilitySync.levels.${level}`)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <div className="mt-3 rounded-md bg-zinc-100 px-3 py-2 text-xs leading-relaxed text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+                              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                                {proposal.sourceRefs[0]?.heading || 'cv.md'}
+                              </span>
+                              <span className="mx-2 text-zinc-400">·</span>
+                              {proposal.sourceRefs[0]?.quote}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-12 text-center text-sm text-zinc-500 dark:border-zinc-700">
+                  {t('personalResume.capabilitySync.empty')}
+                </div>
+              )}
+              {capabilityPreview.staleImports.length > 0 && (
+                <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  {t('personalResume.capabilitySync.stale', { count: capabilityPreview.staleImports.length })}
+                </div>
+              )}
+              {capabilitySyncError && (
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span>{capabilitySyncError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-4 border-t border-zinc-200 bg-zinc-50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+              <p className="text-xs text-zinc-500">{t('personalResume.capabilitySync.confirmHint')}</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setCapabilityPreview(null);
+                    setCapabilitySyncError('');
+                  }}
+                  disabled={capabilityApplying}
+                  className="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  {t('personalResume.capabilitySync.cancel')}
+                </button>
+                <button
+                  onClick={() => void applyCapabilitySync()}
+                  disabled={capabilityApplying || selectedCapabilityCount === 0}
+                  className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {capabilityApplying && <Loader2 size={14} className="animate-spin" />}
+                  {t('personalResume.capabilitySync.apply', { count: selectedCapabilityCount })}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
