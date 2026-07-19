@@ -434,7 +434,10 @@
 .automation-login-state strong { display: block; color: var(--text-primary); font-size: .68rem; }
 .automation-login-state p { margin-top: .2rem; color: var(--text-secondary); font-size: .62rem; line-height: 1.5; }
 .automation-login-state small { display: block; margin-top: .22rem; color: var(--text-muted); font-size: .58rem; }
-.automation-login-state > button { border: 1px solid var(--border-strong); border-radius: .4rem; padding: .35rem .55rem; color: var(--text-secondary); background: var(--surface-raised); font-size: .6rem; }
+.automation-login-state__actions { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
+.automation-login-state__actions button { display: inline-flex; align-items: center; gap: .28rem; border: 1px solid var(--border-strong); border-radius: .4rem; padding: .35rem .55rem; color: var(--text-secondary); background: var(--surface-raised); font-size: .6rem; white-space: nowrap; }
+.automation-login-state__actions button:first-child { border-color: color-mix(in srgb, var(--action-primary) 45%, var(--border-strong)); color: var(--action-primary); }
+.automation-login-state__actions button:disabled { cursor: not-allowed; opacity: .55; }
 .automation-login-state.is-missing, .automation-login-state.is-expired, .automation-login-state.is-refresh_recommended { border-color: color-mix(in srgb, var(--status-pending) 32%, var(--border-subtle)); background: var(--status-pending-surface); }
 .automation-login-state.is-missing > span, .automation-login-state.is-expired > span, .automation-login-state.is-refresh_recommended > span { color: var(--status-pending); background: color-mix(in srgb, var(--status-pending) 12%, transparent); }
 .automation-editor { display: grid; gap: .75rem; border: 1px solid var(--border-subtle); border-radius: .62rem; background: var(--surface-subtle); padding: .85rem; }
@@ -547,7 +550,7 @@
 .mcp-security-note { color: var(--text-muted); font-size: .58rem; line-height: .9rem; }
 @media (max-width: 820px) { .automation-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .mcp-server-card, .mcp-connect-heading { align-items: flex-start; flex-direction: column; } .mcp-server-meta { width: 100%; flex-wrap: wrap; } .mcp-client-guide { grid-template-columns: 1fr; } }
-@media (max-width: 560px) { .automation-queue-summary { grid-template-columns: 1fr auto; } .automation-queue-summary small { grid-column: 1 / -1; justify-self: start; } .automation-login-state { grid-template-columns: auto minmax(0, 1fr); } .automation-login-state > button { grid-column: 2; justify-self: start; } .automation-form-grid { grid-template-columns: 1fr; } .automation-history > div { grid-template-columns: 4.6rem minmax(0, 1fr); } .automation-history > div > small { grid-column: 2; } }
+@media (max-width: 560px) { .automation-queue-summary { grid-template-columns: 1fr auto; } .automation-queue-summary small { grid-column: 1 / -1; justify-self: start; } .automation-login-state { grid-template-columns: auto minmax(0, 1fr); } .automation-login-state__actions { grid-column: 2; justify-self: start; flex-wrap: wrap; justify-content: flex-start; } .automation-form-grid { grid-template-columns: 1fr; } .automation-history > div { grid-template-columns: 4.6rem minmax(0, 1fr); } .automation-history > div > small { grid-column: 2; } }
 
 .theme-picker { position: relative; }
 .theme-picker__trigger { display: flex; width: 100%; align-items: center; gap: .65rem; border: 1px solid var(--border-subtle); border-radius: .5rem; padding: .55rem .6rem; color: var(--text-secondary); font-size: .75rem; font-weight: 600; }

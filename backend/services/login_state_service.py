@@ -98,8 +98,23 @@ def login_state(project: str) -> dict[str, Any]:
     days_since = int((now - last_saved_at).total_seconds() // 86400) if last_saved_at else None
     expiries = [row["expiresAt"] for row in valid_auth_rows if row["expiresAt"]]
     earliest_expiry = min(expiries) if expiries else None
+    # Chrome may keep the latest Cookie rows in its WAL while a crawler/login
+    # window is open. In that short window the copied SQLite database can look
+    # empty or stale even though BossFlow has just verified the authenticated
+    # session in the live browser. Trust that explicit verification marker for
+    # the same refresh window, but still require a persisted Cookie database.
+    recently_verified = bool(
+        verified_at
+        and cookie_path
+        and days_since is not None
+        and days_since < REFRESH_RECOMMENDED_DAYS
+    )
+    can_schedule = bool(valid_auth_rows) or recently_verified
 
-    if not cookie_path or not rows:
+    if recently_verified and not valid_auth_rows:
+        status = "available"
+        message = "The live BOSS session was recently verified; Cookie metadata may still be flushing."
+    elif not cookie_path or not rows:
         status = "missing"
         message = "No saved BOSS login cookies were found for this job target."
     elif not auth_rows:
@@ -118,9 +133,10 @@ def login_state(project: str) -> dict[str, Any]:
     return {
         "project": project,
         "status": status,
-        "canSchedule": bool(valid_auth_rows),
+        "canSchedule": can_schedule,
         "hasCookieDatabase": bool(cookie_path),
         "authCookieCount": len(auth_rows),
+        "verifiedByLiveSession": recently_verified,
         "lastSavedAt": last_saved_at.isoformat(timespec="seconds") if last_saved_at else "",
         "daysSinceSaved": days_since,
         "earliestClientExpiryAt": earliest_expiry.isoformat(timespec="seconds") if earliest_expiry else "",
@@ -137,6 +153,6 @@ def require_saved_login(project: str) -> dict[str, Any]:
 
         raise HTTPException(
             status_code=409,
-            detail=f"{project}: no usable BOSS login Cookie. Open Discover Jobs, choose Login / Save Cookie, then retry.",
+            detail=f"{project}: no usable BOSS login Cookie. Open System Settings, choose Login / Save Cookie, then retry.",
         )
     return state

@@ -63,6 +63,7 @@ export type LoginState = {
   canSchedule: boolean;
   hasCookieDatabase: boolean;
   authCookieCount: number;
+  verifiedByLiveSession?: boolean;
   lastSavedAt: string;
   daysSinceSaved: number | null;
   earliestClientExpiryAt: string;

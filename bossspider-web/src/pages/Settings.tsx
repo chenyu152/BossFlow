@@ -147,6 +147,9 @@ export function Settings({
   const [editingScheduleId, setEditingScheduleId] = useState('');
   const [automationBusy, setAutomationBusy] = useState('');
   const [automationError, setAutomationError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginActionMessage, setLoginActionMessage] = useState('');
+  const loginPollStartedAt = useRef(0);
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null);
   const [desktopSaving, setDesktopSaving] = useState(false);
   const [agentAccess, setAgentAccess] = useState<AgentAccess | null>(null);
@@ -239,6 +242,65 @@ export function Settings({
     }));
     setLoginStates(Object.fromEntries(entries.filter((entry): entry is readonly [string, LoginState] => Boolean(entry))));
   }, [projects]);
+
+  const startLoginFromSettings = async () => {
+    if (!scheduleDraft.project || loginBusy || automationBusy === 'login') return;
+    setAutomationError('');
+    setLoginActionMessage('');
+    setAutomationBusy('login');
+    try {
+      const config = await bossApi.getConfig(scheduleDraft.project);
+      await bossApi.startLogin({
+        project: config.project,
+        keywordsText: config.keywordsText,
+        citiesText: config.citiesText,
+        scrollTarget: config.scrollTarget,
+        scrollMax: config.scrollMax,
+        minSalary: config.minSalary,
+        headlessMode: config.headlessMode,
+        autoSqlite: config.autoSqlite,
+        catRulesText: config.catRulesText,
+        scoringRulesText: config.scoringRulesText,
+        relevanceText: config.relevanceText,
+        blacklistText: config.blacklistText,
+      });
+      loginPollStartedAt.current = Date.now();
+      setLoginBusy(true);
+      setLoginActionMessage(isZh
+        ? '登录窗口已打开。请在其中完成登录，BossFlow 验证成功后会自动刷新此处状态。'
+        : 'The login window is open. Complete sign-in there; BossFlow will refresh this status after verification.');
+    } catch (loginError) {
+      setAutomationError((loginError as Error).message);
+    } finally {
+      setAutomationBusy('');
+    }
+  };
+
+  useEffect(() => {
+    if (!loginBusy || !loginPollStartedAt.current) return undefined;
+    const project = scheduleDraft.project;
+    const timer = window.setInterval(async () => {
+      try {
+        const [task, state] = await Promise.all([
+          bossApi.getTaskStatus(),
+          bossApi.getLoginState(project),
+        ]);
+        setLoginStates((current) => ({ ...current, [project]: state }));
+        if (!task.running) {
+          setLoginBusy(false);
+          setLoginActionMessage(state.canSchedule
+            ? (isZh ? 'Cookie 已保存，可用于定时采集。' : 'Cookie saved and ready for scheduled collection.')
+            : (isZh ? '未检测到可用 Cookie，请重新尝试并确认登录已完成。' : 'No usable Cookie was detected. Try again and complete sign-in.'));
+        } else if (Date.now() - loginPollStartedAt.current > 10 * 60 * 1000) {
+          setLoginBusy(false);
+          setLoginActionMessage(isZh ? '等待登录超时，请刷新状态或重新尝试。' : 'Timed out waiting for login. Refresh or try again.');
+        }
+      } catch {
+        // Keep waiting while the backend or browser is transitioning.
+      }
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [isZh, loginBusy, scheduleDraft.project]);
 
   useEffect(() => {
     void loadLoginStates();
@@ -558,10 +620,18 @@ export function Settings({
                   ? (isZh ? '当前可用于定时采集；执行前仍会再次检查。' : 'Available for scheduled collection; it will be checked again before execution.')
                   : selectedLoginState.status === 'refresh_recommended'
                     ? (isZh ? `已超过 ${selectedLoginState.refreshRecommendedAfterDays} 天刷新建议，建议先重新登录，服务端仍可能提前使 Cookie 失效。` : `Older than the ${selectedLoginState.refreshRecommendedAfterDays}-day refresh recommendation. Sign in again before unattended use.`)
-                    : (isZh ? '无法启动启用状态的定时任务。请前往“发现岗位”点击“登录 / 保存 Cookie”。' : 'An enabled schedule cannot start. Open Discover Jobs and choose Login / Save Cookie.')}</p>
+                    : (isZh ? '无法启动启用状态的定时任务。请在此处点击“登录 / 保存 Cookie”。' : 'An enabled schedule cannot start. Choose Login / Save Cookie here.')}</p>
                 {selectedLoginState.earliestClientExpiryAt && <small>{isZh ? '浏览器记录的最早核心 Cookie 到期：' : 'Earliest core Cookie expiry: '}{new Date(selectedLoginState.earliestClientExpiryAt).toLocaleString(currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}</small>}
+                {loginActionMessage && <small>{loginActionMessage}</small>}
               </div>
-              <button type="button" onClick={() => void loadLoginStates()}>{isZh ? '刷新状态' : 'Refresh'}</button>
+              <div className="automation-login-state__actions">
+                <button type="button" onClick={() => void startLoginFromSettings()} disabled={loginBusy || automationBusy === 'login' || !scheduleDraft.project}>
+                  <KeyRound size={14} />{automationBusy === 'login' ? (isZh ? '正在打开…' : 'Opening…') : loginBusy ? (isZh ? '等待登录…' : 'Waiting…') : (isZh ? '登录 / 保存 Cookie' : 'Login / Save Cookie')}
+                </button>
+                <button type="button" onClick={() => void loadLoginStates()} disabled={loginBusy}>
+                  <RefreshCw size={14} />{isZh ? '刷新状态' : 'Refresh'}
+                </button>
+              </div>
             </div>
           )}
 

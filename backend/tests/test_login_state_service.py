@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -51,6 +52,42 @@ class LoginStateServiceTest(unittest.TestCase):
         self.assertTrue(state["canSchedule"])
         self.assertEqual(state["authCookieCount"], 1)
         self.assertNotIn("cookieValue", state)
+
+    def test_recent_live_verification_survives_cookie_database_wal_window(self):
+        cookie_path = self.profile / "Default" / "Network" / "Cookies"
+        cookie_path.parent.mkdir(parents=True)
+        connection = sqlite3.connect(cookie_path)
+        connection.execute("CREATE TABLE cookies (host_key TEXT, name TEXT, expires_utc INTEGER, last_access_utc INTEGER)")
+        connection.commit()
+        connection.close()
+        (self.project / login_state_service.LOGIN_STATE_FILE).write_text(
+            json.dumps({"verifiedAt": dt.datetime.now().astimezone().isoformat(timespec="seconds")}),
+            encoding="utf-8",
+        )
+
+        state = self.state()
+
+        self.assertEqual(state["status"], "available")
+        self.assertTrue(state["canSchedule"])
+        self.assertTrue(state["verifiedByLiveSession"])
+
+    def test_old_verification_does_not_hide_missing_auth_cookies(self):
+        cookie_path = self.profile / "Default" / "Network" / "Cookies"
+        cookie_path.parent.mkdir(parents=True)
+        connection = sqlite3.connect(cookie_path)
+        connection.execute("CREATE TABLE cookies (host_key TEXT, name TEXT, expires_utc INTEGER, last_access_utc INTEGER)")
+        connection.commit()
+        connection.close()
+        old = dt.datetime.now().astimezone() - dt.timedelta(days=4)
+        (self.project / login_state_service.LOGIN_STATE_FILE).write_text(
+            json.dumps({"verifiedAt": old.isoformat(timespec="seconds")}),
+            encoding="utf-8",
+        )
+
+        state = self.state()
+
+        self.assertEqual(state["status"], "missing")
+        self.assertFalse(state["canSchedule"])
 
 
 if __name__ == "__main__":

@@ -240,7 +240,5 @@ projects/            # 每个求职方向的本地配置和数据
 
 ## 相关文档
 
-- [产品方向与交接说明](HANDOFF.md)（本地开发文档，默认不提交）
-- [架构记录](ARCHITECTURE.md)（含历史设计与后续设想，可能不等同于当前实现）
 - [环境变量示例](.env.example)
 - [MCP 与 Skills v1 规格](BOSSFLOW_MCP_SKILLS_SPEC.md)

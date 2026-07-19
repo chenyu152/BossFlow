@@ -511,6 +511,6 @@ class AutomationService:
         if not state.get("canSchedule"):
             raise HTTPException(
                 status_code=409,
-                detail=f"{project}: no usable BOSS login Cookie. Open Discover Jobs, choose Login / Save Cookie, then retry.",
+                detail=f"{project}: no usable BOSS login Cookie. Open System Settings, choose Login / Save Cookie, then retry.",
             )
         return state
