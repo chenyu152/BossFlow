@@ -1,9 +1,31 @@
 import unittest
+from unittest.mock import patch
+
+from fastapi import HTTPException
 
 from backend.services import resume_service
 
 
 class ResumeServiceTest(unittest.TestCase):
+    def test_rejects_tailored_resume_without_resume_suggestions(self):
+        with (
+            patch.object(
+                resume_service,
+                "_load_pipeline_job",
+                return_value=(
+                    {"sourceKey": "agent:1", "resumeSuggestionPath": ""},
+                    {"company": "测试公司", "title": "AI 工程师"},
+                ),
+            ),
+            patch.object(resume_service, "_call_llm") as call_llm,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                resume_service.generate_resume_draft("agent:1", [], "")
+
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertIn("resume suggestions", raised.exception.detail)
+        call_llm.assert_not_called()
+
     def test_binds_only_confirmed_evidence_ids(self):
         context = {
             "confirmedEvidence": [{"evidenceId": "ev-confirmed", "title": "已确认项目"}],

@@ -121,7 +121,7 @@ cp .env.example .env
 
 桌面版打开“系统设置 → MCP”，可查看 Server 的实时状态、工具和资源数量，再按 Claude Code、Codex 或 Trae 的说明复制对应配置。桌面端默认使用稳定的 **stdio 桥接**，即使后端端口变化也不需要重新设置；使用期间需保持 BossFlow 运行。
 
-源码开发时，可在启动后端前设置 `BOSSFLOW_AGENT_TOKEN`，再把 `http://127.0.0.1:8000/mcp/` 作为 Streamable HTTP MCP endpoint。所有写入、采集和付费 LLM 工具都会先返回预览，只有再次传入 `confirmed=true` 才会执行。
+源码开发时，可在启动后端前设置 `BOSSFLOW_AGENT_TOKEN`，再把 `http://127.0.0.1:8000/mcp/` 作为 Streamable HTTP MCP endpoint。所有写入、采集和付费 LLM 工具都会先返回一次性确认预览；只有用户在后续消息中明确同意，Agent 才能保持原参数并传入返回的 `confirmationId` 执行。
 
 仓库内首批 Skills 位于 `.agents/skills/`：
 

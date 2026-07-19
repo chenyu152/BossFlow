@@ -144,6 +144,7 @@ export function Resume({
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
   const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
   const [userNotes, setUserNotes] = useState('');
+  const [draftGuardMessage, setDraftGuardMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const appliedTargetRef = useRef('');
   const draftingSet = new Set(draftingKeys);
@@ -203,6 +204,7 @@ export function Resume({
       setSuggestion(null);
       setDraft(null);
       setSelectedSuggestionIds(new Set());
+      setDraftGuardMessage('');
       try {
         const suggestionData = selectedItem.resumeSuggestionPath
           ? await onLoadSuggestion(selectedItem.sourceKey)
@@ -239,6 +241,11 @@ export function Resume({
 
   const generateDraft = async () => {
     if (!selectedItem) return;
+    if (!selectedItem.resumeSuggestionPath) {
+      setDraftGuardMessage(t('resume.generateResumePrerequisite'));
+      return;
+    }
+    setDraftGuardMessage('');
     const data = await onGenerateDraft(selectedItem.sourceKey, Array.from(selectedSuggestionIds), userNotes);
     if (data) setDraft(data);
   };
@@ -427,9 +434,14 @@ export function Resume({
                   />
                 </div>
 
+                {draftGuardMessage && (
+                  <div role="alert" className="rounded border border-amber-900/70 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-amber-300">
+                    {draftGuardMessage}
+                  </div>
+                )}
                 <button
                   onClick={generateDraft}
-                  disabled={!selectedItem.resumeSuggestionPath || isDrafting}
+                  disabled={isDrafting}
                   className="inline-flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                 >
                   {isDrafting ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}

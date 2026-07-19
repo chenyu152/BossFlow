@@ -857,6 +857,7 @@
     "sourceProfile": "Profile",
     "sourceReport": "Report",
     "noSuggestions": "No suggestions found for this job.",
+    "generateResumePrerequisite": "Generate resume suggestions before generating a tailored resume.",
     "userNotes": "User notes",
     "userNotesPlaceholder": "Add facts you confirmed, projects to emphasize, or content to avoid...",
     "generateResume": "Generate tailored resume",

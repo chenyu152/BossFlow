@@ -133,6 +133,24 @@ class RequirementAssessmentParserTest(unittest.TestCase):
         self.assertEqual(len(requirements), 1)
         self.assertEqual(requirements[0]["canonicalKey"], "vector-database")
 
+    def test_recovers_complete_items_from_truncated_requirement_array(self):
+        payload = [{
+            "canonicalKey": "langgraph",
+            "label": "LangGraph 开发经验",
+            "category": "skill",
+            "importance": "required",
+            "candidateEvidenceRefs": [],
+            "coverageStatus": "not_found",
+        }]
+        truncated = json.dumps(payload, ensure_ascii=False)[:-1]
+
+        requirements = _parse_requirement_assessment(
+            "---BOSSFLOW_REQUIREMENT_ASSESSMENT---\n" + truncated
+        )
+
+        self.assertEqual(len(requirements), 1)
+        self.assertEqual(requirements[0]["canonicalKey"], "langgraph")
+
     def test_splits_compound_requirement_into_atomic_capabilities(self):
         payload = [{
             "canonicalKey": "rag-prompt-tool-calling",
@@ -284,6 +302,65 @@ class LlmEvaluationIntegrationTest(unittest.TestCase):
         self.assertEqual(call_llm.call_count, 2)
         self.assertEqual(result["requirementAssessment"][0]["canonicalKey"], "vector-database")
         self.assertEqual(result["summary"]["score"], 4.0)
+
+    def test_uses_dedicated_structured_extraction_after_repair_is_truncated(self):
+        initial_report = (
+            "# 岗位精评估\n"
+            "---BOSSSPIDER_LLM_SUMMARY---\n"
+            "SCORE: 4.0\nFIT_LEVEL: Worth Reviewing\nRECOMMENDATION: 继续评估\nGREETING_READY: no\n"
+            "---END_SUMMARY---\n"
+            "---BOSSFLOW_REQUIREMENT_ASSESSMENT---\n["
+        )
+        repaired_response = "---BOSSFLOW_REQUIREMENT_ASSESSMENT---\n["
+        fallback_requirement = {
+            "canonicalKey": "langgraph",
+            "label": "LangGraph 开发经验",
+            "category": "skill",
+            "importance": "required",
+            "candidateEvidenceRefs": [],
+            "coverageStatus": "not_found",
+        }
+        fallback_response = (
+            "---BOSSFLOW_REQUIREMENT_ASSESSMENT---\n"
+            f"{json.dumps([fallback_requirement], ensure_ascii=False)}\n"
+            "---END_REQUIREMENT_ASSESSMENT---"
+        )
+        evidence_summary = {
+            "requirementCount": 1,
+            "supportedRequirementCount": 0,
+            "potentialEvidenceRequirementCount": 0,
+            "unresolvedRequirementCount": 1,
+            "blockingGapCount": 1,
+            "requirementAssessedAt": "2026-07-17T10:00:00+08:00",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                patch.object(llm_evaluation_service, "REPORTS_DIR", Path(temp_dir)),
+                patch.object(
+                    llm_evaluation_service,
+                    "_load_pipeline_job",
+                    return_value=({"score": 4}, {"company": "测试公司", "title": "AI 工程师"}),
+                ),
+                patch.object(
+                    llm_evaluation_service,
+                    "_call_llm",
+                    side_effect=[initial_report, repaired_response, fallback_response],
+                ) as call_llm,
+                patch.object(llm_evaluation_service, "_next_report_id", return_value="001"),
+                patch.object(
+                    llm_evaluation_service,
+                    "sync_requirement_assessment",
+                    return_value={"summary": evidence_summary, "coverages": []},
+                ),
+                patch.object(llm_evaluation_service, "update_pipeline_item_metadata"),
+                patch.object(llm_evaluation_service, "sync_greeting_draft_from_report"),
+                patch.object(llm_evaluation_service, "read_pipeline", return_value={"pending": [], "processed": []}),
+            ):
+                result = llm_evaluation_service.llm_evaluate_pipeline_item("agent:1")
+
+        self.assertEqual(call_llm.call_count, 3)
+        self.assertEqual(result["requirementAssessment"][0]["canonicalKey"], "langgraph")
 
     def test_writes_assessment_and_evidence_summary_to_report_and_pipeline(self):
         requirement = {

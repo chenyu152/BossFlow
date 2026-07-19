@@ -352,6 +352,28 @@ def _requirement_payload(text: str) -> list[Any] | None:
         try:
             decoded, _ = decoder.raw_decode(fragment)
         except json.JSONDecodeError:
+            # A response can be cut off after a complete object but before
+            # the closing array bracket. Recover those complete objects so a
+            # provider's output limit does not turn an otherwise usable
+            # assessment into a hard failure.
+            if not fragment.startswith("["):
+                continue
+            remainder = fragment[1:].lstrip()
+            recovered: list[Any] = []
+            while remainder and not remainder.startswith("]"):
+                try:
+                    item, consumed = decoder.raw_decode(remainder)
+                except json.JSONDecodeError:
+                    break
+                if isinstance(item, dict) and item.get("canonicalKey"):
+                    recovered.append(item)
+                remainder = remainder[consumed:].lstrip()
+                if remainder.startswith(","):
+                    remainder = remainder[1:].lstrip()
+                elif not remainder.startswith("]"):
+                    break
+            if recovered:
+                return recovered
             continue
         if isinstance(decoded, dict):
             decoded = decoded.get("requirements")
@@ -474,10 +496,47 @@ def _repair_requirement_messages(
     ]
 
 
+def _structured_requirement_messages(job: dict[str, Any]) -> list[dict[str, str]]:
+    """Ask for the machine-readable assessment without regenerating the report."""
+    cv_text = _read_text(CV_PATH, 12000)
+    profile_text = _read_text(PROFILE_PATH, 6000)
+    system = """你是 BossSpider 的岗位要求结构化提取器。
+只根据岗位 JD、cv.md 和 profile.yml 输出机器可读 requirement assessment。
+不要输出 Markdown、解释、代码围栏或任何 JSON 之外的内容。
+必须输出 5-16 条最重要的原子要求；同一能力可以合并，相关但不同的能力不能合并。
+candidateEvidenceRefs 只能引用 cv.md 中真实存在的内容；没有证据时必须为空数组并使用 not_found。
+coverageStatus 只能使用 supported、partial、not_found、unknown。
+输出格式必须是：
+---BOSSFLOW_REQUIREMENT_ASSESSMENT---
+[合法 JSON 数组]
+---END_REQUIREMENT_ASSESSMENT---
+每项至少包含 canonicalKey、capabilityName、label、category、verificationMode、importance、
+requiredProficiency、proficiencyApplicable、jdQuote、candidateEvidenceRefs、coverageStatus、rationale、confidence。
+category 使用 skill|experience|behavior|education|location|preference|other；
+verificationMode 使用 document_fact|experience_fact|preference|behavior_example|manual_review；
+importance 使用 required|preferred|context；confidence 是 0 到 1 的数字。"""
+    user = f"""岗位信息：
+```text
+{_job_text(job)}
+```
+
+候选人 cv.md：
+```markdown
+{cv_text or "cv.md not found"}
+```
+
+profile.yml：
+```yaml
+{profile_text or "profile.yml not found"}
+```"""
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
 def _save_failed_llm_output(
     job: dict[str, Any],
     initial_response: str,
     repair_response: str,
+    structured_response: str = "",
 ) -> Path:
     failed_dir = REPORTS_DIR / "_failed-evaluations"
     failed_dir.mkdir(parents=True, exist_ok=True)
@@ -495,6 +554,10 @@ def _save_failed_llm_output(
                 "",
                 repair_response,
                 "",
+                "# Dedicated structured extraction response",
+                "",
+                structured_response,
+                "",
             ]
         ),
         encoding="utf-8",
@@ -504,7 +567,7 @@ def _save_failed_llm_output(
 
 def _strip_requirement_assessment_block(text: str) -> str:
     return re.sub(
-        r"\n?---BOSSFLOW_REQUIREMENT_ASSESSMENT---\s*[\s\S]*?---END_REQUIREMENT_ASSESSMENT---\s*",
+        r"\n?---BOSSFLOW_REQUIREMENT_ASSESSMENT---\s*[\s\S]*?(?:---END_REQUIREMENT_ASSESSMENT---\s*|$)",
         "\n",
         text,
     ).rstrip() + "\n"
@@ -523,14 +586,22 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
         )
         requirement_assessment = _parse_requirement_assessment(repair_text)
         if not requirement_assessment:
-            failed_path = _save_failed_llm_output(job, report_text, repair_text)
-            raise HTTPException(
-                status_code=502,
-                detail=(
-                    "LLM returned an invalid structured requirement assessment after one automatic repair attempt. "
-                    f"Raw responses were saved to {failed_path}"
-                ),
+            structured_text = _call_llm(
+                _structured_requirement_messages(job),
+                max_tokens=6000,
+                temperature=0.05,
             )
+            requirement_assessment = _parse_requirement_assessment(structured_text)
+            if not requirement_assessment:
+                failed_path = _save_failed_llm_output(job, report_text, repair_text, structured_text)
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "LLM returned an invalid structured requirement assessment after automatic repair and "
+                        "dedicated extraction fallback. "
+                        f"Raw responses were saved to {failed_path}"
+                    ),
+                )
     report_id = _next_report_id()
     filename = f"{report_id}-{_slug(job.get('company'))}-{_slug(job.get('title'))}-{dt.datetime.now().strftime('%Y-%m-%d')}.md"
     report_path = REPORTS_DIR / filename

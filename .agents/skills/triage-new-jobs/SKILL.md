@@ -10,8 +10,8 @@ Use the BossFlow MCP server as the only source of job and pipeline state.
 ## Workflow
 
 1. Call `list_projects` when the project is not explicit. Ask for a choice only when multiple projects remain plausible.
-2. Call `get_project_summary` and `get_pipeline` before assessing new jobs.
-3. Call `search_jobs` with the narrowest useful filters: city, salary range, score threshold, fit/risk signal, category, freshness, or recruitment status. Prefer batches of at most 50 and summarize at most 10 jobs at once.
+2. Call `get_project_summary` and `get_pipeline` with `detail_level="summary"` and a limit of at most 20 before assessing new jobs. Follow pagination only when the user needs older candidates.
+3. Call `search_jobs` with `detail_level="summary"` and the narrowest useful filters: city, salary range, score threshold, fit/risk signal, category, freshness, or recruitment status. Prefer batches of at most 50 and summarize at most 10 jobs at once. Use `get_job` only for the few jobs selected for deeper review.
 4. Compare each job using stored score signals, salary, location, experience, education, categories, and JD evidence. Do not infer candidate experience that is not present in BossFlow.
 5. Separate results into:
    - recommend adding;

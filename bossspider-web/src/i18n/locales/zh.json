@@ -858,6 +858,7 @@
     "sourceProfile": "偏好",
     "sourceReport": "精评",
     "noSuggestions": "此岗位未找到简历建议。",
+    "generateResumePrerequisite": "请先生成简历建议，再生成定制简历。",
     "userNotes": "用户备注",
     "userNotesPlaceholder": "补充你确认过的事实、想强调的项目或需要避开的内容...",
     "generateResume": "生成定制简历",

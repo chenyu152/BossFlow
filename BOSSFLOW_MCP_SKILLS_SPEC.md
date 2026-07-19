@@ -42,11 +42,18 @@ python -m uvicorn backend.app:app --port 8000
 | `get_job` | 读取单个岗位完整记录 |
 | `get_pipeline` | 读取候选岗位及工作流状态 |
 | `get_task_status` | 读取当前采集状态和日志尾部 |
-| `get_evidence` | 读取证据概览 |
-| `get_evidence_requirements` | 读取岗位要求与证据覆盖要求 |
-| `get_evidence_tasks` | 读取证据补齐任务 |
-| `get_application_context` | 一次读取岗位、精评、简历、证据、故事和已有材料上下文 |
+| `get_evidence` | 读取能力档案统计和分页摘要，必要时可显式读取完整集合 |
+| `get_capabilities` | 分页读取归一化能力卡片 |
+| `get_capability` | 读取单项能力的完整岗位要求、依据和提升计划关联 |
+| `get_requirement_groups` | 读取保留 `any_of` 替代关系的岗位要求组 |
+| `preview_resume_capability_import` | 分析基础简历中的能力，预览新增、合并、已同步和待判断项 |
 | `get_login_state` | 读取登录 Cookie 保存时间、浏览器到期时间和定时任务可用性 |
+| `get_evidence_requirements` | 分页读取精评提取的原子岗位要求 |
+| `get_evidence_tasks` | 分页读取能力补充或提升任务 |
+| `get_application_context` | 读取单个候选岗位的精评、证据、故事和已有材料上下文 |
+| `get_base_resume` | 默认返回个人基础简历的本机路径、修改时间和 revision；不能访问文件时可返回全文 |
+| `list_tailored_resumes` | 分页列出已有简历建议或定制简历的候选岗位和文件位置 |
+| `get_tailored_resume` | 默认返回单个岗位简历建议、定制简历的路径和 revision；不能访问文件时可返回全文 |
 | `get_story_bank` | 读取已确认故事 |
 | `get_story_drafts` | 读取待确认故事草稿 |
 
@@ -63,7 +70,11 @@ python -m uvicorn backend.app:app --port 8000
 | `stage_evidence_item` | 保存待用户核验的证据草稿 |
 | `confirm_evidence` | 确认事实证据可复用 |
 | `classify_evidence_requirement` | 保存用户对岗位要求的证据判断 |
+| `decide_capability` | 保存一项归一化能力的可复用判断 |
+| `import_resume_capabilities` | 导入用户从基础简历预览中选中的能力 |
 | `set_evidence_task_status` | 更新证据任务状态 |
+| `update_base_resume` | 通过差异预览、人工确认和 revision 校验保存个人简历 |
+| `update_tailored_resume` | 保存岗位定制简历，并同步编辑元数据及校验 revision |
 | `save_agent_resume_suggestions` | 保存外部 Agent 生成的证据绑定简历建议，不调用 BossFlow LLM |
 | `save_agent_interview_preparation` | 保存外部 Agent 生成的面试准备，不调用 BossFlow LLM |
 | `save_imported_story_drafts` | 保存外部项目提取的故事草稿 |
