@@ -8,8 +8,8 @@
     "深圳": "101280600"
   },
   "scrape_limits": {
-    "scroll_target": 20,
-    "scroll_max_scrolls": 30
+    "new_job_target": 20,
+    "max_jobs": 100
   },
   "cat_rules": {
     "大模型/LLM": [

@@ -15,6 +15,10 @@ class AutomationScheduleInput(BaseModel):
     daysOfWeek: list[int] = Field(default_factory=list, max_length=7)
     misfirePolicy: AutomationMisfirePolicy = "run_once"
     maxDelayMinutes: int = Field(default=360, ge=0, le=10080)
+    keywordsText: str = Field(default="", max_length=4000)
+    citiesText: str = Field(default="", max_length=12000)
+    newJobTarget: int = Field(default=20, ge=1, le=5000)
+    maxJobs: int = Field(default=100, ge=1, le=5000)
 
     @field_validator("daysOfWeek")
     @classmethod

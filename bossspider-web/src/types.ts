@@ -20,6 +20,10 @@ export type AutomationScheduleInput = {
   daysOfWeek: number[];
   misfirePolicy: AutomationMisfirePolicy;
   maxDelayMinutes: number;
+  keywordsText: string;
+  citiesText: string;
+  newJobTarget: number;
+  maxJobs: number;
 };
 
 export type AutomationSchedule = AutomationScheduleInput & {
@@ -29,6 +33,15 @@ export type AutomationSchedule = AutomationScheduleInput & {
   lastRunAt: string;
   createdAt: string;
   updatedAt: string;
+  keywordCount: number;
+  cityCount: number;
+  combinationCount: number;
+  estimatedListedJobs: number;
+  estimatedDetailJobs: number;
+  estimatedReusedJobs: number;
+  estimatedStopCondition: 'new_job_target' | 'max_jobs';
+  estimatedMinutes: number;
+  estimatedRangeMinutes: [number, number];
 };
 
 export type AutomationRun = {
@@ -54,6 +67,10 @@ export type AutomationResponse = {
     serial: boolean;
     schedulerRunning: boolean;
     lastError: string;
+  };
+  limits: {
+    maxSchedules: number;
+    recommendedDailyMinutes: number;
   };
 };
 
@@ -121,8 +138,8 @@ export type ConfigPayload = {
   scoringRulesText: string;
   relevanceText: string;
   blacklistText: string;
-  scrollTarget: number;
-  scrollMax: number;
+  newJobTarget: number;
+  maxJobs: number;
   minSalary: number;
   headlessMode: boolean;
   autoSqlite: boolean;

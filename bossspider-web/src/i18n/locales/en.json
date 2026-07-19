@@ -870,7 +870,7 @@
     "help": "Help tour",
     "tour": {
       "keywordsTitle": "Enter crawl keywords",
-      "keywordsBody": "Use one job title per line. A new direction starts with its name as the first keyword; add equivalent target titles as needed.",
+      "keywordsBody": "Click Add keyword to enter a job title. Added titles appear as removable chips; a new direction starts with its name as the first keyword.",
       "citiesTitle": "Choose crawl cities",
       "citiesBody": "Choose cities from the shortcuts to fill their codes automatically. Cities stay your decision, so the system never guesses where you want to work.",
       "saveTitle": "Save, then continue",
@@ -914,8 +914,8 @@
       "advancedHint": "Edit only for custom codes or troubleshooting. For normal use, choose cities above."
     },
     "scrapingLimits": "Scraping Limits",
-    "scrollTargetCount": "Target Job Listings",
-    "maxScrollAttempts": "Max Scroll Attempts"
+    "scrollTargetCount": "New Jobs Target",
+    "maxScrollAttempts": "Maximum Jobs Inspected"
   },
   "rules": {
     "title": "Matching & Scoring Config",

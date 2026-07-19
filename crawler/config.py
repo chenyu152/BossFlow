@@ -6,8 +6,8 @@ from typing import Optional
 PACKAGE_DIR = Path(__file__).parent
 DEFAULT_CONFIG_FILE = PACKAGE_DIR / 'config' / 'keywords.json'
 DEFAULT_SCRAPE_LIMITS = {
-    'scroll_target': 20,
-    'scroll_max_scrolls': 60,
+    'new_job_target': 20,
+    'max_jobs': 100,
 }
 
 _config_cache = None
@@ -64,6 +64,8 @@ def get_cat_rules(config_file: Optional[str] = None) -> dict:
 
 
 def get_scrape_limits(config_file: Optional[str] = None) -> dict:
-    limits = DEFAULT_SCRAPE_LIMITS.copy()
-    limits.update(get_config(config_file).get('scrape_limits', {}))
-    return limits
+    raw = get_config(config_file).get('scrape_limits', {}) or {}
+    return {
+        'new_job_target': max(1, int(raw.get('new_job_target', 20) or 20)),
+        'max_jobs': max(1, int(raw.get('max_jobs', 100) or 100)),
+    }

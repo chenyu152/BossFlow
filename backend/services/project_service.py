@@ -86,7 +86,7 @@ def create_project(name: str) -> Path:
     config = {
         "keywords": [normalized_name],
         "cities": {},
-        "scrape_limits": {**DEFAULT_SCRAPE_LIMITS, "scroll_target": 20},
+        "scrape_limits": {**DEFAULT_SCRAPE_LIMITS},
         "min_salary": MIN_AVG_SALARY_K,
         "headless_mode": True,
         "auto_sqlite": True,
@@ -177,8 +177,9 @@ def stats_for_project(project_dir: Path, config: Dict[str, Any]) -> Dict[str, An
 
 def config_payload(project_dir: Path) -> Dict[str, Any]:
     config = _migrate_legacy_default_scoring_keywords(project_dir, load_config(str(project_dir)))
-    limits = DEFAULT_SCRAPE_LIMITS.copy()
-    limits.update(config.get("scrape_limits") or {})
+    raw_limits = config.get("scrape_limits") or {}
+    new_job_target = int(raw_limits.get("new_job_target", 20) or 20)
+    max_jobs = int(raw_limits.get("max_jobs", 100) or 100)
     paths = paths_for_project(project_dir)
     payload = {
         "ok": True,
@@ -194,8 +195,8 @@ def config_payload(project_dir: Path) -> Dict[str, Any]:
         ),
         "relevanceText": "\n".join(config.get("relevance_keywords") or []),
         "blacklistText": "\n".join(config.get("blacklist_keywords") or []),
-        "scrollTarget": int(limits.get("scroll_target", 20)),
-        "scrollMax": int(limits.get("scroll_max_scrolls", 60)),
+        "newJobTarget": max(1, new_job_target),
+        "maxJobs": max(1, max_jobs),
         "minSalary": float(config.get("min_salary", MIN_AVG_SALARY_K)),
         "headlessMode": bool(config.get("headless_mode", True)),
         "autoSqlite": bool(config.get("auto_sqlite", True)),
@@ -204,7 +205,11 @@ def config_payload(project_dir: Path) -> Dict[str, Any]:
     return payload
 
 
-def save_form_config(payload: ConfigUpdate) -> tuple[Path, Dict[str, Any], Dict[str, str]]:
+def save_form_config(
+    payload: ConfigUpdate,
+    *,
+    persist: bool = True,
+) -> tuple[Path, Dict[str, Any], Dict[str, str]]:
     project_dir = resolve_project(payload.project)
     keywords = split_lines(payload.keywordsText)
     try:
@@ -234,8 +239,8 @@ def save_form_config(payload: ConfigUpdate) -> tuple[Path, Dict[str, Any], Dict[
     config["keywords"] = keywords
     config["cities"] = cities
     config["scrape_limits"] = {
-        "scroll_target": int(payload.scrollTarget or DEFAULT_SCRAPE_LIMITS["scroll_target"]),
-        "scroll_max_scrolls": int(payload.scrollMax or DEFAULT_SCRAPE_LIMITS["scroll_max_scrolls"]),
+        "new_job_target": int(payload.newJobTarget or DEFAULT_SCRAPE_LIMITS["new_job_target"]),
+        "max_jobs": int(payload.maxJobs or DEFAULT_SCRAPE_LIMITS["max_jobs"]),
     }
     config["min_salary"] = float(payload.minSalary or MIN_AVG_SALARY_K)
     config.pop("strategy_index", None)
@@ -246,5 +251,6 @@ def save_form_config(payload: ConfigUpdate) -> tuple[Path, Dict[str, Any], Dict[
     config["scoring"] = normalize_scoring_config(scoring_rules)
     config["relevance_keywords"] = split_lines(payload.relevanceText)
     config["blacklist_keywords"] = split_lines(payload.blacklistText)
-    save_config(config, str(project_dir))
+    if persist:
+        save_config(config, str(project_dir))
     return project_dir, config, paths_for_project(project_dir)

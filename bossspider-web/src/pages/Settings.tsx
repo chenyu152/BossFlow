@@ -1,10 +1,13 @@
-import { AlertTriangle, CalendarClock, Check, ChevronDown, Clock3, Copy, Eye, EyeOff, KeyRound, Languages, MonitorUp, Pencil, Play, PlugZap, Plus, RefreshCw, Save, Server, Settings2, Trash2 } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, ChevronDown, Clock3, Copy, Eye, EyeOff, KeyRound, Languages, MonitorUp, Pencil, Play, PlugZap, Plus, RefreshCw, Save, Server, Settings2, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
+import { CitySelector } from '../components/CitySelector';
+import { KeywordInput } from '../components/KeywordInput';
 import { ThemeOptions } from '../components/ThemePicker';
 import { useAppTranslation } from '../i18n';
 import type { AgentAccess, AutomationResponse, AutomationSchedule, AutomationScheduleInput, DesktopSettings, LlmSettingsStatus, LoginState } from '../types';
+import { collectionEstimate } from '../utils/collectionEstimate';
 
 const defaultSchedule: AutomationScheduleInput = {
   project: '',
@@ -14,6 +17,10 @@ const defaultSchedule: AutomationScheduleInput = {
   daysOfWeek: [],
   misfirePolicy: 'run_once',
   maxDelayMinutes: 360,
+  keywordsText: '',
+  citiesText: '',
+  newJobTarget: 20,
+  maxJobs: 100,
 };
 
 type McpClient = 'claude' | 'codex' | 'trae';
@@ -27,6 +34,10 @@ function scheduleInput(schedule: AutomationSchedule): AutomationScheduleInput {
     daysOfWeek: schedule.daysOfWeek,
     misfirePolicy: schedule.misfirePolicy,
     maxDelayMinutes: schedule.maxDelayMinutes,
+    keywordsText: schedule.keywordsText,
+    citiesText: schedule.citiesText,
+    newJobTarget: schedule.newJobTarget,
+    maxJobs: schedule.maxJobs,
   };
 }
 
@@ -144,7 +155,9 @@ export function Settings({
   const [projects, setProjects] = useState<string[]>([]);
   const [loginStates, setLoginStates] = useState<Record<string, LoginState>>({});
   const [scheduleDraft, setScheduleDraft] = useState<AutomationScheduleInput>(defaultSchedule);
+  const [scheduleProjectJobCount, setScheduleProjectJobCount] = useState(0);
   const [editingScheduleId, setEditingScheduleId] = useState('');
+  const [scheduleEditorOpen, setScheduleEditorOpen] = useState(false);
   const [automationBusy, setAutomationBusy] = useState('');
   const [automationError, setAutomationError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
@@ -231,6 +244,38 @@ export function Settings({
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!scheduleDraft.project || scheduleDraft.keywordsText.trim() || scheduleDraft.citiesText.trim()) return;
+    let cancelled = false;
+    void bossApi.getConfig(scheduleDraft.project).then((config) => {
+      if (cancelled) return;
+      setScheduleDraft((current) => current.project !== config.project || current.keywordsText.trim() || current.citiesText.trim()
+        ? current
+        : {
+            ...current,
+            keywordsText: config.keywordsText,
+            citiesText: config.citiesText,
+            newJobTarget: config.newJobTarget,
+            maxJobs: config.maxJobs,
+          });
+    }).catch((configError) => setAutomationError((configError as Error).message));
+    return () => { cancelled = true; };
+  }, [scheduleDraft.project, scheduleDraft.keywordsText, scheduleDraft.citiesText]);
+
+  useEffect(() => {
+    if (!scheduleDraft.project) {
+      setScheduleProjectJobCount(0);
+      return;
+    }
+    let cancelled = false;
+    void bossApi.getConfig(scheduleDraft.project).then((config) => {
+      if (!cancelled) setScheduleProjectJobCount(config.jobCount);
+    }).catch(() => {
+      if (!cancelled) setScheduleProjectJobCount(0);
+    });
+    return () => { cancelled = true; };
+  }, [scheduleDraft.project]);
+
   const loadLoginStates = useCallback(async () => {
     if (!projects.length) return;
     const entries = await Promise.all(projects.map(async (project) => {
@@ -254,8 +299,8 @@ export function Settings({
         project: config.project,
         keywordsText: config.keywordsText,
         citiesText: config.citiesText,
-        scrollTarget: config.scrollTarget,
-        scrollMax: config.scrollMax,
+        newJobTarget: config.newJobTarget,
+        maxJobs: config.maxJobs,
         minSalary: config.minSalary,
         headlessMode: config.headlessMode,
         autoSqlite: config.autoSqlite,
@@ -346,6 +391,7 @@ export function Settings({
       if (editingScheduleId) await bossApi.updateAutomationSchedule(editingScheduleId, scheduleDraft);
       else await bossApi.createAutomationSchedule(scheduleDraft);
       setEditingScheduleId('');
+      setScheduleEditorOpen(false);
       setScheduleDraft({ ...defaultSchedule, project: scheduleDraft.project });
       await loadAutomation(true);
       await loadLoginStates();
@@ -357,8 +403,26 @@ export function Settings({
   };
 
   const editSchedule = (schedule: AutomationSchedule) => {
+    setAutomationError('');
     setEditingScheduleId(schedule.id);
     setScheduleDraft(scheduleInput(schedule));
+    setScheduleEditorOpen(true);
+  };
+
+  const createSchedule = () => {
+    setAutomationError('');
+    setEditingScheduleId('');
+    setScheduleDraft({
+      ...defaultSchedule,
+      project: scheduleDraft.project || projects[0] || '',
+    });
+    setScheduleEditorOpen(true);
+  };
+
+  const closeScheduleEditor = () => {
+    if (automationBusy === 'save') return;
+    setEditingScheduleId('');
+    setScheduleEditorOpen(false);
   };
 
   const toggleSchedule = async (schedule: AutomationSchedule) => {
@@ -508,6 +572,14 @@ export function Settings({
       ? (isZh ? '今天已保存' : 'Saved today')
       : (isZh ? `${selectedLoginState.daysSinceSaved} 天前保存` : `Saved ${selectedLoginState.daysSinceSaved} days ago`))
     : (isZh ? '尚未保存' : 'Not saved');
+  const draftEstimate = useMemo(() => collectionEstimate({
+    ...scheduleDraft,
+    existingJobCount: scheduleProjectJobCount,
+  }), [scheduleDraft, scheduleProjectJobCount]);
+  const longSchedules = (automation?.schedules || []).filter(
+    (schedule) => schedule.enabled
+      && schedule.estimatedMinutes > (automation?.limits?.recommendedDailyMinutes || 300),
+  );
 
   return (
     <div className="settings-page mx-auto max-w-5xl space-y-6">
@@ -600,9 +672,14 @@ export function Settings({
         </div>
       </section>
       <section className="rounded-lg border border-zinc-800 bg-zinc-950">
-        <div className="border-b border-zinc-800 p-5">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-100"><CalendarClock size={17} className="text-indigo-300" />{isZh ? '定时岗位采集' : 'Scheduled job collection'}</h2>
-          <p className="mt-2 text-sm leading-6 text-zinc-500">{isZh ? '按求职目标创建采集计划。所有计划共用一个串行队列，同一时间触发时会依次执行，避免账号与浏览器会话冲突。' : 'Create collection plans per job target. All plans share one serial queue, so simultaneous triggers run one after another.'}</p>
+        <div className="flex items-start justify-between gap-5 border-b border-zinc-800 p-5">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-100"><CalendarClock size={17} className="text-indigo-300" />{isZh ? '定时岗位采集' : 'Scheduled job collection'}</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-500">{isZh ? '每个计划保存独立的关键词、城市和岗位数量。计划共用串行队列，时间重叠时会依次执行。' : 'Each plan keeps its own keywords, cities, and job target. Overlapping plans run through one serial queue.'}</p>
+          </div>
+          <button type="button" className="automation-primary-button shrink-0" onClick={createSchedule} disabled={(automation?.schedules.length || 0) >= (automation?.limits?.maxSchedules || 10)}>
+            <Plus size={15} />{isZh ? '新增计划' : 'New plan'}
+          </button>
         </div>
         <div className="space-y-5 p-4 sm:p-5">
           <div className="automation-queue-summary">
@@ -625,9 +702,9 @@ export function Settings({
                 {loginActionMessage && <small>{loginActionMessage}</small>}
               </div>
               <div className="automation-login-state__actions">
-                <button type="button" onClick={() => void startLoginFromSettings()} disabled={loginBusy || automationBusy === 'login' || !scheduleDraft.project}>
-                  <KeyRound size={14} />{automationBusy === 'login' ? (isZh ? '正在打开…' : 'Opening…') : loginBusy ? (isZh ? '等待登录…' : 'Waiting…') : (isZh ? '登录 / 保存 Cookie' : 'Login / Save Cookie')}
-                </button>
+                {selectedLoginState.status !== 'available' && <button type="button" onClick={() => void startLoginFromSettings()} disabled={loginBusy || automationBusy === 'login' || !scheduleDraft.project}>
+                  <KeyRound size={14} />{automationBusy === 'login' ? (isZh ? '正在打开…' : 'Opening…') : loginBusy ? (isZh ? '等待登录…' : 'Waiting…') : selectedLoginState.status === 'refresh_recommended' ? (isZh ? '重新登录并更新 Cookie' : 'Refresh login Cookie') : (isZh ? '登录 / 保存 Cookie' : 'Login / Save Cookie')}
+                </button>}
                 <button type="button" onClick={() => void loadLoginStates()} disabled={loginBusy}>
                   <RefreshCw size={14} />{isZh ? '刷新状态' : 'Refresh'}
                 </button>
@@ -635,74 +712,120 @@ export function Settings({
             </div>
           )}
 
-          <div className="automation-editor">
-            <div className="automation-form-grid">
-              <div className="automation-field">
-                <span>{isZh ? '求职目标' : 'Job target'}</span>
-                <CompactSelect
-                  value={scheduleDraft.project}
-                  options={projects.map((project) => ({ value: project, label: project }))}
-                  onChange={(project) => setScheduleDraft({ ...scheduleDraft, project })}
-                  ariaLabel={isZh ? '选择求职目标' : 'Select job target'}
-                  placeholder={isZh ? '请选择求职目标' : 'Choose a job target'}
-                />
-              </div>
-              <div className="automation-field">
-                <span>{isZh ? '执行频率' : 'Frequency'}</span>
-                <CompactSelect
-                  value={scheduleDraft.cadence}
-                  options={[
-                    { value: 'daily', label: isZh ? '每天' : 'Daily' },
-                    { value: 'weekdays', label: isZh ? '工作日' : 'Weekdays' },
-                    { value: 'weekly', label: isZh ? '每周' : 'Weekly' },
-                  ]}
-                  onChange={(cadence) => setScheduleDraft({ ...scheduleDraft, cadence, daysOfWeek: [] })}
-                  ariaLabel={isZh ? '选择执行频率' : 'Select frequency'}
-                />
-              </div>
-              <label><span>{isZh ? '开始时间' : 'Start time'}</span><input type="time" value={scheduleDraft.timeOfDay} onChange={(event) => setScheduleDraft({ ...scheduleDraft, timeOfDay: event.target.value })} /></label>
-              <div className="automation-field">
-                <span>{isZh ? '错过后处理' : 'If missed'}</span>
-                <CompactSelect
-                  value={scheduleDraft.misfirePolicy}
-                  options={[
-                    { value: 'run_once', label: isZh ? '启动后补跑一次' : 'Catch up once' },
-                    { value: 'skip', label: isZh ? '跳过本次' : 'Skip this run' },
-                  ]}
-                  onChange={(misfirePolicy) => setScheduleDraft({ ...scheduleDraft, misfirePolicy })}
-                  ariaLabel={isZh ? '选择错过后的处理方式' : 'Select missed-run policy'}
-                />
-              </div>
-            </div>
-            {scheduleDraft.cadence === 'weekly' && (
-              <div className="automation-weekdays" aria-label={isZh ? '每周执行日' : 'Weekly run days'}>
-                {(isZh ? ['一', '二', '三', '四', '五', '六', '日'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']).map((label, day) => <button key={label} type="button" className={scheduleDraft.daysOfWeek.includes(day) ? 'is-active' : ''} onClick={() => setScheduleDraft({ ...scheduleDraft, daysOfWeek: scheduleDraft.daysOfWeek.includes(day) ? scheduleDraft.daysOfWeek.filter((item) => item !== day) : [...scheduleDraft.daysOfWeek, day].sort() })}>{label}</button>)}
-              </div>
-            )}
-            {scheduleDraft.misfirePolicy === 'run_once' && <label className="automation-delay"><span>{isZh ? '最长补跑延迟（分钟）' : 'Maximum catch-up delay (minutes)'}</span><input type="number" min={0} max={10080} value={scheduleDraft.maxDelayMinutes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, maxDelayMinutes: Math.max(0, Number(event.target.value) || 0) })} /></label>}
-            <div className="flex justify-end gap-2">
-              {editingScheduleId && <button type="button" className="automation-secondary-button" onClick={() => { setEditingScheduleId(''); setScheduleDraft({ ...defaultSchedule, project: scheduleDraft.project }); }}>{isZh ? '取消编辑' : 'Cancel'}</button>}
-              <button type="button" disabled={!scheduleDraft.project || automationBusy === 'save' || (scheduleDraft.enabled && selectedLoginState && !selectedLoginState.canSchedule) || (scheduleDraft.cadence === 'weekly' && scheduleDraft.daysOfWeek.length === 0)} className="automation-primary-button" onClick={() => void saveSchedule()}>{editingScheduleId ? <Save size={15} /> : <Plus size={15} />}{editingScheduleId ? (isZh ? '保存计划' : 'Save plan') : (isZh ? '添加计划' : 'Add plan')}</button>
-            </div>
-          </div>
-
           {automationError && <p className="rounded border border-red-900/60 bg-red-950/20 px-3 py-2 text-sm text-red-200">{automationError}</p>}
 
           <div className="automation-schedule-list">
             {automation?.schedules.length ? automation.schedules.map((schedule) => (
               <article key={schedule.id} className={!schedule.enabled ? 'is-disabled' : ''}>
                 <button type="button" role="switch" aria-checked={schedule.enabled} aria-label={schedule.enabled ? (isZh ? '停用计划' : 'Disable plan') : (isZh ? '启用计划' : 'Enable plan')} className={`automation-switch ${schedule.enabled ? 'is-on' : ''}`} onClick={() => void toggleSchedule(schedule)} disabled={automationBusy === schedule.id}><span /></button>
-                <div><strong>{schedule.project}</strong><p>{schedule.cadence === 'daily' ? (isZh ? '每天' : 'Daily') : schedule.cadence === 'weekdays' ? (isZh ? '工作日' : 'Weekdays') : (isZh ? `每周 ${schedule.daysOfWeek.map((day) => '一二三四五六日'[day]).join('、')}` : `Weekly · ${schedule.daysOfWeek.join(', ')}`)} · {schedule.timeOfDay}</p><small>{isZh ? '下次：' : 'Next: '}{new Date(schedule.nextRunAt).toLocaleString(currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}</small></div>
+                <div className="automation-schedule-main">
+                  <div className="automation-schedule-title"><strong>{schedule.project}</strong><span className={schedule.estimatedMinutes > (automation?.limits?.recommendedDailyMinutes || 300) ? 'is-long' : ''}>{isZh ? `预计约 ${schedule.estimatedMinutes} 分钟` : `About ${schedule.estimatedMinutes} min`}</span></div>
+                  <p>{schedule.cadence === 'daily' ? (isZh ? '每天' : 'Daily') : schedule.cadence === 'weekdays' ? (isZh ? '工作日' : 'Weekdays') : (isZh ? `每周 ${schedule.daysOfWeek.map((day) => '一二三四五六日'[day]).join('、')}` : `Weekly · ${schedule.daysOfWeek.join(', ')}`)} · {schedule.timeOfDay}</p>
+                  <small>{schedule.keywordCount} {isZh ? '个关键词' : 'keywords'} · {schedule.cityCount} {isZh ? '个城市' : 'cities'} · {isZh ? '下次：' : 'Next: '}{new Date(schedule.nextRunAt).toLocaleString(currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}</small>
+                </div>
                 <div className="automation-row-actions"><button title={isZh ? '立即运行' : 'Run now'} onClick={() => void runSchedule(schedule)} disabled={automationBusy === schedule.id || (loginStates[schedule.project] && !loginStates[schedule.project].canSchedule)}><Play size={15} /></button><button title={isZh ? '编辑' : 'Edit'} onClick={() => editSchedule(schedule)}><Pencil size={15} /></button><button title={isZh ? '删除' : 'Delete'} onClick={() => void deleteSchedule(schedule)} disabled={automationBusy === schedule.id}><Trash2 size={15} /></button></div>
               </article>
             )) : <div className="automation-empty">{isZh ? '还没有定时计划。先选择求职目标和执行时间。' : 'No scheduled plans yet. Choose a job target and run time to begin.'}</div>}
           </div>
+          {!!longSchedules.length && <p className="automation-plan-warning is-strong">{isZh ? `${longSchedules.length} 个启用计划的单次预计采集时间超过 5 小时。不会阻止运行，但建议减少城市、关键词或目标岗位数。` : `${longSchedules.length} enabled plans are estimated to run longer than 5 hours each. They remain runnable, but reducing scope is recommended.`}</p>}
 
           {!!automation?.schedules.some((schedule) => schedule.enabled) && desktopSettings && !desktopSettings.keepRunningInTray && <p className="desktop-setting-warning">{isZh ? '已有启用的计划，但关闭窗口后应用会退出。若要在后台按时执行，请在下方开启“关闭窗口后在托盘运行”。' : 'A plan is enabled, but closing the window currently quits the app. Enable “Keep running in tray” below for reliable background runs.'}</p>}
 
           {!!automation?.runs.length && <div className="automation-history"><h3>{isZh ? '最近执行' : 'Recent runs'}</h3>{automation.runs.slice(0, 5).map((run) => <div key={run.id}><span className={`automation-run-status is-${run.status}`}>{run.status === 'succeeded' ? (isZh ? '成功' : 'Succeeded') : run.status === 'running' ? (isZh ? '运行中' : 'Running') : run.status === 'queued' ? (isZh ? '排队中' : 'Queued') : run.status === 'missed' ? (isZh ? '已错过' : 'Missed') : run.status === 'interrupted' ? (isZh ? '已中断' : 'Interrupted') : (isZh ? '失败' : 'Failed')}</span><strong>{run.project}</strong><small>{new Date(run.scheduledFor).toLocaleString(currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}</small></div>)}</div>}
         </div>
       </section>
+
+      {scheduleEditorOpen && (
+        <div className="automation-dialog-backdrop" role="presentation" onMouseDown={closeScheduleEditor}>
+          <section className="automation-dialog" role="dialog" aria-modal="true" aria-labelledby="automation-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div>
+                <h2 id="automation-dialog-title">{editingScheduleId ? (isZh ? '编辑定时采集计划' : 'Edit collection plan') : (isZh ? '新增定时采集计划' : 'New collection plan')}</h2>
+                <p>{isZh ? '设置执行时间和此计划独立使用的采集范围。' : 'Set the schedule and the collection scope stored with this plan.'}</p>
+              </div>
+              <button type="button" onClick={closeScheduleEditor} disabled={automationBusy === 'save'} aria-label={isZh ? '关闭' : 'Close'}><X size={17} /></button>
+            </header>
+            <div className="automation-dialog__body">
+              {automationError && <p className="mb-3 rounded border border-red-900/60 bg-red-950/20 px-3 py-2 text-sm text-red-200">{automationError}</p>}
+              <div className="automation-editor">
+                <div className="automation-form-grid">
+                  <div className="automation-field">
+                    <span>{isZh ? '求职目标' : 'Job target'}</span>
+                    <CompactSelect
+                      value={scheduleDraft.project}
+                      options={projects.map((project) => ({ value: project, label: project }))}
+                      onChange={(project) => setScheduleDraft({ ...scheduleDraft, project, keywordsText: '', citiesText: '' })}
+                      ariaLabel={isZh ? '选择求职目标' : 'Select job target'}
+                      placeholder={isZh ? '请选择求职目标' : 'Choose a job target'}
+                    />
+                  </div>
+                  <div className="automation-field">
+                    <span>{isZh ? '执行频率' : 'Frequency'}</span>
+                    <CompactSelect
+                      value={scheduleDraft.cadence}
+                      options={[
+                        { value: 'daily', label: isZh ? '每天' : 'Daily' },
+                        { value: 'weekdays', label: isZh ? '工作日' : 'Weekdays' },
+                        { value: 'weekly', label: isZh ? '每周' : 'Weekly' },
+                      ]}
+                      onChange={(cadence) => setScheduleDraft({ ...scheduleDraft, cadence, daysOfWeek: [] })}
+                      ariaLabel={isZh ? '选择执行频率' : 'Select frequency'}
+                    />
+                  </div>
+                  <label><span>{isZh ? '开始时间' : 'Start time'}</span><input type="time" value={scheduleDraft.timeOfDay} onChange={(event) => setScheduleDraft({ ...scheduleDraft, timeOfDay: event.target.value })} /></label>
+                  <div className="automation-field">
+                    <span>{isZh ? '错过后处理' : 'If missed'}</span>
+                    <CompactSelect
+                      value={scheduleDraft.misfirePolicy}
+                      options={[
+                        { value: 'run_once', label: isZh ? '启动后补跑一次' : 'Catch up once' },
+                        { value: 'skip', label: isZh ? '跳过本次' : 'Skip this run' },
+                      ]}
+                      onChange={(misfirePolicy) => setScheduleDraft({ ...scheduleDraft, misfirePolicy })}
+                      ariaLabel={isZh ? '选择错过后的处理方式' : 'Select missed-run policy'}
+                    />
+                  </div>
+                </div>
+                {scheduleDraft.cadence === 'weekly' && (
+                  <div className="automation-weekdays" aria-label={isZh ? '每周执行日' : 'Weekly run days'}>
+                    {(isZh ? ['一', '二', '三', '四', '五', '六', '日'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']).map((label, day) => <button key={label} type="button" className={scheduleDraft.daysOfWeek.includes(day) ? 'is-active' : ''} onClick={() => setScheduleDraft({ ...scheduleDraft, daysOfWeek: scheduleDraft.daysOfWeek.includes(day) ? scheduleDraft.daysOfWeek.filter((item) => item !== day) : [...scheduleDraft.daysOfWeek, day].sort() })}>{label}</button>)}
+                  </div>
+                )}
+                <div className="automation-collection-scope">
+                  <div className="automation-collection-scope__heading">
+                    <div><strong>{isZh ? '此计划的采集范围' : 'Collection scope for this plan'}</strong><span>{isZh ? '新建时复制求职目标当前配置，保存后独立维护。' : 'The current target config is copied once and then stored independently.'}</span></div>
+                    <b>{draftEstimate.estimatedMinutes
+                      ? (isZh ? `预计约 ${draftEstimate.estimatedMinutes} 分钟` : `About ${draftEstimate.estimatedMinutes} min`)
+                      : (isZh ? '请填写关键词和城市' : 'Add keywords and cities')}</b>
+                  </div>
+                  {draftEstimate.estimatedMinutes > (automation?.limits?.recommendedDailyMinutes || 300) && <p className="automation-plan-warning is-strong">{isZh ? '本计划单次预计超过 5 小时。可以继续保存，但建议缩小采集范围。' : 'This run is estimated to exceed 5 hours. You can save it, but reducing the scope is recommended.'}</p>}
+                  <div className="automation-collection-scope__grid">
+                    <KeywordInput
+                      value={scheduleDraft.keywordsText}
+                      onChange={(keywordsText) => setScheduleDraft({ ...scheduleDraft, keywordsText })}
+                      label={isZh ? '采集关键词' : 'Keywords'}
+                      addLabel={isZh ? '添加关键词' : 'Add keyword'}
+                      inputPlaceholder={isZh ? '输入关键词后回车' : 'Type a keyword and press Enter'}
+                      emptyLabel={isZh ? '还没有添加关键词' : 'No keywords added yet'}
+                    />
+                    <div className="automation-collection-limits">
+                      <label><span>{isZh ? '获取新岗位数量' : 'New jobs target'}</span><input type="number" min={1} max={5000} value={scheduleDraft.newJobTarget} onChange={(event) => setScheduleDraft({ ...scheduleDraft, newJobTarget: Math.max(1, Number(event.target.value) || 1) })} /></label>
+                      <label><span>{isZh ? '最大获取岗位数量' : 'Maximum jobs inspected'}</span><input type="number" min={1} max={5000} value={scheduleDraft.maxJobs} onChange={(event) => setScheduleDraft({ ...scheduleDraft, maxJobs: Math.max(1, Number(event.target.value) || 1) })} /></label>
+                      <small>{isZh ? `${draftEstimate.keywordCount} 个关键词 × ${draftEstimate.cityCount} 个城市 = ${draftEstimate.combinationCount} 组；任一条件先满足即停止。预计查看 ${draftEstimate.estimatedListedJobs} 条列表、读取 ${draftEstimate.estimatedDetailJobs} 条详情，复用 ${draftEstimate.estimatedReusedJobs} 条已有岗位。` : `${draftEstimate.keywordCount} keywords × ${draftEstimate.cityCount} cities = ${draftEstimate.combinationCount} searches. The first reached limit stops collection; about ${draftEstimate.estimatedListedJobs} listings inspected, ${draftEstimate.estimatedDetailJobs} detail reads, and ${draftEstimate.estimatedReusedJobs} known jobs reused.`}</small>
+                    </div>
+                  </div>
+                  <CitySelector value={scheduleDraft.citiesText} onChange={(citiesText) => setScheduleDraft({ ...scheduleDraft, citiesText })} showAdvanced={false} compact />
+                </div>
+                {scheduleDraft.misfirePolicy === 'run_once' && <label className="automation-delay"><span>{isZh ? '最长补跑延迟（分钟）' : 'Maximum catch-up delay (minutes)'}</span><input type="number" min={0} max={10080} value={scheduleDraft.maxDelayMinutes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, maxDelayMinutes: Math.max(0, Number(event.target.value) || 0) })} /></label>}
+              </div>
+            </div>
+            <footer>
+              <button type="button" className="automation-secondary-button" onClick={closeScheduleEditor}>{isZh ? '取消' : 'Cancel'}</button>
+              <button type="button" disabled={!scheduleDraft.project || !scheduleDraft.keywordsText.trim() || !scheduleDraft.citiesText.trim() || automationBusy === 'save' || (!editingScheduleId && (automation?.schedules.length || 0) >= (automation?.limits?.maxSchedules || 10)) || (scheduleDraft.enabled && selectedLoginState && !selectedLoginState.canSchedule) || (scheduleDraft.cadence === 'weekly' && scheduleDraft.daysOfWeek.length === 0)} className="automation-primary-button" onClick={() => void saveSchedule()}>{editingScheduleId ? <Save size={15} /> : <Plus size={15} />}{automationBusy === 'save' ? (isZh ? '保存中…' : 'Saving…') : editingScheduleId ? (isZh ? '保存计划' : 'Save plan') : (isZh ? '添加计划' : 'Add plan')}</button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950">
         <div className="border-b border-zinc-800 p-5">

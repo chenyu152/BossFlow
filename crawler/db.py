@@ -1,12 +1,14 @@
 """SQLite storage for crawled BOSS jobs."""
 import datetime
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Iterable
 
 
 DEFAULT_DB_FILE = Path('jobs_data.db')
+JOB_DETAIL_ID_RE = re.compile(r'/job_detail/([^/?#]+)\.html')
 
 
 def _json_dumps(value) -> str:
@@ -83,6 +85,77 @@ def init_db(conn: sqlite3.Connection):
 
 def _job_key(job: dict) -> str:
     return str(job.get('_key') or '').strip()
+
+
+def _encrypt_job_id(url: str) -> str:
+    match = JOB_DETAIL_ID_RE.search(str(url or '').strip())
+    return match.group(1) if match else ''
+
+
+def load_existing_job_index(db_file=None) -> dict:
+    """Load lightweight identities used to skip detail reads for known jobs."""
+    conn = connect(db_file)
+    try:
+        rows = conn.execute(
+            'SELECT id, job_key, url, raw_json FROM jobs'
+        ).fetchall()
+    finally:
+        conn.close()
+
+    by_encrypt_id: dict[str, int] = {}
+    by_job_key: dict[str, int] = {}
+    for row in rows:
+        row_id = int(row['id'])
+        job_key = str(row['job_key'] or '').strip()
+        if job_key:
+            by_job_key[job_key] = row_id
+
+        encrypt_id = _encrypt_job_id(row['url'])
+        if not encrypt_id and row['raw_json']:
+            try:
+                raw = json.loads(row['raw_json'])
+            except (TypeError, json.JSONDecodeError):
+                raw = {}
+            encrypt_id = str(raw.get('encrypt_job_id') or '').strip()
+            if not encrypt_id:
+                encrypt_id = _encrypt_job_id(raw.get('url'))
+        if encrypt_id:
+            by_encrypt_id[encrypt_id] = row_id
+
+    return {
+        'by_encrypt_id': by_encrypt_id,
+        'by_job_key': by_job_key,
+        'job_count': len(rows),
+    }
+
+
+def touch_existing_jobs(job_ids: Iterable[int], db_file=None) -> int:
+    """Refresh last-seen dates without pretending saved details were re-fetched."""
+    normalized_ids = sorted({int(job_id) for job_id in job_ids if int(job_id) > 0})
+    if not normalized_ids:
+        return 0
+
+    today = datetime.date.today().isoformat()
+    conn = connect(db_file)
+    updated = 0
+    try:
+        # Keep below SQLite's default parameter limit.
+        for offset in range(0, len(normalized_ids), 500):
+            batch = normalized_ids[offset:offset + 500]
+            placeholders = ','.join('?' for _ in batch)
+            cursor = conn.execute(
+                f'''
+                    UPDATE jobs
+                    SET last_seen = ?, is_new = 0
+                    WHERE id IN ({placeholders})
+                ''',
+                (today, *batch),
+            )
+            updated += max(0, int(cursor.rowcount or 0))
+        conn.commit()
+    finally:
+        conn.close()
+    return updated
 
 
 def upsert_jobs(jobs: Iterable[dict], db_file=None) -> dict:
@@ -202,7 +275,7 @@ def save_run(db_file=None, **kwargs):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             kwargs.get('started_at'),
-            kwargs.get('finished_at') or datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+            kwargs.get('finished_at') or datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             _json_dumps(kwargs.get('keywords')),
             _json_dumps(kwargs.get('cities')),
             kwargs.get('mode') or '',

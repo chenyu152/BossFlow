@@ -871,7 +871,7 @@
     "help": "帮助引导",
     "tour": {
       "keywordsTitle": "填写采集关键词",
-      "keywordsBody": "每行填写一个想搜索的岗位名称。新方向会自动带入方向名称，你可以补充同类岗位称呼。",
+      "keywordsBody": "点击“添加关键词”输入想搜索的岗位名称，已添加的关键词会显示为可移除的气泡；新方向会自动带入方向名称，你可以补充同类岗位称呼。",
       "citiesTitle": "选择采集城市",
       "citiesBody": "点击城市快捷选择，系统会自动填入对应城市代码。城市由你决定，避免系统替你猜测求职地点。",
       "saveTitle": "保存后开始下一步",
@@ -915,8 +915,8 @@
       "advancedHint": "仅在需要使用自定义代码或排查配置时编辑；常规使用请通过上方城市选择器操作。"
     },
     "scrapingLimits": "抓取上限",
-    "scrollTargetCount": "获取岗位目标条目",
-    "maxScrollAttempts": "最大滚动次数"
+    "scrollTargetCount": "获取新岗位数量",
+    "maxScrollAttempts": "最大获取岗位数量"
   },
   "rules": {
     "title": "匹配与评分配置",

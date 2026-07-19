@@ -3,9 +3,11 @@ import { NumberField } from '../components/NumberField';
 import { useAppTranslation } from '../i18n';
 import type { ConfigPatch, ConfigPayload } from '../types';
 import { OptionToggle } from '../components/OptionToggle';
-import { CircleHelp, PlayCircle, RefreshCw } from 'lucide-react';
+import { KeywordInput } from '../components/KeywordInput';
+import { CircleHelp, Clock3, PlayCircle, RefreshCw } from 'lucide-react';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { useEffect, useMemo, useState } from 'react';
+import { collectionEstimate } from '../utils/collectionEstimate';
 
 export function Scope({
   config,
@@ -28,7 +30,8 @@ export function Scope({
   onAutoStartGuideHandled: () => void;
   onGuideComplete: () => void;
 }) {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
+  const isZh = (i18n.resolvedLanguage || i18n.language).startsWith('zh');
   const [guideStep, setGuideStep] = useState<number | null>(null);
   const [guideSaving, setGuideSaving] = useState(false);
   const [guideError, setGuideError] = useState('');
@@ -37,6 +40,13 @@ export function Scope({
     { target: 'scope-cities', title: t('scope.tour.citiesTitle'), body: t('scope.tour.citiesBody') },
     { target: 'scope-save', title: t('scope.tour.saveTitle'), body: t('scope.tour.saveBody') },
   ], [t]);
+  const estimate = useMemo(() => collectionEstimate({
+    keywordsText: config.keywordsText,
+    citiesText: config.citiesText,
+    newJobTarget: config.newJobTarget,
+    maxJobs: config.maxJobs,
+    existingJobCount: config.jobCount,
+  }), [config.citiesText, config.jobCount, config.keywordsText, config.maxJobs, config.newJobTarget]);
 
   useEffect(() => {
     if (!autoStartGuide) return;
@@ -84,6 +94,21 @@ export function Scope({
         </div>
       </div>
 
+      <div className="scope-estimate">
+        <span><Clock3 size={16} /></span>
+        <div>
+          <strong>{isZh ? '本次手动采集预计耗时' : 'Estimated manual collection time'}</strong>
+          <small>{estimate.combinationCount
+            ? (isZh
+                ? `${estimate.keywordCount} 个关键词 × ${estimate.cityCount} 个城市，共 ${estimate.combinationCount} 组；预计读取 ${estimate.estimatedDetailJobs} 条详情，复用 ${estimate.estimatedReusedJobs} 条已有岗位`
+                : `${estimate.keywordCount} keywords × ${estimate.cityCount} cities, ${estimate.combinationCount} searches; about ${estimate.estimatedDetailJobs} detail reads and ${estimate.estimatedReusedJobs} known jobs reused`)
+            : (isZh ? '填写关键词和城市后显示估算' : 'Add keywords and cities to calculate an estimate')}</small>
+        </div>
+        <b>{estimate.estimatedMinutes
+          ? (isZh ? `约 ${estimate.estimatedMinutes} 分钟` : `About ${estimate.estimatedMinutes} min`)
+          : '—'}</b>
+      </div>
+
       <div className="grid grid-cols-1 gap-5 flex-1 xl:grid-cols-2 xl:gap-6">
         <div className="space-y-6">
           <section className="scope-card border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
@@ -111,14 +136,13 @@ export function Scope({
           </section>
 
           <div data-guide-target="scope-keywords" className="scope-field-group">
-            <label className="block text-sm font-medium text-zinc-300 mb-2 flex items-center justify-between">
-              {t('scope.keywords')}
-              <span className="text-xs text-zinc-500 font-normal">{t('scope.onePerLine')}</span>
-            </label>
-            <textarea
-              className="w-full h-32 bg-zinc-900/50 border border-zinc-800 rounded-md p-3 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono resize-none"
+            <KeywordInput
               value={config.keywordsText}
-              onChange={(event) => updateConfig({ keywordsText: event.target.value })}
+              onChange={(keywordsText) => updateConfig({ keywordsText })}
+              label={t('scope.keywords')}
+              addLabel={isZh ? '添加关键词' : 'Add keyword'}
+              inputPlaceholder={isZh ? '输入关键词后回车' : 'Type a keyword and press Enter'}
+              emptyLabel={isZh ? '还没有添加关键词' : 'No keywords added yet'}
             />
           </div>
 
@@ -128,8 +152,8 @@ export function Scope({
           <div className="scope-card border border-zinc-800 bg-zinc-900/30 rounded-md p-5">
             <h3 className="text-sm font-semibold text-zinc-100 mb-5 border-b border-zinc-800 pb-3">{t('scope.scrapingLimits')}</h3>
             <div className="space-y-5">
-              <NumberField label={t('scope.scrollTargetCount')} value={config.scrollTarget} onChange={(value) => updateConfig({ scrollTarget: value })} />
-              <NumberField label={t('scope.maxScrollAttempts')} value={config.scrollMax} onChange={(value) => updateConfig({ scrollMax: value })} />
+              <NumberField label={t('scope.scrollTargetCount')} value={config.newJobTarget} onChange={(value) => updateConfig({ newJobTarget: value })} />
+              <NumberField label={t('scope.maxScrollAttempts')} value={config.maxJobs} onChange={(value) => updateConfig({ maxJobs: value })} />
             </div>
           </div>
 

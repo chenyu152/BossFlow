@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import sqlite3
 import threading
 import uuid
@@ -13,7 +14,7 @@ from fastapi import HTTPException
 
 from backend.schemas.automation import AutomationScheduleInput
 from backend.schemas.config import CrawlRequest
-from backend.services.project_service import config_payload, resolve_project
+from backend.services.project_service import config_payload, resolve_project, text_to_cities
 from backend.services.login_state_service import login_state
 from backend.services.task_service import TaskManager
 from backend.storage.paths import BASE_DIR
@@ -21,6 +22,8 @@ from backend.storage.paths import BASE_DIR
 
 CrawlStarter = Callable[..., dict]
 LoginStateReader = Callable[[str], dict]
+MAX_AUTOMATION_SCHEDULES = 10
+RECOMMENDED_DAILY_AUTOMATION_MINUTES = 5 * 60
 
 
 def _now() -> dt.datetime:
@@ -52,6 +55,110 @@ def _next_occurrence(
         if cadence == "daily" or candidate.weekday() in allowed_days:
             return candidate
     raise ValueError("Unable to calculate the next scheduled run")
+
+
+def _schedule_days(cadence: str, days_of_week: list[int]) -> set[int]:
+    if cadence == "daily":
+        return set(range(7))
+    if cadence == "weekdays":
+        return set(range(5))
+    return set(days_of_week)
+
+
+def _schedule_signature(
+    project: str,
+    cadence: str,
+    time_of_day: str,
+    days_of_week: list[int],
+    keywords_text: str,
+    cities_text: str,
+    new_job_target: int,
+    max_jobs: int,
+) -> tuple[str, str, tuple[int, ...], tuple[str, ...], tuple[str, ...], int, int]:
+    normalized_days = tuple(sorted(_schedule_days(cadence, days_of_week)))
+    normalized_keywords = tuple(
+        sorted({line.strip().casefold() for line in keywords_text.splitlines() if line.strip()})
+    )
+    normalized_cities = tuple(
+        sorted({line.strip().casefold() for line in cities_text.splitlines() if line.strip()})
+    )
+    return (
+        project,
+        time_of_day,
+        normalized_days,
+        normalized_keywords,
+        normalized_cities,
+        int(new_job_target),
+        int(max_jobs),
+    )
+
+
+def _collection_estimate(
+    keywords_text: str,
+    cities_text: str,
+    new_job_target: int,
+    max_jobs: int,
+    existing_job_count: int = 0,
+) -> dict:
+    keyword_count = len({line.strip().casefold() for line in keywords_text.splitlines() if line.strip()})
+    city_count = len({line.strip().casefold() for line in cities_text.splitlines() if line.strip()})
+    combinations = keyword_count * city_count
+    if not combinations:
+        return {
+            "keywordCount": keyword_count,
+            "cityCount": city_count,
+            "combinationCount": combinations,
+            "estimatedListedJobs": 0,
+            "estimatedDetailJobs": 0,
+            "estimatedReusedJobs": 0,
+            "estimatedStopCondition": "new_job_target",
+            "estimatedMinutes": 0,
+            "estimatedRangeMinutes": [0, 0],
+        }
+
+    new_target = max(1, int(new_job_target))
+    total_limit = max(1, int(max_jobs))
+    new_job_ratio = 1.0 if existing_job_count <= 0 else 0.27
+    listed_to_reach_new_target = math.ceil(new_target / new_job_ratio)
+    estimated_listed_per_search = min(total_limit, listed_to_reach_new_target)
+    estimated_scroll_rounds = max(1, math.ceil(estimated_listed_per_search / 20))
+    # The captured run found 13 database-new rows among 48 observed rows. Reuse
+    # that 27% discovery rate once the project already has collection history.
+    estimated_listed_jobs = estimated_listed_per_search * combinations
+    estimated_detail_per_search = min(
+        estimated_listed_per_search,
+        math.ceil(estimated_listed_per_search * new_job_ratio),
+    )
+    estimated_detail_jobs = estimated_detail_per_search * combinations
+    estimated_reused_jobs = max(0, estimated_listed_jobs - estimated_detail_jobs)
+    # The same run took about 33 seconds for two list searches and averaged
+    # about 8.7 seconds per detail page that could not be reused.
+    seconds = (
+        12
+        + combinations * (10 + estimated_scroll_rounds * 4)
+        + estimated_detail_jobs * 8.7
+        + keyword_count * 2
+        + city_count * 3
+    )
+    estimated = max(1, math.ceil(seconds / 60))
+    return {
+        "keywordCount": keyword_count,
+        "cityCount": city_count,
+        "combinationCount": combinations,
+        "estimatedListedJobs": estimated_listed_jobs,
+        "estimatedDetailJobs": estimated_detail_jobs,
+        "estimatedReusedJobs": estimated_reused_jobs,
+        "estimatedStopCondition": (
+            "new_job_target"
+            if listed_to_reach_new_target <= total_limit
+            else "max_jobs"
+        ),
+        "estimatedMinutes": estimated,
+        "estimatedRangeMinutes": [
+            max(1, math.floor(estimated * 0.9)),
+            max(1, math.ceil(estimated * 1.15)),
+        ],
+    }
 
 
 class AutomationService:
@@ -102,6 +209,10 @@ class AutomationService:
                     days_of_week TEXT NOT NULL DEFAULT '[]',
                     misfire_policy TEXT NOT NULL DEFAULT 'run_once',
                     max_delay_minutes INTEGER NOT NULL DEFAULT 360,
+                    keywords_text TEXT NOT NULL DEFAULT '',
+                    cities_text TEXT NOT NULL DEFAULT '',
+                    new_job_target INTEGER NOT NULL DEFAULT 20,
+                    max_jobs INTEGER NOT NULL DEFAULT 100,
                     next_run_at TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -124,6 +235,57 @@ class AutomationService:
                     ON automation_runs(schedule_id, created_at DESC);
                 """
             )
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(automation_schedules)").fetchall()
+            }
+            migrations = {
+                "keywords_text": "ALTER TABLE automation_schedules ADD COLUMN keywords_text TEXT NOT NULL DEFAULT ''",
+                "cities_text": "ALTER TABLE automation_schedules ADD COLUMN cities_text TEXT NOT NULL DEFAULT ''",
+                "new_job_target": "ALTER TABLE automation_schedules ADD COLUMN new_job_target INTEGER NOT NULL DEFAULT 20",
+                "max_jobs": "ALTER TABLE automation_schedules ADD COLUMN max_jobs INTEGER NOT NULL DEFAULT 100",
+            }
+            added_collection_limits = (
+                "new_job_target" not in columns or "max_jobs" not in columns
+            )
+            for column, statement in migrations.items():
+                if column not in columns:
+                    connection.execute(statement)
+            if added_collection_limits and "scroll_target" in columns:
+                connection.execute(
+                    """
+                    UPDATE automation_schedules
+                    SET new_job_target = 20,
+                        max_jobs = 100
+                    """
+                )
+
+            legacy_rows = connection.execute(
+                """
+                SELECT id, project FROM automation_schedules
+                WHERE keywords_text = '' OR cities_text = ''
+                """
+            ).fetchall()
+            for row in legacy_rows:
+                try:
+                    payload = config_payload(resolve_project(str(row["project"])))
+                except Exception:
+                    continue
+                connection.execute(
+                    """
+                    UPDATE automation_schedules
+                    SET keywords_text = ?, cities_text = ?,
+                        new_job_target = ?, max_jobs = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        str(payload.get("keywordsText") or ""),
+                        str(payload.get("citiesText") or ""),
+                        int(payload.get("newJobTarget") or 20),
+                        int(payload.get("maxJobs") or 100),
+                        row["id"],
+                    ),
+                )
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -163,6 +325,22 @@ class AutomationService:
         self._dispatch_next()
 
     def _schedule_dict(self, row: sqlite3.Row, last_run: Optional[sqlite3.Row] = None) -> dict:
+        existing_job_count = 0
+        try:
+            project_db = Path(resolve_project(str(row["project"]))) / "jobs_data.db"
+            if project_db.exists():
+                with sqlite3.connect(project_db) as project_connection:
+                    result = project_connection.execute("SELECT COUNT(*) FROM jobs").fetchone()
+                    existing_job_count = int(result[0] or 0) if result else 0
+        except sqlite3.Error:
+            existing_job_count = 0
+        estimate = _collection_estimate(
+            str(row["keywords_text"] or ""),
+            str(row["cities_text"] or ""),
+            int(row["new_job_target"] or 20),
+            int(row["max_jobs"] or 100),
+            existing_job_count,
+        )
         return {
             "id": row["id"],
             "project": row["project"],
@@ -172,6 +350,11 @@ class AutomationService:
             "daysOfWeek": json.loads(row["days_of_week"] or "[]"),
             "misfirePolicy": row["misfire_policy"],
             "maxDelayMinutes": int(row["max_delay_minutes"]),
+            "keywordsText": row["keywords_text"],
+            "citiesText": row["cities_text"],
+            "newJobTarget": int(row["new_job_target"]),
+            "maxJobs": int(row["max_jobs"]),
+            **estimate,
             "nextRunAt": row["next_run_at"],
             "lastRunStatus": last_run["status"] if last_run else "",
             "lastRunAt": (last_run["finished_at"] or last_run["started_at"] or last_run["created_at"]) if last_run else "",
@@ -235,10 +418,15 @@ class AutomationService:
                 "schedulerRunning": bool(self.thread and self.thread.is_alive()),
                 "lastError": self.last_error,
             },
+            "limits": {
+                "maxSchedules": MAX_AUTOMATION_SCHEDULES,
+                "recommendedDailyMinutes": RECOMMENDED_DAILY_AUTOMATION_MINUTES,
+            },
         }
 
     def create_schedule(self, payload: AutomationScheduleInput) -> dict:
         resolve_project(payload.project)
+        payload = self._materialize_collection_config(payload)
         if payload.enabled:
             self._require_login(payload.project)
         current = _now()
@@ -248,12 +436,14 @@ class AutomationService:
             _next_occurrence(payload.cadence, payload.timeOfDay, payload.daysOfWeek, current)
         )
         with self.lock, self._connect() as connection:
+            self._validate_schedule(connection, payload)
             connection.execute(
                 """
                 INSERT INTO automation_schedules (
                     id, project, enabled, cadence, time_of_day, days_of_week,
-                    misfire_policy, max_delay_minutes, next_run_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    misfire_policy, max_delay_minutes, keywords_text, cities_text,
+                    new_job_target, max_jobs, next_run_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     schedule_id,
@@ -264,6 +454,10 @@ class AutomationService:
                     json.dumps(payload.daysOfWeek),
                     payload.misfirePolicy,
                     payload.maxDelayMinutes,
+                    payload.keywordsText,
+                    payload.citiesText,
+                    payload.newJobTarget,
+                    payload.maxJobs,
                     next_run_at,
                     timestamp,
                     timestamp,
@@ -276,6 +470,7 @@ class AutomationService:
 
     def update_schedule(self, schedule_id: str, payload: AutomationScheduleInput) -> dict:
         resolve_project(payload.project)
+        payload = self._materialize_collection_config(payload)
         if payload.enabled:
             self._require_login(payload.project)
         current = _now()
@@ -289,11 +484,14 @@ class AutomationService:
             ).fetchone()
             if not existing:
                 raise HTTPException(status_code=404, detail="Automation schedule not found")
+            self._validate_schedule(connection, payload, exclude_schedule_id=schedule_id)
             connection.execute(
                 """
                 UPDATE automation_schedules
                 SET project = ?, enabled = ?, cadence = ?, time_of_day = ?, days_of_week = ?,
-                    misfire_policy = ?, max_delay_minutes = ?, next_run_at = ?, updated_at = ?
+                    misfire_policy = ?, max_delay_minutes = ?, keywords_text = ?,
+                    cities_text = ?, new_job_target = ?, max_jobs = ?,
+                    next_run_at = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -304,6 +502,10 @@ class AutomationService:
                     json.dumps(payload.daysOfWeek),
                     payload.misfirePolicy,
                     payload.maxDelayMinutes,
+                    payload.keywordsText,
+                    payload.citiesText,
+                    payload.newJobTarget,
+                    payload.maxJobs,
                     next_run_at,
                     timestamp,
                     schedule_id,
@@ -317,6 +519,76 @@ class AutomationService:
                 (schedule_id,),
             ).fetchone()
             return self._schedule_dict(row, last_run)
+
+    @staticmethod
+    def _materialize_collection_config(payload: AutomationScheduleInput) -> AutomationScheduleInput:
+        has_keywords = bool(payload.keywordsText.strip())
+        has_cities = bool(payload.citiesText.strip())
+        if has_keywords and has_cities:
+            try:
+                cities = text_to_cities(payload.citiesText)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+            if not cities:
+                raise HTTPException(status_code=400, detail="Scheduled collection requires at least one city.")
+            return payload
+        if has_keywords != has_cities:
+            raise HTTPException(
+                status_code=400,
+                detail="Scheduled collection requires both keywords and cities.",
+            )
+        current = config_payload(resolve_project(payload.project))
+        return payload.model_copy(
+            update={
+                "keywordsText": str(current.get("keywordsText") or ""),
+                "citiesText": str(current.get("citiesText") or ""),
+                "newJobTarget": int(current.get("newJobTarget") or payload.newJobTarget),
+                "maxJobs": int(current.get("maxJobs") or payload.maxJobs),
+            }
+        )
+
+    def _validate_schedule(
+        self,
+        connection: sqlite3.Connection,
+        payload: AutomationScheduleInput,
+        exclude_schedule_id: str = "",
+    ) -> None:
+        rows = connection.execute(
+            "SELECT * FROM automation_schedules WHERE id != ? ORDER BY created_at, id",
+            (exclude_schedule_id,),
+        ).fetchall()
+        if not exclude_schedule_id and len(rows) >= MAX_AUTOMATION_SCHEDULES:
+            raise HTTPException(
+                status_code=409,
+                detail=f"At most {MAX_AUTOMATION_SCHEDULES} automation schedules can be created.",
+            )
+
+        payload_signature = _schedule_signature(
+            payload.project,
+            payload.cadence,
+            payload.timeOfDay,
+            payload.daysOfWeek,
+            payload.keywordsText,
+            payload.citiesText,
+            payload.newJobTarget,
+            payload.maxJobs,
+        )
+        for row in rows:
+            row_days = json.loads(row["days_of_week"] or "[]")
+            if payload_signature == _schedule_signature(
+                str(row["project"]),
+                str(row["cadence"]),
+                str(row["time_of_day"]),
+                row_days,
+                str(row["keywords_text"] or ""),
+                str(row["cities_text"] or ""),
+                int(row["new_job_target"] or 20),
+                int(row["max_jobs"] or 100),
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="An identical automation schedule already exists. Edit or re-enable the existing schedule instead.",
+                )
 
     def delete_schedule(self, schedule_id: str) -> dict:
         with self.lock, self._connect() as connection:
@@ -401,7 +673,49 @@ class AutomationService:
                 lateness_minutes = max(0, int((current - due_at).total_seconds() // 60))
                 should_skip = schedule["misfire_policy"] == "skip" or lateness_minutes > int(schedule["max_delay_minutes"])
                 if not active:
-                    if should_skip:
+                    duplicate_rows = connection.execute(
+                        """
+                        SELECT candidate.*
+                        FROM automation_runs AS run
+                        JOIN automation_schedules AS candidate ON candidate.id = run.schedule_id
+                        WHERE run.status IN ('queued', 'running') AND run.scheduled_for = ?
+                        """,
+                        (_iso(due_at),),
+                    ).fetchall()
+                    signature = _schedule_signature(
+                        str(schedule["project"]),
+                        str(schedule["cadence"]),
+                        str(schedule["time_of_day"]),
+                        json.loads(schedule["days_of_week"] or "[]"),
+                        str(schedule["keywords_text"] or ""),
+                        str(schedule["cities_text"] or ""),
+                        int(schedule["new_job_target"] or 20),
+                        int(schedule["max_jobs"] or 100),
+                    )
+                    is_legacy_duplicate = any(
+                        candidate["id"] != schedule["id"]
+                        and signature == _schedule_signature(
+                            str(candidate["project"]),
+                            str(candidate["cadence"]),
+                            str(candidate["time_of_day"]),
+                            json.loads(candidate["days_of_week"] or "[]"),
+                            str(candidate["keywords_text"] or ""),
+                            str(candidate["cities_text"] or ""),
+                            int(candidate["new_job_target"] or 20),
+                            int(candidate["max_jobs"] or 100),
+                        )
+                        for candidate in duplicate_rows
+                    )
+                    if is_legacy_duplicate:
+                        self._insert_run(
+                            connection,
+                            schedule,
+                            due_at,
+                            "schedule",
+                            "missed",
+                            "An identical legacy schedule was already queued; duplicate run suppressed.",
+                        )
+                    elif should_skip:
                         self._insert_run(
                             connection,
                             schedule,
@@ -423,14 +737,15 @@ class AutomationService:
                     (_iso(next_run), _iso(current), schedule["id"]),
                 )
 
-    def _crawl_payload(self, project: str) -> CrawlRequest:
+    def _crawl_payload(self, schedule: sqlite3.Row) -> CrawlRequest:
+        project = str(schedule["project"])
         payload = config_payload(resolve_project(project))
         return CrawlRequest(
             project=project,
-            keywordsText=payload["keywordsText"],
-            citiesText=payload["citiesText"],
-            scrollTarget=payload["scrollTarget"],
-            scrollMax=payload["scrollMax"],
+            keywordsText=str(schedule["keywords_text"]),
+            citiesText=str(schedule["cities_text"]),
+            newJobTarget=int(schedule["new_job_target"]),
+            maxJobs=int(schedule["max_jobs"]),
             minSalary=payload["minSalary"],
             headlessMode=payload["headlessMode"],
             autoSqlite=payload["autoSqlite"],
@@ -438,6 +753,7 @@ class AutomationService:
             scoringRulesText=payload["scoringRulesText"],
             relevanceText=payload["relevanceText"],
             blacklistText=payload["blacklistText"],
+            persistConfig=False,
         )
 
     def _dispatch_next(self) -> None:
@@ -461,6 +777,20 @@ class AutomationService:
             )
             run_id = run["id"]
             project = run["project"]
+            schedule = connection.execute(
+                "SELECT * FROM automation_schedules WHERE id = ?",
+                (run["schedule_id"],),
+            ).fetchone()
+            if not schedule:
+                connection.execute(
+                    """
+                    UPDATE automation_runs
+                    SET status = 'failed', finished_at = ?, error = ?
+                    WHERE id = ?
+                    """,
+                    (_iso(_now()), "Automation schedule no longer exists.", run_id),
+                )
+                return
 
         try:
             self._require_login(project)
@@ -477,7 +807,7 @@ class AutomationService:
                 from backend.services.crawler_service import start_crawl_task
 
                 starter = start_crawl_task
-            starter(self._crawl_payload(project), self.task_manager, on_complete=on_complete)
+            starter(self._crawl_payload(schedule), self.task_manager, on_complete=on_complete)
         except HTTPException as error:
             if error.status_code == 409:
                 with self.lock, self._connect() as connection:

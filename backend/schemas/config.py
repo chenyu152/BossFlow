@@ -10,8 +10,8 @@ class ConfigUpdate(BaseModel):
     project: Optional[str] = None
     keywordsText: str = ""
     citiesText: str = ""
-    scrollTarget: int = Field(default=20, ge=1, le=5000)
-    scrollMax: int = Field(default=60, ge=1, le=1000)
+    newJobTarget: int = Field(default=20, ge=1, le=5000)
+    maxJobs: int = Field(default=100, ge=1, le=5000)
     minSalary: float = Field(default=MIN_AVG_SALARY_K, ge=0)
     headlessMode: bool = True
     autoSqlite: bool = True
@@ -22,7 +22,7 @@ class ConfigUpdate(BaseModel):
 
 
 class CrawlRequest(ConfigUpdate):
-    pass
+    persistConfig: bool = True
 
 
 class ProcessPartialRequest(ConfigUpdate):
