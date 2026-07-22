@@ -13,6 +13,7 @@ import {
   Inbox,
   MessageSquareText,
   LayoutDashboard,
+  ListPlus,
   Play,
   PanelsTopLeft,
   Plus,
@@ -30,6 +31,7 @@ import { ThemePicker } from './components/ThemePicker';
 import { GuidedTour } from './components/GuidedTour';
 import { CitySelector } from './components/CitySelector';
 import { useBossSpider } from './hooks/useBossSpider';
+import { bossApi } from './api';
 import { buildTemplateSeed, JOB_DIRECTION_TEMPLATES, type JobDirectionTemplate } from './jobTemplates';
 import type { DashboardTaskTarget } from './pages/Dashboard';
 import type { ResumeNavigationTarget, Tab } from './types';
@@ -40,6 +42,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ def
 const Evidence = lazy(() => import('./pages/Evidence').then((module) => ({ default: module.Evidence })));
 const Interview = lazy(() => import('./pages/Interview').then((module) => ({ default: module.Interview })));
 const Jobs = lazy(() => import('./pages/Jobs').then((module) => ({ default: module.Jobs })));
+const AccountActivity = lazy(() => import('./pages/AccountActivity').then((module) => ({ default: module.AccountActivity })));
 const Logs = lazy(() => import('./pages/Logs').then((module) => ({ default: module.Logs })));
 const Pipeline = lazy(() => import('./pages/Pipeline').then((module) => ({ default: module.Pipeline })));
 const PersonalResume = lazy(() => import('./pages/PersonalResume').then((module) => ({ default: module.PersonalResume })));
@@ -113,9 +116,11 @@ export default function App() {
   const [resumeGuideAutoStartPending, setResumeGuideAutoStartPending] = useState(false);
   const [resumeGuideAfterCrawl, setResumeGuideAfterCrawl] = useState(false);
   const [activeRailMenu, setActiveRailMenu] = useState<RailMenu | null>(null);
+  const [accountActivityNewCount, setAccountActivityNewCount] = useState(0);
+  const [accountProfileProject, setAccountProfileProject] = useState(() => window.localStorage.getItem('bossflow.accountProfileProject') || '');
   const railRef = useRef<HTMLElement>(null);
   const boss = useBossSpider();
-  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'Pipeline' || activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
+  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Pipeline' || activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
   const hasUnsavedChanges = boss.isConfigDirty || personalResumeDirty;
 
@@ -177,6 +182,39 @@ export default function App() {
       setActiveRailMenu(null);
     }
   }, [activeTab, confirmDiscardUnsavedConfig]);
+
+  useEffect(() => {
+    const openAccountActivity = () => navigateToTab('AccountActivity');
+    window.addEventListener('bossflow:open-account-activity', openAccountActivity);
+    return () => window.removeEventListener('bossflow:open-account-activity', openAccountActivity);
+  }, [navigateToTab]);
+
+  useEffect(() => {
+    if (!accountProfileProject && boss.project) {
+      setAccountProfileProject(boss.project);
+      window.localStorage.setItem('bossflow.accountProfileProject', boss.project);
+    }
+  }, [accountProfileProject, boss.project]);
+
+  useEffect(() => {
+    if (!boss.project) { setAccountActivityNewCount(0); return; }
+    let cancelled = false;
+    const applyResult = (result: Awaited<ReturnType<typeof bossApi.getAccountActivity>>) => {
+      if (!cancelled) setAccountActivityNewCount(result.total || result.summary?.new || 0);
+      return result;
+    };
+    void bossApi.getAccountActivity(boss.project, 'all', 1, 1, '', true, { profileProject: accountProfileProject || boss.project }).then((result) => {
+      if (result.account || !accountProfileProject || accountProfileProject === boss.project || cancelled) return applyResult(result);
+      return bossApi.getAccountActivity(boss.project, 'all', 1, 1, '', true, { profileProject: boss.project }).then((fallback) => {
+        if (!cancelled && fallback.account) {
+          setAccountProfileProject(boss.project);
+          window.localStorage.setItem('bossflow.accountProfileProject', boss.project);
+        }
+        return applyResult(fallback);
+      });
+    }).catch(() => { if (!cancelled) setAccountActivityNewCount(0); });
+    return () => { cancelled = true; };
+  }, [accountProfileProject, boss.project]);
 
   const setActiveTabStable = useCallback((tab: Tab) => {
     navigateToTab(tab);
@@ -268,10 +306,10 @@ export default function App() {
   const pageTitleByTab: Record<Tab, string> = {
     Dashboard: t('nav.dashboard'), Scope: t('nav.scope'), MatchingRules: t('nav.matchingRules'),
     ScoringRules: t('nav.scoringRules'), Jobs: t('nav.jobs'), Pipeline: t('nav.pipeline'),
-    Evidence: t('nav.evidence'), PersonalResume: t('nav.personalResume'), Resume: t('nav.resume'), Story: t('nav.story'),
+    Evidence: t('nav.evidence'), PersonalResume: t('nav.personalResume'), Resume: t('nav.resume'), Story: t('nav.story'), AccountActivity: t('accountActivity.title', { defaultValue: 'BOSS 求职记录' }),
     Interview: t('nav.interview'), Logs: t('nav.logs'), Settings: t('nav.settings'),
   };
-  const discoveryActive = activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'ScoringRules' || activeTab === 'Jobs' || activeTab === 'Logs';
+  const discoveryActive = activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'ScoringRules' || activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Logs';
   const materialsActive = activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume';
   const interviewActive = activeTab === 'Interview' || activeTab === 'Story';
 
@@ -281,6 +319,7 @@ export default function App() {
         title: t('nav.stages.discovery'),
         items: [
           { tab: 'Jobs' as Tab, icon: <Briefcase size={16} />, label: t('nav.jobs') },
+          { tab: 'AccountActivity' as Tab, icon: <ListPlus size={16} />, label: t('accountActivity.menu', { defaultValue: 'BOSS 求职记录' }) },
           { tab: 'Scope' as Tab, icon: <Crosshair size={16} />, label: t('nav.scope') },
           { tab: 'MatchingRules' as Tab, icon: <Tags size={16} />, label: t('nav.matchingRules') },
           { tab: 'ScoringRules' as Tab, icon: <SlidersHorizontal size={16} />, label: t('nav.scoringRules') },
@@ -517,6 +556,7 @@ export default function App() {
                   onOpenTask={openDashboardTask}
                   recentLogs={boss.recentLogs}
                   onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
+                  accountActivityNewCount={accountActivityNewCount}
                 />
               )}
               {activeTab === 'Scope' && boss.config && (
@@ -583,8 +623,18 @@ export default function App() {
                   taskRunning={boss.isRunning}
                   selectedJobId={selectedJobId}
                   targetRequestId={dashboardTargetRequestId}
-                  onAddToPipeline={async (jobs) => {
-                    if (await boss.addJobsToPipeline(jobs.map((job) => job.id))) navigateToTab('Pipeline');
+                  onAddToPipeline={async (jobs, autoFineReview) => {
+                    if (await boss.addJobsToPipeline(jobs.map((job) => job.id), autoFineReview)) navigateToTab('Pipeline');
+                  }}
+                  accountActivityNewCount={accountActivityNewCount}
+                />
+              )}
+              {activeTab === 'AccountActivity' && (
+                <AccountActivity
+                  project={boss.project}
+                  profileProject={accountProfileProject || boss.project}
+                  onAddToPipeline={async (jobIds) => {
+                    if (await boss.addJobsToPipeline(jobIds, true)) navigateToTab('Pipeline');
                   }}
                 />
               )}
@@ -611,6 +661,8 @@ export default function App() {
                   onLoadReport={boss.loadPipelineReport}
                   onLoadGreetingDraft={boss.loadGreetingDraft}
                   onSaveGreetingDraft={boss.saveGreetingDraft}
+                  onPreflightGreeting={boss.preflightGreeting}
+                  onPrepareGreeting={boss.prepareGreeting}
                   onGenerateResumeSuggestions={boss.generateResumeSuggestions}
                   onLoadResumeSuggestion={boss.loadResumeSuggestion}
                   onGenerateInterviewPrep={boss.generateInterviewPrep}

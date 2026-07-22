@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 from backend.schemas.automation import AutomationScheduleInput, AutomationScheduleUpdate
+from backend.schemas.account_activity import AccountActivityImportRequest, AccountActivitySyncRequest
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.schemas.cv import (
     CapabilityDecisionRequest,
@@ -27,7 +28,7 @@ from backend.schemas.evidence import (
     EvidenceTaskUpdateRequest,
     RequirementsUpsertRequest,
 )
-from backend.schemas.greeting import GreetingDraftSaveRequest
+from backend.schemas.greeting import GreetingDraftSaveRequest, GreetingPreflightRequest, GreetingPrepareRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
 from backend.schemas.jobs import JobCreateRequest, JobLiveStatusUpdateRequest
 from backend.schemas.matching import MatchingRulesSuggestionRequest
@@ -39,6 +40,7 @@ from backend.schemas.system_settings import LlmSettingsUpdate
 from backend.mcp_security import DesktopRuntimeTokenMiddleware, McpSecurityMiddleware
 from backend.mcp_server import create_bossflow_mcp
 from backend.services.automation_service import AutomationService
+from backend.services.account_activity_service import import_account_activity, list_account_activity, start_account_activity_sync
 from backend.services.crawler_service import process_partial_task, start_crawl_task, start_login_task
 from backend.services.cv_service import create_cv_from_template, cv_status, read_cv_document, save_cv_document
 from backend.services.evidence_service import (
@@ -58,7 +60,8 @@ from backend.services.evidence_service import (
     upsert_requirements,
 )
 from backend.services.evaluation_service import evaluate_pipeline_item, score_jobs, score_pipeline_items
-from backend.services.greeting_service import read_greeting_draft, save_greeting_draft
+from backend.services.greeting_prepare_service import start_greeting_prepare_task
+from backend.services.greeting_service import preflight_greeting, read_greeting_draft, save_greeting_draft
 from backend.services.interview_service import (
     generate_interview_prep,
     list_interview_items,
@@ -376,13 +379,58 @@ def get_greeting_draft(sourceKey: str):
 @app.put("/api/greetings/draft")
 def update_greeting_draft(payload: GreetingDraftSaveRequest):
     with project_workspace(_workspace_project(source_key=payload.sourceKey)):
-        return save_greeting_draft(payload.sourceKey, payload.editedText, payload.status)
+        result = save_greeting_draft(payload.sourceKey, payload.editedText, payload.status)
+        if payload.status == "manually_marked_sent":
+            result["pipeline"] = update_pipeline_item_status(payload.sourceKey, "greeted")
+        return result
+
+
+@app.post("/api/greetings/preflight")
+def greeting_preflight(payload: GreetingPreflightRequest):
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return preflight_greeting(payload.sourceKey, payload.message, task_manager.snapshot())
+
+
+@app.post("/api/greetings/prepare")
+def prepare_greeting(payload: GreetingPrepareRequest):
+    return start_greeting_prepare_task(payload, task_manager)
 
 
 @app.post("/api/pipeline/jobs")
 def add_pipeline_jobs(payload: AddJobsToPipelineRequest):
     with project_workspace(_workspace_project(payload.project)):
         return add_jobs_to_pipeline(payload.project, payload.jobIds)
+
+
+@app.get("/api/account-activity")
+def get_account_activity(
+    project: Optional[str] = None,
+    matchProject: str = "",
+    profileProject: str = "",
+    tab: str = "all",
+    page: int = Query(default=1, ge=1),
+    pageSize: int = Query(default=30, ge=1, le=200),
+    search: str = "",
+    newOnly: bool = False,
+    accountKey: str = "",
+    matchStatus: str = "all",
+    importStatus: str = "all",
+    jobStatus: str = "all",
+):
+    target = matchProject or project or default_project_name()
+    profile = profileProject or project or default_project_name()
+    return list_account_activity(target, tab, page, pageSize, search, newOnly, accountKey, profile_project=profile, match_status=matchStatus, import_status=importStatus, job_status=jobStatus)
+
+
+@app.post("/api/account-activity/sync")
+def sync_account_activity(payload: AccountActivitySyncRequest):
+    return start_account_activity_sync(payload.model_dump(), task_manager)
+
+
+@app.post("/api/account-activity/import")
+def import_account_activity_jobs(payload: AccountActivityImportRequest):
+    target = payload.matchProject or payload.project or default_project_name()
+    return import_account_activity(target, payload.accountJobIds, payload.mode, payload.allowUncertain, payload.accountKey, profile_project=payload.profileProject or payload.project or target)
 
 
 @app.post("/api/pipeline/status")

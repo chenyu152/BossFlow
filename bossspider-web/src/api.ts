@@ -1,5 +1,9 @@
 import type {
   AutomationResponse,
+  AccountActivityImportResponse,
+  AccountActivityResponse,
+  AccountActivitySyncResponse,
+  AccountActivityTab,
   AutomationRun,
   AutomationSchedule,
   AutomationScheduleInput,
@@ -18,6 +22,8 @@ import type {
   EvaluatePipelineResponse,
   GreetingDraftResponse,
   GreetingDraftStatus,
+  GreetingPreflightResponse,
+  GreetingPrepareResponse,
   InterviewItemsResponse,
   InterviewPrepResponse,
   InterviewStoryBankResponse,
@@ -228,6 +234,22 @@ export const bossApi = {
     });
   },
 
+  getAccountActivity(project: string, tab: AccountActivityTab = 'all', page = 1, pageSize = 30, search = '', newOnly = false, options: { profileProject?: string; matchStatus?: string; importStatus?: string; jobStatus?: string } = {}) {
+    const params = new URLSearchParams({ project, matchProject: project, tab, page: String(page), pageSize: String(pageSize), search, newOnly: String(newOnly), profileProject: options.profileProject || project });
+    if (options.matchStatus && options.matchStatus !== 'all') params.set('matchStatus', options.matchStatus);
+    if (options.importStatus && options.importStatus !== 'all') params.set('importStatus', options.importStatus);
+    if (options.jobStatus && options.jobStatus !== 'all') params.set('jobStatus', options.jobStatus);
+    return request<AccountActivityResponse>(`/api/account-activity?${params.toString()}`);
+  },
+
+  startAccountActivitySync(body: { project: string; profileProject?: string; matchProject?: string; accountKey?: string; tabs?: Exclude<AccountActivityTab, 'all'>[] }) {
+    return request<AccountActivitySyncResponse>('/api/account-activity/sync', { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  importAccountActivity(body: { project: string; matchProject?: string; profileProject?: string; accountKey?: string; accountJobIds: number[]; mode: 'library' | 'candidate'; allowUncertain?: boolean }) {
+    return request<AccountActivityImportResponse>('/api/account-activity/import', { method: 'POST', body: JSON.stringify(body) });
+  },
+
   getJobItem(project: string, jobId: number) {
     return request<Job>(
       `/api/jobs/item?project=${encodeURIComponent(project)}&jobId=${encodeURIComponent(jobId)}`,
@@ -250,6 +272,20 @@ export const bossApi = {
     return request<GreetingDraftResponse>('/api/greetings/draft', {
       method: 'PUT',
       body: JSON.stringify({ sourceKey, editedText, status }),
+    });
+  },
+
+  preflightGreeting(sourceKey: string, message: string) {
+    return request<GreetingPreflightResponse>('/api/greetings/preflight', {
+      method: 'POST',
+      body: JSON.stringify({ sourceKey, message }),
+    });
+  },
+
+  prepareGreeting(sourceKey: string, message: string) {
+    return request<GreetingPrepareResponse>('/api/greetings/prepare', {
+      method: 'POST',
+      body: JSON.stringify({ sourceKey, message, confirmed: true }),
     });
   },
 

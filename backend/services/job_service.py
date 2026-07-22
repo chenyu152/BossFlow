@@ -217,7 +217,7 @@ def get_job_by_id(project_dir: Path, job_id: int) -> dict[str, Any]:
 def create_job(payload) -> dict[str, Any]:
     """Create a job manually, running it through the same pipeline as crawled jobs."""
     from crawler.pipeline import process_one
-    from crawler.db import upsert_jobs
+    from crawler.db import connect, upsert_jobs
     from backend.services.project_service import resolve_project
     from crawler.boss import load_config
 
@@ -261,7 +261,18 @@ def create_job(payload) -> dict[str, Any]:
     if stats.get("inserted", 0) == 0 and stats.get("updated", 0) == 0:
         raise HTTPException(status_code=400, detail="岗位已存在，未能添加（重复键）")
 
-    return {"ok": True, "jobId": stats.get("inserted", 0), "job": cleaned}
+    conn = connect(db_file)
+    try:
+        row = conn.execute(
+            "SELECT id FROM jobs WHERE job_key = ?",
+            (cleaned["_key"],),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(status_code=500, detail="岗位已写入但无法读取数据库编号")
+
+    return {"ok": True, "jobId": int(row["id"]), "job": cleaned}
 
 
 def export_jobs_response(rows: list[dict[str, Any]]) -> Response:

@@ -207,6 +207,7 @@ export function Dashboard({
   onOpenTask,
   recentLogs,
   onLoadStoryDrafts,
+  accountActivityNewCount = 0,
 }: {
   config: ConfigPayload;
   jobs: Job[];
@@ -216,6 +217,7 @@ export function Dashboard({
   onOpenTask: (tab: Tab, target?: DashboardTaskTarget) => void;
   recentLogs: ParsedLog[];
   onLoadStoryDrafts: () => Promise<InterviewStoryDraftsResponse | null>;
+  accountActivityNewCount?: number;
 }) {
   const { t, i18n } = useAppTranslation();
   const isZh = (i18n.resolvedLanguage || i18n.language).startsWith('zh');
@@ -496,7 +498,16 @@ export function Dashboard({
     action: t('dashboardTasks.openJobs'),
     target: { jobId: jobsToShow[0].id },
   } : null;
-  const primaryTask: DashboardTask | null = evidenceTasks[0] || waitingItems[0] || materialTasks[0] || focusTask || recentJobTask;
+  const accountActivityTask: DashboardTask | null = accountActivityNewCount > 0 ? {
+    id: 'account-activity:new',
+    title: 'BOSS 求职记录',
+    detail: `有 ${accountActivityNewCount} 条新记录待处理`,
+    meta: '查看并按当前目标匹配',
+    tone: 'cyan',
+    tab: 'AccountActivity',
+    action: '查看记录',
+  } : null;
+  const primaryTask: DashboardTask | null = accountActivityTask || evidenceTasks[0] || waitingItems[0] || materialTasks[0] || focusTask || recentJobTask;
 
   return (
     <div className="dashboard-page dashboard-home space-y-5">
@@ -550,6 +561,7 @@ export function Dashboard({
             <div><strong>{isZh ? '工作区' : 'Workspace'}</strong><span>{isZh ? '直接进入高频任务' : 'Jump into frequent tasks'}</span></div>
           </div>
           <div className="dashboard-launcher-panel__grid">
+            {accountActivityNewCount > 0 && <LauncherTile icon={<ListChecks size={17} />} title="BOSS 求职记录" detail="处理新增的账号记录" count={accountActivityNewCount} onClick={() => setActiveTab('AccountActivity')} />}
             <LauncherTile icon={<Search size={17} />} title={t('nav.jobs')} detail={isZh ? '筛选与评估新机会' : 'Filter and assess opportunities'} count={todayCount} onClick={() => setActiveTab('Jobs')} />
             <LauncherTile icon={<Inbox size={17} />} title={t('nav.pipeline')} detail={isZh ? '推进候选与证据' : 'Advance candidates and evidence'} count={pending.length} onClick={() => setActiveTab('Pipeline')} />
             <LauncherTile icon={<ListChecks size={17} />} title={isZh ? '提升计划' : 'Improvement plans'} detail={isZh ? '推进已选择的能力建设' : 'Advance chosen capability work'} count={evidenceTaskCount} onClick={() => evidenceTasks[0] ? onOpenTask('Evidence', evidenceTasks[0].target) : setActiveTab('Evidence')} />

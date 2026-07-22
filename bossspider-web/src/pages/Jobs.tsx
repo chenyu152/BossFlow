@@ -29,6 +29,7 @@ export function Jobs({
   selectedJobId,
   targetRequestId,
   onAddToPipeline,
+  accountActivityNewCount,
 }: {
   project: string;
   jobs: Job[];
@@ -45,7 +46,8 @@ export function Jobs({
   taskRunning: boolean;
   selectedJobId?: number | null;
   targetRequestId?: number;
-  onAddToPipeline: (jobs: Job[]) => void;
+  onAddToPipeline: (jobs: Job[], autoFineReview: boolean) => void;
+  accountActivityNewCount?: number;
 }) {
   const { t } = useAppTranslation();
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -62,6 +64,9 @@ export function Jobs({
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addForm, setAddForm] = useState({ title: '', company: '', city: '', salary: '', exp: '', edu: '', desc: '', url: '' });
+  const [autoFineReview, setAutoFineReview] = useState(() => (
+    window.localStorage.getItem('bossflow.jobs.autoFineReview') !== 'false'
+  ));
   const dragStateRef = useRef<{
     active: boolean;
     anchorIndex: number;
@@ -203,6 +208,10 @@ export function Jobs({
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    window.localStorage.setItem('bossflow.jobs.autoFineReview', String(autoFineReview));
+  }, [autoFineReview]);
 
   useEffect(() => {
     const stopDrag = () => {
@@ -371,6 +380,9 @@ export function Jobs({
             <Plus size={14} />
             {t('jobs.addManual.button')}
           </button>
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('bossflow:open-account-activity'))} className="relative inline-flex items-center gap-1.5 rounded border border-indigo-700/70 px-2.5 py-1.5 text-xs text-indigo-300 hover:bg-indigo-950/40" aria-label="BOSS 记录">
+            <ListPlus size={14} />BOSS 记录{Boolean(accountActivityNewCount) && <span className="absolute -right-2 -top-2 rounded-full bg-rose-500 px-1.5 text-[10px] leading-4 text-white">{accountActivityNewCount! > 99 ? '99+' : accountActivityNewCount}</span>}
+          </button>
           <span className="text-xs text-zinc-500">
             {jobs.length >= total ? `${t('jobs.allJobs')} ${total.toLocaleString()}` : `${jobs.length.toLocaleString()} / ${total.toLocaleString()}`}
           </span>
@@ -416,11 +428,20 @@ export function Jobs({
         <div className="jobs-selection-bar">
           <div><CheckSquare size={15} /><strong>{selectedJobs.length}</strong><span>{t('jobs.selected')}</span></div>
           <div className="jobs-selection-bar__actions">
+            <label className="jobs-auto-review-toggle" title={t('jobs.autoFineReviewHint')}>
+              <input
+                type="checkbox"
+                checked={autoFineReview}
+                onChange={(event) => setAutoFineReview(event.target.checked)}
+              />
+              <span>{t('jobs.autoFineReview')}</span>
+              <small>{t('jobs.autoFineReviewConcurrency')}</small>
+            </label>
             <button onClick={() => onScoreJobs(selectedJobs.map((job) => job.id))} disabled={scoringSelected}>
               {scoringSelected ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}{t('jobs.scoreSelected')}
             </button>
             <button onClick={() => onUpdateLiveStatus(selectedJobs.map((job) => job.id))} disabled={taskRunning}><ShieldCheck size={14} />{t('jobs.updateSelectedLiveStatus')}</button>
-            <button onClick={() => onAddToPipeline(selectedJobs)} className="jobs-selection-bar__primary"><ListPlus size={14} />{t('jobs.addSelected')}</button>
+            <button onClick={() => onAddToPipeline(selectedJobs, autoFineReview)} className="jobs-selection-bar__primary"><ListPlus size={14} />{t('jobs.addSelected')}</button>
             <button onClick={() => setSelectedIds(new Set())}>{t('jobs.clear')}</button>
           </div>
         </div>
@@ -657,12 +678,24 @@ export function Jobs({
             </div>
             <div className="p-4 flex-1 overflow-y-auto space-y-5">
               <button
-                onClick={() => onAddToPipeline([selectedJob])}
+                onClick={() => onAddToPipeline([selectedJob], autoFineReview)}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
               >
                 <ListPlus size={15} />
                 {t('jobs.addToPipeline')}
               </button>
+              <label className="flex cursor-pointer items-start gap-2 rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-xs text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={autoFineReview}
+                  onChange={(event) => setAutoFineReview(event.target.checked)}
+                  className="mt-0.5 accent-indigo-500"
+                />
+                <span>
+                  <strong className="block text-zinc-200">{t('jobs.autoFineReview')}</strong>
+                  <span className="mt-0.5 block leading-relaxed">{t('jobs.autoFineReviewHint')}</span>
+                </span>
+              </label>
               <button
                 onClick={() => onUpdateLiveStatus([selectedJob.id])}
                 disabled={taskRunning}

@@ -17,6 +17,8 @@ import type {
   EvidenceRequirement,
   GreetingDraftResponse,
   GreetingDraftStatus,
+  GreetingPreflightResponse,
+  GreetingPrepareResponse,
   InterviewPrepResponse,
   Job,
   PipelineItem,
@@ -192,6 +194,8 @@ export function Pipeline({
   onLoadReport,
   onLoadGreetingDraft,
   onSaveGreetingDraft,
+  onPreflightGreeting,
+  onPrepareGreeting,
   onGenerateResumeSuggestions,
   onLoadResumeSuggestion,
   onGenerateInterviewPrep,
@@ -230,6 +234,8 @@ export function Pipeline({
   onLoadReport: (sourceKey: string) => Promise<PipelineReportResponse | null>;
   onLoadGreetingDraft: (sourceKey: string) => Promise<GreetingDraftResponse | null>;
   onSaveGreetingDraft: (sourceKey: string, editedText: string, status: GreetingDraftStatus) => Promise<GreetingDraftResponse | null>;
+  onPreflightGreeting: (sourceKey: string, message: string) => Promise<GreetingPreflightResponse | null>;
+  onPrepareGreeting: (sourceKey: string, message: string) => Promise<GreetingPrepareResponse | null>;
   onGenerateResumeSuggestions: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
   onLoadResumeSuggestion: (sourceKey: string) => Promise<ResumeSuggestionResponse | null>;
   onGenerateInterviewPrep: (sourceKey: string, userNotes: string) => Promise<InterviewPrepResponse | null>;
@@ -333,12 +339,17 @@ export function Pipeline({
     greetingDraft,
     greetingLoading,
     greetingSaving,
+    greetingPreparing,
     saveGreetingDraft,
+    preflightGreeting,
+    prepareGreeting,
     clearGreetingDraft,
   } = useGreetingDraftEditor({
     selectedItem,
     onLoadGreetingDraft,
     onSaveGreetingDraft,
+    onPreflightGreeting,
+    onPrepareGreeting,
   });
 
   resetWorkspaceRef.current = () => {
@@ -616,7 +627,10 @@ export function Pipeline({
             greetingDraft={greetingDraft}
             greetingLoading={greetingLoading}
             greetingSaving={greetingSaving}
+            greetingPreparing={greetingPreparing}
             onSaveGreetingDraft={saveGreetingDraft}
+            onPreflightGreeting={preflightGreeting}
+            onPrepareGreeting={prepareGreeting}
             onGenerateResumeSuggestions={generateResumeSuggestion}
             onViewResumeSuggestion={viewResumeSuggestion}
             isResumeSuggesting={isSelectedResumeSuggesting}

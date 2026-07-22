@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { bossApi } from '../api';
-import type { GreetingDraftResponse, GreetingDraftStatus, PipelineResponse } from '../types';
+import type {
+  GreetingDraftResponse,
+  GreetingDraftStatus,
+  GreetingPreflightResponse,
+  GreetingPrepareResponse,
+  PipelineResponse,
+} from '../types';
 
 export function usePipeline({
   showNotice,
@@ -14,6 +20,9 @@ export function usePipeline({
   const [pipeline, setPipeline] = useState<PipelineResponse | null>(null);
   const [sortPipelineByLlmScore, setSortPipelineByLlmScore] = useState(false);
   const [llmEvaluatingKeys, setLlmEvaluatingKeys] = useState<string[]>([]);
+  const llmEvaluationActiveCountRef = useRef(0);
+  const llmEvaluationPendingTasksRef = useRef<Array<() => Promise<void>>>([]);
+  const queuedLlmEvaluationKeysRef = useRef(new Set<string>());
 
   const refreshPipeline = useCallback(async (project = getProject()) => {
     const data = await bossApi.getPipeline(project);
@@ -22,15 +31,15 @@ export function usePipeline({
   }, [getProject]);
 
   const addJobsToPipeline = useCallback(async (projectName: string | undefined, jobIds: number[]) => {
-    if (!projectName || !jobIds.length) return false;
+    if (!projectName || !jobIds.length) return null;
     try {
       const data = await bossApi.addJobsToPipeline(projectName, jobIds);
       setPipeline(data);
       showNotice(t('notices.addedToPipeline', { added: data.added || 0, skipped: data.skipped || 0 }));
-      return true;
+      return data;
     } catch (error) {
       showNotice(t('notices.addToPipelineFailed', { error: (error as Error).message }));
-      return false;
+      return null;
     }
   }, [showNotice, t]);
 
@@ -61,24 +70,67 @@ export function usePipeline({
     }
   }, [getProject, showNotice, t]);
 
-  const llmEvaluatePipelineItem = useCallback(async (sourceKey: string) => {
-    setLlmEvaluatingKeys((keys) => keys.includes(sourceKey) ? keys : [...keys, sourceKey]);
-    showNotice(t('notices.llmEvalStarted'));
-    try {
-      const data = await bossApi.llmEvaluatePipelineItem(sourceKey);
-      setPipeline(data.pipeline);
-      showNotice(t('notices.llmEvalComplete', {
-        reportId: data.reportId,
-        scoreInfo: data.summary.score ? `，${data.summary.score.toFixed(1)} / 5.0` : '',
-      }));
+  const queueLlmEvaluatePipelineItems = useCallback((sourceKeys: string[], notifyEach = false) => {
+    const uniqueKeys = [...new Set(sourceKeys)].filter((sourceKey) => {
+      if (!sourceKey || queuedLlmEvaluationKeysRef.current.has(sourceKey)) return false;
+      queuedLlmEvaluationKeysRef.current.add(sourceKey);
       return true;
-    } catch (error) {
-      showNotice(t('notices.llmEvalFailed', { error: (error as Error).message }));
-      return false;
-    } finally {
-      setLlmEvaluatingKeys((keys) => keys.filter((key) => key !== sourceKey));
-    }
+    });
+    if (!uniqueKeys.length) return Promise.resolve({ queued: 0, succeeded: 0, failed: 0 });
+
+    setLlmEvaluatingKeys((keys) => [...new Set([...keys, ...uniqueKeys])]);
+    if (uniqueKeys.length > 1) showNotice(t('notices.llmEvalBatchQueued', { count: uniqueKeys.length }));
+
+    const schedulePendingTasks = () => {
+      while (llmEvaluationActiveCountRef.current < 5 && llmEvaluationPendingTasksRef.current.length) {
+        const pendingTask = llmEvaluationPendingTasksRef.current.shift();
+        if (!pendingTask) break;
+        llmEvaluationActiveCountRef.current += 1;
+        void pendingTask().finally(() => {
+          llmEvaluationActiveCountRef.current -= 1;
+          schedulePendingTasks();
+        });
+      }
+    };
+
+    const tasks = uniqueKeys.map((sourceKey) => new Promise<boolean>((resolve) => {
+      llmEvaluationPendingTasksRef.current.push(async () => {
+        if (notifyEach) showNotice(t('notices.llmEvalStarted'));
+        try {
+          const data = await bossApi.llmEvaluatePipelineItem(sourceKey);
+          setPipeline(data.pipeline);
+          if (notifyEach) {
+            showNotice(t('notices.llmEvalComplete', {
+              reportId: data.reportId,
+              scoreInfo: data.summary.score ? `，${data.summary.score.toFixed(1)} / 5.0` : '',
+            }));
+          }
+          resolve(true);
+        } catch (error) {
+          if (notifyEach) showNotice(t('notices.llmEvalFailed', { error: (error as Error).message }));
+          resolve(false);
+        } finally {
+          queuedLlmEvaluationKeysRef.current.delete(sourceKey);
+          setLlmEvaluatingKeys((keys) => keys.filter((key) => key !== sourceKey));
+        }
+      });
+      schedulePendingTasks();
+    }));
+
+    return Promise.all(tasks).then((results) => {
+      const succeeded = results.filter(Boolean).length;
+      const failed = results.length - succeeded;
+      if (!notifyEach || results.length > 1) {
+        showNotice(t('notices.llmEvalBatchComplete', { succeeded, failed }));
+      }
+      return { queued: uniqueKeys.length, succeeded, failed };
+    });
   }, [showNotice, t]);
+
+  const llmEvaluatePipelineItem = useCallback(async (sourceKey: string) => {
+    const result = await queueLlmEvaluatePipelineItems([sourceKey], true);
+    return result.succeeded === 1;
+  }, [queueLlmEvaluatePipelineItems]);
 
   const loadJobDetail = useCallback(async (projectName: string, jobId: number) => {
     try {
@@ -114,10 +166,37 @@ export function usePipeline({
   ): Promise<GreetingDraftResponse | null> => {
     try {
       const data = await bossApi.saveGreetingDraft(sourceKey, editedText, status);
+      if (data.pipeline) setPipeline(data.pipeline);
       showNotice(t('notices.greetingDraftSaved'));
       return data;
     } catch (error) {
       showNotice(t('notices.greetingDraftSaveFailed', { error: (error as Error).message }));
+      return null;
+    }
+  }, [showNotice, t]);
+
+  const preflightGreeting = useCallback(async (
+    sourceKey: string,
+    message: string,
+  ): Promise<GreetingPreflightResponse | null> => {
+    try {
+      return await bossApi.preflightGreeting(sourceKey, message);
+    } catch (error) {
+      showNotice(t('notices.greetingPreflightFailed', { error: (error as Error).message }));
+      return null;
+    }
+  }, [showNotice, t]);
+
+  const prepareGreeting = useCallback(async (
+    sourceKey: string,
+    message: string,
+  ): Promise<GreetingPrepareResponse | null> => {
+    try {
+      const data = await bossApi.prepareGreeting(sourceKey, message);
+      showNotice(t('notices.greetingPrepareStarted'));
+      return data;
+    } catch (error) {
+      showNotice(t('notices.greetingPrepareFailed', { error: (error as Error).message }));
       return null;
     }
   }, [showNotice, t]);
@@ -165,10 +244,13 @@ export function usePipeline({
     evaluatePipelineItem,
     scoreAllPipeline,
     llmEvaluatePipelineItem,
+    queueLlmEvaluatePipelineItems,
     loadJobDetail,
     loadPipelineReport,
     loadGreetingDraft,
     saveGreetingDraft,
+    preflightGreeting,
+    prepareGreeting,
     updatePipelineStatus,
     deletePipelineItem,
   };

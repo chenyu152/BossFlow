@@ -42,10 +42,13 @@ export function useBossSpider() {
     evaluatePipelineItem,
     scoreAllPipeline,
     llmEvaluatePipelineItem: llmEvaluatePipelineItemBase,
+    queueLlmEvaluatePipelineItems,
     loadJobDetail,
     loadPipelineReport,
     loadGreetingDraft,
     saveGreetingDraft,
+    preflightGreeting,
+    prepareGreeting,
     updatePipelineStatus,
     deletePipelineItem: deletePipelineItemBase,
   } = usePipeline({ showNotice, t, getProject: getActiveProject });
@@ -132,9 +135,14 @@ export function useBossSpider() {
     exportJobsForProject(config?.project);
   }, [config?.project, exportJobsForProject]);
 
-  const addJobsToPipeline = useCallback(async (jobIds: number[]) => (
-    addJobsToPipelineForProject(config?.project, jobIds)
-  ), [addJobsToPipelineForProject, config?.project]);
+  const addJobsToPipeline = useCallback(async (jobIds: number[], autoFineReview = true) => {
+    const data = await addJobsToPipelineForProject(config?.project, jobIds);
+    const addedSourceKeys = data?.addedSourceKeys || [];
+    if (autoFineReview && addedSourceKeys.length) {
+      void queueLlmEvaluatePipelineItems(addedSourceKeys).then(() => evidence.refreshEvidenceOverview());
+    }
+    return Boolean(data);
+  }, [addJobsToPipelineForProject, config?.project, evidence.refreshEvidenceOverview, queueLlmEvaluatePipelineItems]);
 
   const scoreJobs = useCallback(async (jobIds: number[]) => (
     scoreJobsForProject(config?.project, jobIds)
@@ -263,6 +271,8 @@ export function useBossSpider() {
     loadPipelineReport,
     loadGreetingDraft,
     saveGreetingDraft,
+    preflightGreeting,
+    prepareGreeting,
     generateResumeSuggestions,
     loadResumeSuggestion,
     generateResumeDraft,

@@ -353,6 +353,7 @@ def add_jobs_to_pipeline(project: str, job_ids: list[int]) -> dict[str, Any]:
         keys = _existing_keys([*pending, *processed])
 
         added_lines: list[str] = []
+        added_source_keys: list[str] = []
         skipped = 0
         for job in jobs:
             source_key = f"{project_dir.name}:{job['id']}"
@@ -362,6 +363,7 @@ def add_jobs_to_pipeline(project: str, job_ids: list[int]) -> dict[str, Any]:
                 continue
             line = _job_line(project_dir.name, job)
             added_lines.append(line)
+            added_source_keys.append(source_key)
             keys.add(source_key)
             if url_key:
                 keys.add(url_key)
@@ -379,6 +381,7 @@ def add_jobs_to_pipeline(project: str, job_ids: list[int]) -> dict[str, Any]:
     return {
         "ok": True,
         "added": len(added_lines),
+        "addedSourceKeys": added_source_keys,
         "skipped": skipped,
         "missing": max(0, len(job_ids) - len(jobs)),
         **pipeline,

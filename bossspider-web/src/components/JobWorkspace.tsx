@@ -1,6 +1,7 @@
 import {
   BookOpenText,
   BrainCircuit,
+  AlertTriangle,
   CheckCircle2,
   Circle,
   Clipboard,
@@ -9,6 +10,7 @@ import {
   MessageSquareText,
   Save,
   Send,
+  ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react';
@@ -29,6 +31,8 @@ import type {
   EvidenceRequirement,
   ProficiencyLevel,
   GreetingDraft,
+  GreetingPreflightResponse,
+  GreetingPrepareResponse,
   GreetingDraftStatus,
   Job,
   PipelineItem,
@@ -101,7 +105,10 @@ type JobWorkspaceProps = {
   greetingDraft: GreetingDraft | null;
   greetingLoading: boolean;
   greetingSaving: boolean;
+  greetingPreparing: boolean;
   onSaveGreetingDraft: (editedText: string, status: GreetingDraftStatus) => Promise<unknown>;
+  onPreflightGreeting: (message: string) => Promise<GreetingPreflightResponse | null>;
+  onPrepareGreeting: (message: string) => Promise<GreetingPrepareResponse | null>;
   onGenerateResumeSuggestions: () => void;
   onViewResumeSuggestion: () => void;
   isResumeSuggesting: boolean;
@@ -259,7 +266,10 @@ export function JobWorkspace({
   greetingDraft,
   greetingLoading,
   greetingSaving,
+  greetingPreparing,
   onSaveGreetingDraft,
+  onPreflightGreeting,
+  onPrepareGreeting,
   onGenerateResumeSuggestions,
   onViewResumeSuggestion,
   isResumeSuggesting,
@@ -276,6 +286,9 @@ export function JobWorkspace({
   const language = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'zh';
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
   const [greetingText, setGreetingText] = useState('');
+  const [greetingPreflight, setGreetingPreflight] = useState<GreetingPreflightResponse | null>(null);
+  const [greetingChecking, setGreetingChecking] = useState(false);
+  const [greetingActionError, setGreetingActionError] = useState('');
   const [decisionTarget, setDecisionTarget] = useState<EvidenceDecisionTarget | null>(null);
   const [decisionSaving, setDecisionSaving] = useState(false);
   const [decisionError, setDecisionError] = useState('');
@@ -413,6 +426,8 @@ export function JobWorkspace({
     : item.potentialEvidenceRequirementCount || 0;
   const averageSalary = (job?.avg ?? item.avg ?? 0).toFixed(1);
   const greetingSourceText = greetingDraft?.editedText || greetingDraft?.draftText || '';
+  const greetingOptions = (greetingDraft?.draftOptions || []).filter((option) => option.trim());
+  const selectedGreetingOption = greetingOptions.findIndex((option) => option === greetingText);
 
   useEffect(() => {
     setGreetingText(greetingSourceText);
@@ -422,6 +437,8 @@ export function JobWorkspace({
     setDecisionTarget(null);
     setDecisionError('');
     setWorkspaceEvidenceError('');
+    setGreetingPreflight(null);
+    setGreetingActionError('');
   }, [item.sourceKey]);
 
   useEffect(() => {
@@ -494,6 +511,32 @@ export function JobWorkspace({
     if (!greetingText.trim()) return;
     await navigator.clipboard.writeText(greetingText);
     await onSaveGreetingDraft(greetingText, 'copied');
+  };
+
+  const checkGreeting = async () => {
+    setGreetingChecking(true);
+    setGreetingActionError('');
+    try {
+      const result = await onPreflightGreeting(greetingText);
+      if (!result) return;
+      if (!result.canProceed) {
+        setGreetingActionError(result.errors.join('；'));
+        return;
+      }
+      setGreetingPreflight(result);
+    } finally {
+      setGreetingChecking(false);
+    }
+  };
+
+  const confirmGreetingPrepare = async () => {
+    const result = await onPrepareGreeting(greetingText);
+    if (result) setGreetingPreflight(null);
+  };
+
+  const markGreetingSent = async () => {
+    if (!window.confirm(t('jobWorkspace.greetingMarkSentConfirm'))) return;
+    await onSaveGreetingDraft(greetingText, 'manually_marked_sent');
   };
 
   const greetingStatusLabel = greetingDraft
@@ -915,19 +958,21 @@ export function JobWorkspace({
               {isLegacyEvaluation && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-amber-900/60 bg-amber-950/25 p-3">
                   <div className="min-w-0 text-xs leading-relaxed text-amber-200">{t('jobWorkspace.evidence.staleEvaluationHint')}</div>
-                  <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="amber">
-                    {isLlmEvaluating && <Loader2 size={13} className="animate-spin" />}
-                    {t('jobWorkspace.evidence.regenerateAssessment')}
-                  </ActionButton>
                 </div>
               )}
               {item.reportPath ? (
                 <>
                   <div className="break-all text-[10px] text-zinc-500">{item.reportPath}</div>
-                  <ActionButton onClick={onViewReport} disabled={reportLoading} tone="emerald">
-                    {reportLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
-                    {t('pipeline.viewReport')}
-                  </ActionButton>
+                  <div className="flex flex-wrap gap-2">
+                    <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="amber">
+                      {isLlmEvaluating ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+                      {isLlmEvaluating ? t('pipeline.generating') : t('pipeline.regenerateLlmEval')}
+                    </ActionButton>
+                    <ActionButton onClick={onViewReport} disabled={reportLoading} tone="emerald">
+                      {reportLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpenText size={13} />}
+                      {t('pipeline.viewReport')}
+                    </ActionButton>
+                  </div>
                 </>
               ) : (
                 <ActionButton onClick={onLlmEvaluate} disabled={isLlmEvaluating} tone="emerald">
@@ -1336,6 +1381,35 @@ export function JobWorkspace({
                       <span className="text-[10px] text-zinc-600">{t('story.updatedAt')}: {greetingDraft.updatedAt}</span>
                     )}
                   </div>
+                  {greetingOptions.length > 0 && (
+                    <div className="grid gap-2 lg:grid-cols-2">
+                      {greetingOptions.map((option, index) => {
+                        const selected = selectedGreetingOption === index;
+                        return (
+                          <button
+                            key={`${index}:${option}`}
+                            type="button"
+                            onClick={() => {
+                              setGreetingText(option);
+                              setGreetingActionError('');
+                            }}
+                            className={`rounded border p-3 text-left transition-colors ${selected
+                              ? 'border-emerald-600 bg-emerald-950/30 text-zinc-100'
+                              : 'border-zinc-800 bg-zinc-900/40 text-zinc-300 hover:border-zinc-700'}`}
+                          >
+                            <span className="mb-1.5 flex items-center justify-between gap-2 text-xs font-semibold">
+                              <span>{t('jobWorkspace.greetingOption', { index: index + 1 })}</span>
+                              <span className={selected ? 'text-emerald-400' : 'text-zinc-600'}>
+                                {selected ? t('jobWorkspace.greetingOptionSelected') : t('jobWorkspace.greetingOptionChoose')}
+                              </span>
+                            </span>
+                            <span className="block text-xs leading-5">{option}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="text-xs font-medium text-zinc-500">{t('jobWorkspace.greetingFinalEditable')}</div>
                   <textarea
                     value={greetingText}
                     onChange={(event) => setGreetingText(event.target.value)}
@@ -1348,10 +1422,31 @@ export function JobWorkspace({
                   {greetingDraft?.sourceReportPath && (
                     <div className="break-all text-[10px] text-zinc-600">{greetingDraft.sourceReportPath}</div>
                   )}
+                  {greetingDraft?.status === 'preparing' && (
+                    <div className="flex items-start gap-2 rounded border border-blue-800/50 bg-blue-950/30 p-3 text-xs leading-relaxed text-blue-200">
+                      <Loader2 size={14} className="mt-0.5 shrink-0 animate-spin" />
+                      <span>{t('jobWorkspace.greetingPreparingHint')}</span>
+                    </div>
+                  )}
+                  {greetingDraft?.status === 'prepared' && (
+                    <div className="flex items-start gap-2 rounded border border-emerald-800/50 bg-emerald-950/30 p-3 text-xs leading-relaxed text-emerald-200">
+                      <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+                      <span>{t('jobWorkspace.greetingPreparedHint')}</span>
+                    </div>
+                  )}
+                  {greetingDraft?.status === 'prepare_failed' && (
+                    <div className="flex items-start gap-2 rounded border border-red-800/50 bg-red-950/30 p-3 text-xs leading-relaxed text-red-200">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      <span>{greetingDraft.lastError || t('jobWorkspace.greetingPrepareUnknownError')}</span>
+                    </div>
+                  )}
+                  {greetingActionError && (
+                    <div className="rounded border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-200">{greetingActionError}</div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <ActionButton
                       onClick={() => saveGreeting('edited')}
-                      disabled={greetingSaving || !greetingDraft}
+                      disabled={greetingSaving || greetingPreparing || !greetingDraft}
                       tone="emerald"
                     >
                       {greetingSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
@@ -1359,19 +1454,29 @@ export function JobWorkspace({
                     </ActionButton>
                     <ActionButton
                       onClick={copyGreeting}
-                      disabled={greetingSaving || !greetingDraft || !greetingText.trim()}
+                      disabled={greetingSaving || greetingPreparing || !greetingDraft || !greetingText.trim()}
                     >
                       <Clipboard size={13} />
                       {t('jobWorkspace.copyGreeting')}
                     </ActionButton>
                     <ActionButton
-                      onClick={() => saveGreeting('sent')}
-                      disabled={greetingSaving || !greetingDraft || !greetingText.trim()}
+                      onClick={() => { void checkGreeting(); }}
+                      disabled={greetingSaving || greetingPreparing || greetingChecking || !greetingDraft || !greetingText.trim()}
                       tone="cyan"
                     >
-                      <Send size={13} />
-                      {t('jobWorkspace.markGreetingSent')}
+                      {greetingChecking || greetingPreparing ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      {t('jobWorkspace.openGreeting')}
                     </ActionButton>
+                    {greetingDraft?.status === 'prepared' && (
+                      <ActionButton
+                        onClick={() => { void markGreetingSent(); }}
+                        disabled={greetingSaving}
+                        tone="emerald"
+                      >
+                        <CheckCircle2 size={13} />
+                        {t('jobWorkspace.markGreetingSent')}
+                      </ActionButton>
+                    )}
                   </div>
                 </div>
               )}
@@ -1418,6 +1523,73 @@ export function JobWorkspace({
           onCancel={() => { if (!decisionSaving) setDecisionTarget(null); }}
           onSubmit={(input) => { void submitEvidenceDecision(input); }}
         />
+      )}
+      {greetingPreflight && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6"
+          onClick={() => { if (!greetingPreparing) setGreetingPreflight(null); }}
+        >
+          <div
+            className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
+              <div>
+                <div className="flex items-center gap-2 text-base font-semibold text-zinc-100">
+                  <ShieldCheck size={17} className="text-emerald-400" />
+                  {t('jobWorkspace.greetingConfirmTitle')}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-500">{t('jobWorkspace.greetingConfirmSubtitle')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGreetingPreflight(null)}
+                disabled={greetingPreparing}
+                className="rounded border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 sm:grid-cols-2">
+                <div>
+                  <div className="text-[11px] text-zinc-500">{t('pipeline.company')}</div>
+                  <div className="mt-1 text-sm font-medium text-zinc-100">{greetingPreflight.preview.company || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-zinc-500">{t('jobWorkspace.greetingTargetPosition')}</div>
+                  <div className="mt-1 text-sm font-medium text-zinc-100">{greetingPreflight.preview.title || '-'}</div>
+                </div>
+                <div className="sm:col-span-2">
+                  <div className="text-[11px] text-zinc-500">{t('jobWorkspace.greetingTargetUrl')}</div>
+                  <div className="mt-1 break-all text-xs text-zinc-300">{greetingPreflight.preview.url}</div>
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 flex items-center justify-between text-xs text-zinc-500">
+                  <span>{t('jobWorkspace.greetingFinalMessage')}</span>
+                  <span>{greetingPreflight.preview.messageLength} / 800</span>
+                </div>
+                <div className="whitespace-pre-wrap rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm leading-6 text-zinc-200">
+                  {greetingPreflight.preview.message}
+                </div>
+              </div>
+              <div className="flex items-start gap-2 rounded-lg border border-amber-800/40 bg-amber-950/25 p-3 text-xs leading-relaxed text-amber-100">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                <span>{t('jobWorkspace.greetingSafetyNotice')}</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-zinc-800 px-5 py-4">
+              <ActionButton onClick={() => setGreetingPreflight(null)} disabled={greetingPreparing}>
+                {t('jobWorkspace.greetingCancel')}
+              </ActionButton>
+              <ActionButton onClick={() => { void confirmGreetingPrepare(); }} disabled={greetingPreparing} tone="emerald">
+                {greetingPreparing ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+                {t('jobWorkspace.greetingConfirmOpen')}
+              </ActionButton>
+            </div>
+          </div>
+        </div>
       )}
       {selectedEvidence && (
         <EvidenceDetailDrawer

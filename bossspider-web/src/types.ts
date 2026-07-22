@@ -1,4 +1,43 @@
-export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'Pipeline' | 'Evidence' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
+export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'AccountActivity' | 'Pipeline' | 'Evidence' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
+
+export type AccountActivityTab = 'all' | 'communicated' | 'applied' | 'interview' | 'favorited';
+export type AccountActivityItem = {
+  id: number;
+  platformKey: string;
+  encryptJobId: string;
+  title: string;
+  company: string;
+  city: string;
+  salary: string;
+  detailUrl: string;
+  closedStatus: 'open' | 'closed' | 'unknown' | string;
+  identityConfidence: 'high' | 'medium' | 'low' | string;
+  eventTypes: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  isNew: boolean;
+  relevance: 'matched' | 'uncertain' | 'mismatched' | string;
+  confidence: string;
+  reason: string;
+  projectJobId: number | null;
+  imported: boolean;
+  candidate: boolean;
+  initiator: 'user' | 'recruiter' | 'unknown' | string;
+};
+export type AccountActivityResponse = {
+  ok: boolean;
+  items: AccountActivityItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pages: number;
+  tabs?: Record<AccountActivityTab, number>;
+  account?: { accountKey: string; displayName: string; lastSyncAt: string | null } | null;
+  summary?: { new: number; matched: number; closed: number };
+  sync: { status: string; error: string; finishedAt: string; runId: number } | null;
+};
+export type AccountActivitySyncResponse = { ok: boolean; status: string; accountKey: string; message?: string; error?: string };
+export type AccountActivityImportResponse = { ok: boolean; mode: 'library' | 'candidate'; projectJobIds: number[]; imported: number; failed: { id: number; reason: string }[] };
 
 export type LlmSettingsStatus = {
   configured: boolean;
@@ -308,6 +347,7 @@ export type PipelineResponse = {
   };
   ok?: boolean;
   added?: number;
+  addedSourceKeys?: string[];
   skipped?: number;
   missing?: number;
 };
@@ -819,7 +859,16 @@ export type EvidenceTaskUpdateInput = Pick<
   'taskId' | 'status' | 'completionEvidenceIds' | 'progressPercent' | 'nextStep' | 'progressNotes' | 'currentProficiency' | 'targetProficiency'
 >;
 
-export type GreetingDraftStatus = 'draft' | 'edited' | 'copied' | 'sent' | 'dismissed';
+export type GreetingDraftStatus =
+  | 'draft'
+  | 'edited'
+  | 'copied'
+  | 'sent'
+  | 'preparing'
+  | 'prepared'
+  | 'prepare_failed'
+  | 'manually_marked_sent'
+  | 'dismissed';
 
 export type GreetingDraft = {
   sourceKey: string;
@@ -829,6 +878,8 @@ export type GreetingDraft = {
   title: string;
   channel: string;
   draftText: string;
+  draftOptions?: string[];
+  selectedOptionIndex?: number;
   editedText: string;
   status: GreetingDraftStatus;
   sourceReportPath: string;
@@ -836,12 +887,42 @@ export type GreetingDraft = {
   createdAt: string;
   updatedAt: string;
   usedAt: string;
+  preparedAt?: string;
+  lastError?: string;
 };
 
 export type GreetingDraftResponse = {
   ok: boolean;
   path: string;
   draft: GreetingDraft;
+  pipeline?: PipelineResponse;
+};
+
+export type GreetingPreflightPreview = {
+  sourceKey: string;
+  project: string;
+  jobId: number | null;
+  company: string;
+  title: string;
+  url: string;
+  message: string;
+  messageLength: number;
+  finalSendByUser: boolean;
+};
+
+export type GreetingPreflightResponse = {
+  ok: boolean;
+  canProceed: boolean;
+  errors: string[];
+  preview: GreetingPreflightPreview;
+};
+
+export type GreetingPrepareResponse = {
+  ok: boolean;
+  status: 'preparing';
+  message: string;
+  draft: GreetingDraft;
+  preview: GreetingPreflightPreview;
 };
 
 export type TaskStatusResponse = {
