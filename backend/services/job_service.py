@@ -214,6 +214,56 @@ def get_job_by_id(project_dir: Path, job_id: int) -> dict[str, Any]:
     return jobs[0]
 
 
+def create_job(payload) -> dict[str, Any]:
+    """Create a job manually, running it through the same pipeline as crawled jobs."""
+    from crawler.pipeline import process_one
+    from crawler.db import upsert_jobs
+    from backend.services.project_service import resolve_project
+    from crawler.boss import load_config
+
+    project_dir: Path = resolve_project(payload.project)
+    config = load_config(str(project_dir))
+
+    cat_rules = config.get("cat_rules")
+    relevance_keywords = config.get("relevance_keywords")
+    blacklist_keywords = config.get("blacklist_keywords")
+    min_salary = config.get("min_salary")
+
+    raw = {
+        "title": payload.title,
+        "company": payload.company,
+        "city": payload.city,
+        "salary": payload.salary,
+        "exp": payload.exp,
+        "edu": payload.edu,
+        "desc": payload.desc,
+        "url": payload.url,
+        "security_id": payload.security_id,
+        "_source": "manual",
+    }
+
+    cleaned = process_one(
+        raw,
+        cat_rules=cat_rules,
+        min_salary=min_salary,
+        relevance_keywords=relevance_keywords,
+        blacklist_keywords=blacklist_keywords,
+    )
+
+    if cleaned is None:
+        raise HTTPException(status_code=400, detail="岗位被匹配规则过滤，无法添加")
+
+    cleaned["_source"] = "manual"
+
+    db_file = str(project_dir / "jobs_data.db")
+    stats = upsert_jobs([cleaned], db_file)
+
+    if stats.get("inserted", 0) == 0 and stats.get("updated", 0) == 0:
+        raise HTTPException(status_code=400, detail="岗位已存在，未能添加（重复键）")
+
+    return {"ok": True, "jobId": stats.get("inserted", 0), "job": cleaned}
+
+
 def export_jobs_response(rows: list[dict[str, Any]]) -> Response:
     if not rows:
         raise HTTPException(status_code=404, detail="当前筛选条件下没有可导出的数据")

@@ -475,7 +475,27 @@
     "unselectVisibleJobs": "取消选择可见岗位",
     "selectJob": "选择岗位",
     "unselectJob": "取消选择岗位",
-    "dbId": "DB ID"
+    "dbId": "DB ID",
+    "addManual": {
+      "button": "手动添加",
+      "title": "手动添加岗位",
+      "titleLabel": "岗位名称 *",
+      "titlePlaceholder": "如：AI应用开发工程师",
+      "companyLabel": "公司名称 *",
+      "companyPlaceholder": "如：字节跳动",
+      "cityLabel": "城市",
+      "cityPlaceholder": "如：深圳",
+      "salaryLabel": "薪资",
+      "salaryPlaceholder": "如：15K-25K",
+      "expLabel": "经验要求",
+      "eduLabel": "学历要求",
+      "descLabel": "职位描述",
+      "urlLabel": "岗位链接",
+      "cancel": "取消",
+      "save": "保存",
+      "success": "岗位已添加",
+      "failed": "添加失败：{{error}}"
+    }
   },
   "pipeline": {
     "title": "候选岗位",

@@ -29,7 +29,7 @@ from backend.schemas.evidence import (
 )
 from backend.schemas.greeting import GreetingDraftSaveRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
-from backend.schemas.jobs import JobLiveStatusUpdateRequest
+from backend.schemas.jobs import JobCreateRequest, JobLiveStatusUpdateRequest
 from backend.schemas.matching import MatchingRulesSuggestionRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.project import ProjectCreateRequest
@@ -69,7 +69,7 @@ from backend.services.interview_service import (
     save_story_bank,
     save_story_drafts,
 )
-from backend.services.job_service import export_jobs_response, get_job_by_id, query_jobs
+from backend.services.job_service import create_job, export_jobs_response, get_job_by_id, query_jobs
 from backend.services.live_status_service import start_live_status_update_task
 from backend.services.login_state_service import login_state
 from backend.services.matching_suggestion_service import suggest_matching_rules
@@ -324,6 +324,12 @@ def export_jobs(project: Optional[str] = None, q: str = ""):
 def get_job_item(project: str, jobId: int):
     with project_workspace(_workspace_project(project)):
         return get_job_by_id(resolve_project(project), jobId)
+
+
+@app.post("/api/jobs")
+def add_job(payload: JobCreateRequest):
+    with project_workspace(payload.project):
+        return create_job(payload)
 
 
 @app.post("/api/jobs/score")

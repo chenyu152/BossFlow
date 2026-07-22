@@ -568,6 +568,7 @@ export default function App() {
               )}
               {activeTab === 'Jobs' && (
                 <Jobs
+                  project={boss.project}
                   jobs={boss.jobs}
                   total={boss.jobsTotal}
                   search={boss.jobSearch}

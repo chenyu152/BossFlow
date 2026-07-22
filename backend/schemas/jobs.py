@@ -12,3 +12,16 @@ class JobLiveStatusUpdateRequest(BaseModel):
     headless: bool = True
     interactiveOnCaptcha: bool = True
     verificationTimeoutSeconds: int = Field(default=240, ge=30, le=900)
+
+
+class JobCreateRequest(BaseModel):
+    project: str
+    title: str
+    company: str
+    city: str = ""
+    salary: str = ""
+    exp: str = ""
+    edu: str = ""
+    desc: str = ""
+    url: str = ""
+    security_id: str = ""

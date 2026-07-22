@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, MoreHorizontal, RefreshCw, RotateCcw, Search, ShieldCheck, Square, Wand2, X } from 'lucide-react';
+import { ArrowDownWideNarrow, CheckSquare, Download, Funnel, ListPlus, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Square, Wand2, X } from 'lucide-react';
 import { useAppTranslation } from '../i18n';
+import { bossApi } from '../api';
 import { DetailItem } from '../components/DetailItem';
 import { JobDescription } from '../components/JobDescription';
 import type { Job } from '../types';
@@ -12,6 +13,7 @@ function parseTime(value?: string) {
 }
 
 export function Jobs({
+  project,
   jobs,
   total,
   search,
@@ -28,6 +30,7 @@ export function Jobs({
   targetRequestId,
   onAddToPipeline,
 }: {
+  project: string;
   jobs: Job[];
   total: number;
   search: string;
@@ -57,6 +60,8 @@ export function Jobs({
   const [updateTimeSort, setUpdateTimeSort] = useState<'last_seen_desc' | 'last_seen_asc' | 'default'>('last_seen_desc');
   const [minAvgFilter, setMinAvgFilter] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addForm, setAddForm] = useState({ title: '', company: '', city: '', salary: '', exp: '', edu: '', desc: '', url: '' });
   const dragStateRef = useRef<{
     active: boolean;
     anchorIndex: number;
@@ -361,6 +366,10 @@ export function Jobs({
           </div>
           <button onClick={onRefresh} className="p-1.5 border border-zinc-800 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors">
             <RefreshCw size={14} />
+          </button>
+          <button onClick={() => setShowAddDialog(true)} className="inline-flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">
+            <Plus size={14} />
+            {t('jobs.addManual.button')}
           </button>
           <span className="text-xs text-zinc-500">
             {jobs.length >= total ? `${t('jobs.allJobs')} ${total.toLocaleString()}` : `${jobs.length.toLocaleString()} / ${total.toLocaleString()}`}
@@ -726,6 +735,73 @@ export function Jobs({
           </div>
         )}
       </div>
+
+      {showAddDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowAddDialog(false)}>
+          <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-950 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-zinc-100">{t('jobs.addManual.title')}</h3>
+              <button onClick={() => setShowAddDialog(false)} className="text-zinc-400 hover:text-zinc-200"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1 col-span-2">
+                  <span className="text-xs text-zinc-500">{t('jobs.addManual.titleLabel')}</span>
+                  <input value={addForm.title} onChange={e => setAddForm({...addForm, title: e.target.value})} placeholder={t('jobs.addManual.titlePlaceholder')} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600" />
+                </label>
+                <label className="space-y-1 col-span-2">
+                  <span className="text-xs text-zinc-500">{t('jobs.addManual.companyLabel')}</span>
+                  <input value={addForm.company} onChange={e => setAddForm({...addForm, company: e.target.value})} placeholder={t('jobs.addManual.companyPlaceholder')} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-500">{t('jobs.addManual.cityLabel')}</span>
+                  <input value={addForm.city} onChange={e => setAddForm({...addForm, city: e.target.value})} placeholder={t('jobs.addManual.cityPlaceholder')} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-500">{t('jobs.addManual.salaryLabel')}</span>
+                  <input value={addForm.salary} onChange={e => setAddForm({...addForm, salary: e.target.value})} placeholder={t('jobs.addManual.salaryPlaceholder')} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-500">{t('jobs.addManual.expLabel')}</span>
+                  <input value={addForm.exp} onChange={e => setAddForm({...addForm, exp: e.target.value})} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-500">{t('jobs.addManual.eduLabel')}</span>
+                  <input value={addForm.edu} onChange={e => setAddForm({...addForm, edu: e.target.value})} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600" />
+                </label>
+              </div>
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-500">{t('jobs.addManual.descLabel')}</span>
+                <textarea value={addForm.desc} onChange={e => setAddForm({...addForm, desc: e.target.value})} rows={4} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600 resize-none" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-500">{t('jobs.addManual.urlLabel')}</span>
+                <input value={addForm.url} onChange={e => setAddForm({...addForm, url: e.target.value})} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-600" />
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowAddDialog(false)} className="rounded border border-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900">{t('jobs.addManual.cancel')}</button>
+              <button
+                onClick={async () => {
+                  if (!addForm.title.trim() || !addForm.company.trim()) return;
+                  try {
+                    await bossApi.createJob(project, addForm);
+                    setShowAddDialog(false);
+                    setAddForm({ title: '', company: '', city: '', salary: '', exp: '', edu: '', desc: '', url: '' });
+                    onRefresh();
+                  } catch (e) {
+                    alert((e as Error).message);
+                  }
+                }}
+                disabled={!addForm.title.trim() || !addForm.company.trim()}
+                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {t('jobs.addManual.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

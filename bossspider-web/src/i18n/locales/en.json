@@ -474,7 +474,27 @@
     "unselectVisibleJobs": "Unselect visible jobs",
     "selectJob": "Select job",
     "unselectJob": "Unselect job",
-    "dbId": "DB ID"
+    "dbId": "DB ID",
+    "addManual": {
+      "button": "Add Job",
+      "title": "Add Job Manually",
+      "titleLabel": "Job Title *",
+      "titlePlaceholder": "e.g. AI Application Developer",
+      "companyLabel": "Company *",
+      "companyPlaceholder": "e.g. ByteDance",
+      "cityLabel": "City",
+      "cityPlaceholder": "e.g. Shenzhen",
+      "salaryLabel": "Salary",
+      "salaryPlaceholder": "e.g. 15K-25K",
+      "expLabel": "Experience",
+      "eduLabel": "Education",
+      "descLabel": "Description",
+      "urlLabel": "Job URL",
+      "cancel": "Cancel",
+      "save": "Save",
+      "success": "Job added successfully",
+      "failed": "Failed to add: {{error}}"
+    }
   },
   "pipeline": {
     "title": "Pipeline",

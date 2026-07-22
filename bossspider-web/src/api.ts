@@ -221,6 +221,13 @@ export const bossApi = {
     );
   },
 
+  createJob(project: string, data: { title: string; company: string; city?: string; salary?: string; exp?: string; edu?: string; desc?: string; url?: string }) {
+    return request<{ ok: boolean; jobId: number }>('/api/jobs', {
+      method: 'POST',
+      body: JSON.stringify({ project, ...data }),
+    });
+  },
+
   getJobItem(project: string, jobId: number) {
     return request<Job>(
       `/api/jobs/item?project=${encodeURIComponent(project)}&jobId=${encodeURIComponent(jobId)}`,
