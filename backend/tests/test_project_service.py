@@ -39,6 +39,15 @@ class ProjectServiceTest(unittest.TestCase):
             project_service.create_project("../other")
         self.assertEqual(error.exception.status_code, 400)
 
+    def test_empty_desktop_workspace_does_not_invent_agent_project(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            projects_dir = Path(temp_dir) / "projects"
+            with patch.object(project_service, "PROJECTS_DIR", projects_dir), patch.dict(
+                "os.environ", {"BOSSFLOW_DESKTOP": "1"}, clear=False
+            ):
+                self.assertEqual(project_service.project_names(), [])
+                self.assertFalse((projects_dir / "agent").exists())
+
     def test_clears_legacy_default_scoring_library_once(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             projects_dir = Path(temp_dir) / "projects"

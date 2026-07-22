@@ -33,6 +33,7 @@ import { CitySelector } from './components/CitySelector';
 import { useBossSpider } from './hooks/useBossSpider';
 import { bossApi } from './api';
 import { buildTemplateSeed, JOB_DIRECTION_TEMPLATES, type JobDirectionTemplate } from './jobTemplates';
+import { chooseAccountProfileProject } from './projectSelection';
 import type { DashboardTaskTarget } from './pages/Dashboard';
 import type { ResumeNavigationTarget, Tab } from './types';
 
@@ -123,6 +124,11 @@ export default function App() {
   const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Pipeline' || activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
   const hasUnsavedChanges = boss.isConfigDirty || personalResumeDirty;
+  const activeProjectReady = !boss.loading
+    && Boolean(boss.config?.project)
+    && Boolean(boss.project)
+    && boss.projects.includes(boss.project);
+  const accountProfileReady = activeProjectReady && boss.projects.includes(accountProfileProject);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -190,31 +196,21 @@ export default function App() {
   }, [navigateToTab]);
 
   useEffect(() => {
-    if (!accountProfileProject && boss.project) {
-      setAccountProfileProject(boss.project);
-      window.localStorage.setItem('bossflow.accountProfileProject', boss.project);
-    }
-  }, [accountProfileProject, boss.project]);
+    if (!activeProjectReady) return;
+    const rememberedProfile = window.localStorage.getItem('bossflow.accountProfileProject') || '';
+    const nextProfile = chooseAccountProfileProject(boss.projects, boss.project, rememberedProfile);
+    if (accountProfileProject !== nextProfile) setAccountProfileProject(nextProfile);
+    if (rememberedProfile !== nextProfile) window.localStorage.setItem('bossflow.accountProfileProject', nextProfile);
+  }, [accountProfileProject, activeProjectReady, boss.project, boss.projects]);
 
   useEffect(() => {
-    if (!boss.project) { setAccountActivityNewCount(0); return; }
+    if (!activeProjectReady || !accountProfileReady) { setAccountActivityNewCount(0); return; }
     let cancelled = false;
-    const applyResult = (result: Awaited<ReturnType<typeof bossApi.getAccountActivity>>) => {
-      if (!cancelled) setAccountActivityNewCount(result.total || result.summary?.new || 0);
-      return result;
-    };
-    void bossApi.getAccountActivity(boss.project, 'all', 1, 1, '', true, { profileProject: accountProfileProject || boss.project }).then((result) => {
-      if (result.account || !accountProfileProject || accountProfileProject === boss.project || cancelled) return applyResult(result);
-      return bossApi.getAccountActivity(boss.project, 'all', 1, 1, '', true, { profileProject: boss.project }).then((fallback) => {
-        if (!cancelled && fallback.account) {
-          setAccountProfileProject(boss.project);
-          window.localStorage.setItem('bossflow.accountProfileProject', boss.project);
-        }
-        return applyResult(fallback);
-      });
-    }).catch(() => { if (!cancelled) setAccountActivityNewCount(0); });
+    void bossApi.getAccountActivity(boss.project, 'all', 1, 1, '', true, { profileProject: accountProfileProject })
+      .then((result) => { if (!cancelled) setAccountActivityNewCount(result.total || result.summary?.new || 0); })
+      .catch(() => { if (!cancelled) setAccountActivityNewCount(0); });
     return () => { cancelled = true; };
-  }, [accountProfileProject, boss.project]);
+  }, [accountProfileProject, accountProfileReady, activeProjectReady, boss.project]);
 
   const setActiveTabStable = useCallback((tab: Tab) => {
     navigateToTab(tab);
@@ -630,13 +626,15 @@ export default function App() {
                 />
               )}
               {activeTab === 'AccountActivity' && (
-                <AccountActivity
-                  project={boss.project}
-                  profileProject={accountProfileProject || boss.project}
-                  onAddToPipeline={async (jobIds) => {
-                    if (await boss.addJobsToPipeline(jobIds, true)) navigateToTab('Pipeline');
-                  }}
-                />
+                activeProjectReady && accountProfileReady ? (
+                  <AccountActivity
+                    project={boss.project}
+                    profileProject={accountProfileProject}
+                    onAddToPipeline={async (jobIds) => {
+                      if (await boss.addJobsToPipeline(jobIds, true)) navigateToTab('Pipeline');
+                    }}
+                  />
+                ) : <PageLoading label="正在加载求职目标…" />
               )}
               {activeTab === 'Pipeline' && (
                 <Pipeline

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bossApi } from '../api';
+import { chooseInitialProject } from '../projectSelection';
 import type { ConfigPatch, ConfigPayload, ProjectTemplateSeed } from '../types';
 
 const ACTIVE_DIRECTION_STORAGE_KEY = 'bossflow.active-direction';
@@ -31,11 +32,14 @@ export function useProjectsConfig({
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const [projects, setProjects] = useState<string[]>([]);
-  const [project, setProject] = useState('agent');
+  // The project directory is discovered from /api/projects.  An invented
+  // fallback such as "agent" can race the first request and does not
+  // necessarily match the user's real directory name.
+  const [project, setProject] = useState('');
   const [config, setConfig] = useState<ConfigPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [isConfigDirty, setIsConfigDirty] = useState(false);
-  const projectRef = useRef(project);
+  const projectRef = useRef('');
   const savedConfigRef = useRef<ConfigPayload | null>(null);
   const loadEpochRef = useRef(0);
   const tRef = useRef(t);
@@ -80,8 +84,10 @@ export function useProjectsConfig({
           return;
         }
         const remembered = window.localStorage.getItem(ACTIVE_DIRECTION_STORAGE_KEY);
-        const initialProject = remembered && data.projects.includes(remembered) ? remembered : data.defaultProject;
+        const initialProject = chooseInitialProject(data.projects, data.defaultProject, remembered);
         setProject(initialProject);
+        projectRef.current = initialProject;
+        window.localStorage.setItem(ACTIVE_DIRECTION_STORAGE_KEY, initialProject);
         await loadConfig(initialProject);
       })
       .catch((error) => {

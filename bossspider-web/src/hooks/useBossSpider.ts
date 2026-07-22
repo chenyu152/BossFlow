@@ -14,7 +14,7 @@ type ResourceKey = 'jobs' | 'pipeline' | 'resume' | 'interview' | 'evidence';
 export function useBossSpider() {
   const { t } = useTranslation('common');
   const { notice, showNotice } = useNotice();
-  const activeProjectRef = useRef('agent');
+  const activeProjectRef = useRef('');
   const getActiveProject = useCallback(() => activeProjectRef.current, []);
   const evidence = useEvidence(getActiveProject);
 
