@@ -25,7 +25,7 @@
 
 ## 💡 为什么选择 BossFlow？
 
-传统的求职方式常常面临 **海投效率低下**、**简历隐私泄露**、**AI 乱编履历被面试官戳穿** 等痛点。
+传统的求职方式常常面临 **海投效率低下**、**AI 乱编履历被面试官戳穿** 等痛点。
 
 **BossFlow** 重新定义了个人求职流水线：
 - 🛡️ **数据完全本地存储**：岗位库、基础简历、证据库与 Cookie 全部保留在你的电脑上，不上传任何第三方云端。
@@ -47,17 +47,22 @@
 
 <img src="./image/candidate.png" alt="BossFlow 候选岗位档案" width="100%" />
 
-### 3. 材料定制与能力档案库
+### 3. 多格式个人简历导入与维护
+支持 **Markdown、文本 (TXT) 及 PDF** 等多种格式的基础简历快速导入与自动解析，便于集中维护核心履历线索。
+
+<img src="./image/Resume.png" alt="BossFlow 个人简历维护与多格式导入" width="100%" />
+
+### 4. 材料定制与能力档案库
 基于能力覆盖度生成匹配报告与定制简历 Markdown，能力档案直观展现各技能覆盖岗位数。
 
 <img src="./image/power.png" alt="BossFlow 能力档案" width="100%" />
 
-### 4. 针对性面试准备与 STAR 故事库
+### 5. 针对性面试准备与 STAR 故事库
 按岗位考察能力点自动生成面试准备文档，将真实项目经历整理为可复用的 STAR 面试故事库。
 
 <img src="./image/Interview.png" alt="BossFlow 面试准备文档" width="100%" />
 
-### 5. 原生 MCP 服务支持与 Agent 联动
+### 6. 原生 MCP 服务支持与 Agent 联动
 内置 Streamable HTTP & stdio 桥接 MCP Server，支持 Claude Code, Trae 等工具直接调用岗位、简历与技能面板。
 
 <img src="./image/mcp.png" alt="BossFlow MCP 界面" width="100%" />
