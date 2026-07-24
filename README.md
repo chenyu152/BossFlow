@@ -52,17 +52,22 @@
 
 <img src="./image/Resume.png" alt="BossFlow 个人简历维护与多格式导入" width="100%" />
 
-### 4. 材料定制与能力档案库
-基于能力覆盖度生成匹配报告与定制简历 Markdown，能力档案直观展现各技能覆盖岗位数。
+### 4. 优化建议自主勾选与定制简历输出
+所有 LLM 优化建议均支持**自主勾选与人工确认**；未确认项仅作为补充参考，只有经你确认的事实才会写入简历，生成针对目标岗位的定制 Markdown 简历。
+
+<img src="./image/Customized Resume.png" alt="BossFlow 简历材料与定制简历输出" width="100%" />
+
+### 5. 材料定制与能力档案库
+基于能力覆盖度生成匹配报告与能力面板，直观展现个人各项技能覆盖的目标岗位数量与硬性要求占比。
 
 <img src="./image/power.png" alt="BossFlow 能力档案" width="100%" />
 
-### 5. 针对性面试准备与 STAR 故事库
+### 6. 针对性面试准备与 STAR 故事库
 按岗位考察能力点自动生成面试准备文档，将真实项目经历整理为可复用的 STAR 面试故事库。
 
 <img src="./image/Interview.png" alt="BossFlow 面试准备文档" width="100%" />
 
-### 6. 原生 MCP 服务支持与 Agent 联动
+### 7. 原生 MCP 服务支持与 Agent 联动
 内置 Streamable HTTP & stdio 桥接 MCP Server，支持 Claude Code, Trae 等工具直接调用岗位、简历与技能面板。
 
 <img src="./image/mcp.png" alt="BossFlow MCP 界面" width="100%" />
@@ -94,7 +99,10 @@ flowchart TD
 
 ## 🚀 快速开始
 
-### 环境要求
+> [!TIP]
+> 💻 **Windows 用户快速体验**：如无需开发源码，可以直接前往 [Releases 页面](https://github.com/chenyu152/BossFlow/releases) 下载最新的 Windows 桌面安装包 (`.exe`) 一键开箱使用！
+
+### 环境要求 (源码运行)
 - **Python**: `3.10+`
 - **Node.js**: `18+`
 - **Chrome 浏览器**（用于岗位采集和登录 Cookie）
