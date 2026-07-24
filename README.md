@@ -42,6 +42,11 @@
 
 <img src="./image/Job Board.png" alt="BossFlow 岗位库列表" width="100%" />
 
+#### 💡 BOSS 求职记录同步
+支持一键同步个人 Boss 直聘账号的真实沟通与求职记录（沟通中、已投递、已关闭、收藏），自动比对当前求职目标匹配度，方便统一管理历史求职脉络。
+
+<img src="./image/BossRecord.png" alt="BossFlow BOSS 求职记录同步" width="100%" />
+
 ### 2. 候选岗位与履历证据链核对
 自动比对 JD 要求与个人真实经历，区分“已有证据”、“待确认”与“技能缺口”，避免 AI 瞎编经历。
 
