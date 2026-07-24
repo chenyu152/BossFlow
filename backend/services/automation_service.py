@@ -821,6 +821,7 @@ class AutomationService:
             self._finish_run(run_id, False, str(error))
 
     def _finish_run(self, run_id: str, success: bool, error: str = "") -> None:
+        stopped = str(error or "").strip().lower() == "stopped"
         with self.lock, self._connect() as connection:
             connection.execute(
                 """
@@ -829,9 +830,9 @@ class AutomationService:
                 WHERE id = ?
                 """,
                 (
-                    "succeeded" if success else "failed",
+                    "succeeded" if success else "interrupted" if stopped else "failed",
                     _iso(_now()),
-                    str(error or "")[:4000],
+                    "" if stopped else str(error or "")[:4000],
                     run_id,
                 ),
             )

@@ -10,6 +10,7 @@ export function StatusBadge({ status }: { status: Status }) {
     'processing-partial': { color: 'text-blue-400', bg: 'bg-blue-950', dot: 'bg-blue-500 animate-pulse', labelKey: 'status.processingPartial' },
     'live-status': { color: 'text-cyan-300', bg: 'bg-cyan-950', dot: 'bg-cyan-400 animate-pulse', labelKey: 'status.liveStatus' },
     stopping: { color: 'text-orange-400', bg: 'bg-orange-950', dot: 'bg-orange-500 animate-pulse', labelKey: 'status.stopping' },
+    stopped: { color: 'text-zinc-400', bg: 'bg-zinc-800', dot: 'bg-zinc-500', labelKey: 'status.stopped' },
     failed: { color: 'text-red-400', bg: 'bg-red-950', dot: 'bg-red-500', labelKey: 'status.failed' },
   };
   const item = config[status] || config.ready;

@@ -132,6 +132,7 @@
     "processingPartial": "Processing Partial",
     "liveStatus": "Checking Jobs",
     "stopping": "Stopping",
+    "stopped": "Stopped",
     "failed": "Failed",
     "ok": "ok",
     "near": "near",

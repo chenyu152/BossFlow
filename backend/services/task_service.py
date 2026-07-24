@@ -49,6 +49,7 @@ class TaskManager:
         self.worker: Optional[threading.Thread] = None
         self.current_crawler: Optional[Any] = None
         self.current_stop: Optional[Callable[[], None]] = None
+        self.stop_requested = False
         self.status = "ready"
         self.running = False
         self.crawl_authenticated = False
@@ -84,6 +85,7 @@ class TaskManager:
             self.running = True
             self.crawl_authenticated = False
             self.current_stop = stop_handler
+            self.stop_requested = False
             self.logs.clear()
         self.append_log("任务已启动")
 
@@ -92,21 +94,31 @@ class TaskManager:
             completion_error = ""
             try:
                 target()
-                success = True
-                self.append_log("任务结束")
                 with self.lock:
-                    self.status = "ready"
+                    stopped = self.stop_requested
+                    self.status = "stopped" if stopped else "ready"
                     self.running = False
                     self.current_crawler = None
                     self.current_stop = None
+                if stopped:
+                    completion_error = "stopped"
+                    self.append_log("任务已停止，已获取的数据已完成保存")
+                else:
+                    success = True
+                    self.append_log("任务结束")
             except Exception:
-                completion_error = traceback.format_exc()
-                self.append_log(completion_error)
                 with self.lock:
-                    self.status = "failed"
+                    stopped = self.stop_requested
+                    self.status = "stopped" if stopped else "failed"
                     self.running = False
                     self.current_crawler = None
                     self.current_stop = None
+                if stopped:
+                    completion_error = "stopped"
+                    self.append_log("任务已停止，已获取的数据已完成保存")
+                else:
+                    completion_error = traceback.format_exc()
+                    self.append_log(completion_error)
             finally:
                 if on_complete:
                     try:
@@ -128,6 +140,7 @@ class TaskManager:
             self.append_log("收到终止请求，正在停止当前任务")
             with self.lock:
                 self.status = "stopping"
+                self.stop_requested = True
             try:
                 stop_handler()
             except Exception:
@@ -138,15 +151,18 @@ class TaskManager:
         if not crawler:
             self.append_log("当前没有可终止的爬虫实例")
             return
-        self.append_log("收到终止请求，正在保存中断数据并关闭浏览器")
+        self.append_log("收到终止请求，正在保存中断数据并等待采集流程安全退出")
         with self.lock:
             self.status = "stopping"
+            self.stop_requested = True
         try:
-            crawler._stopped = True
-            crawler._save_partial()
-            crawler._safe_listen_stop()
-            if crawler.page:
-                crawler.page.quit()
+            request_stop = getattr(crawler, "request_stop", None)
+            if callable(request_stop):
+                request_stop()
+            else:
+                crawler._stopped = True
+                crawler._save_partial()
+                crawler._safe_listen_stop()
         except Exception:
             self.append_log(traceback.format_exc())
 

@@ -89,6 +89,7 @@ RELEVANT_KEYWORDS = [
 ]
 
 DETAIL_API = 'https://www.zhipin.com/wapi/zpgeek/job/detail.json'
+LEGACY_MIN_DETAIL_LENGTH = 100
 
 
 # ==================== 工具函数 ====================
@@ -115,6 +116,17 @@ def _merge_unique(*groups):
                 seen.add(term)
                 merged.append(term)
     return merged
+
+
+def has_complete_job_detail(job: dict) -> bool:
+    """判断中断结果是否已有完整 JD；兼容尚未写入完成标记的旧中断文件。"""
+    marker = job.get('_detail_complete')
+    if marker is not None:
+        return marker is True
+    desc = job.get('desc', '')
+    if isinstance(desc, list):
+        desc = ' '.join(str(item) for item in desc)
+    return len(str(desc or '').strip()) >= LEGACY_MIN_DETAIL_LENGTH
 
 
 # ==================== 配置加载 ====================
@@ -332,6 +344,12 @@ class BossCrawler:
             self.page.listen.stop()
         except Exception:
             pass
+
+    def request_stop(self):
+        """请求优雅停止；由当前采集流程负责落盘、入库并最终关闭浏览器。"""
+        self._stopped = True
+        self._safe_listen_stop()
+        self._save_partial()
 
     def set_existing_job_index(self, index: dict | None):
         """Provide database identities so known jobs can bypass detail requests."""
@@ -570,7 +588,8 @@ class BossCrawler:
             observed_total += observed
 
         while (
-            database_new < new_job_target
+            not self._stopped
+            and database_new < new_job_target
             and observed_total < max_jobs
             and scroll_idx < max_scrolls
         ):
@@ -647,6 +666,8 @@ class BossCrawler:
         random.shuffle(city_items)
 
         for city_i, (city_name, city_code) in enumerate(city_items):
+            if self._stopped:
+                break
             if not self._browser_alive():
                 logger.warning(f'浏览器已断连，停止关键词 {keyword}')
                 break
@@ -682,7 +703,7 @@ class BossCrawler:
                 except Exception:
                     pass
 
-            if city_i < len(city_items) - 1:
+            if not self._stopped and city_i < len(city_items) - 1:
                 random_delay(CITY_REST_MIN, CITY_REST_MAX)
 
         # 已入库岗位只刷新观察时间，不再重复打开详情页。
@@ -722,6 +743,7 @@ class BossCrawler:
                     'url': job.get('url', ''),
                     'security_id': job.get('security_id', ''),
                     '_source': 'boss',
+                    '_detail_complete': bool(str(job.get('full_desc') or '').strip()),
                 })
 
         kw_raw = len(self.all_jobs) - kw_before
@@ -743,6 +765,9 @@ class BossCrawler:
         success = fail = consecutive_fail = 0
 
         for idx, (key, job) in enumerate(jobs_needing_detail, 1):
+            if self._stopped:
+                logger.info(f'收到停止请求，停止详情获取 (已完成 {idx-1}/{total})')
+                break
             if not self._browser_alive():
                 logger.warning(f'浏览器已断连，停止详情获取 (已完成 {idx-1}/{total})')
                 break
@@ -817,7 +842,7 @@ class BossCrawler:
                 else:
                     consecutive_fail = 0
 
-                if consecutive_fail >= 5:
+                if not self._stopped and consecutive_fail >= 5:
                     print(f'  [WARN] 连续 {consecutive_fail} 次失败，休息 10s...')
                     time.sleep(random.uniform(8, 12))
                     consecutive_fail = 0
@@ -825,9 +850,11 @@ class BossCrawler:
                 if idx % 20 == 0:
                     print(f'  详情进度: {idx}/{total} (成功 {success}, 失败 {fail})')
 
+                if self._stopped:
+                    break
                 random_delay(DETAIL_DELAY_MIN, DETAIL_DELAY_MAX)
 
-                if idx % DETAIL_BATCH_SIZE == 0:
+                if not self._stopped and idx % DETAIL_BATCH_SIZE == 0:
                     pause = random.uniform(*DETAIL_BATCH_PAUSE)
                     print(f'  ☕ 批次休息 {pause:.0f}s...')
                     simulate_human(self.page)
@@ -981,6 +1008,10 @@ class BossCrawler:
                 except Exception:
                     pass
 
+            if self._stopped:
+                print('  [STOP] 已停止后续关键词，正在保存并处理已获取的数据')
+                break
+
             if kw_idx < total_kws:
                 rest = random.uniform(KEYWORD_REST_MIN, KEYWORD_REST_MAX)
                 print(f'  ☕ 关键词切换休息 {rest:.0f}s...')
@@ -992,7 +1023,8 @@ class BossCrawler:
             self.page.quit()
         except Exception:
             pass
-        print(f'\n[OK] 完成! 耗时 {elapsed_total:.1f} 分钟')
+        result_label = '[STOP] 已停止' if self._stopped else '[OK] 完成'
+        print(f'\n{result_label}! 耗时 {elapsed_total:.1f} 分钟')
         print(f'   强相关岗位: {len(all_results)} 条 | 过滤非相关: {self.skipped} 条')
 
         # 最终保存，完成后清理临时文件
@@ -1004,6 +1036,18 @@ class BossCrawler:
                 self._partial_file.unlink(missing_ok=True)
             except Exception:
                 pass
+
+        if self._stopped:
+            completed_results = [
+                job for job in all_results
+                if has_complete_job_detail(job)
+            ]
+            incomplete_count = len(all_results) - len(completed_results)
+            print(
+                f'   中断入库: 完整详情 {len(completed_results)} 条'
+                f' | 待续采详情 {incomplete_count} 条（保留在 {self._partial_file}）'
+            )
+            return completed_results
 
         return all_results
 
@@ -1108,13 +1152,17 @@ def main():
             partial_data = json.load(f)
         raw_jobs = partial_data.get('jobs', partial_data if isinstance(partial_data, list) else [])
         print(f'[>>] 读取 {partial_path}: {len(raw_jobs)} 条原始数据')
+        complete_jobs = [job for job in raw_jobs if has_complete_job_detail(job)]
+        deferred_count = len(raw_jobs) - len(complete_jobs)
+        if deferred_count:
+            print(f'[INFO] 跳过 {deferred_count} 条尚未完成详情采集的岗位；它们仍保留在中断文件中')
 
         config = load_config(config_file)
         cat_rules = config.get('cat_rules')
         relevance_keywords = config.get('relevance_keywords')
         blacklist_keywords = config.get('blacklist_keywords')
         min_salary = float(config.get('min_salary', MIN_AVG_SALARY_K))
-        cleaned = process_batch(raw_jobs, cat_rules=cat_rules, min_salary=min_salary, relevance_keywords=relevance_keywords, blacklist_keywords=blacklist_keywords, target_keywords=keywords)
+        cleaned = process_batch(complete_jobs, cat_rules=cat_rules, min_salary=min_salary, relevance_keywords=relevance_keywords, blacklist_keywords=blacklist_keywords, target_keywords=keywords)
         print(f'[*] 清洗后: {len(cleaned)} 条')
 
         if args.merge:

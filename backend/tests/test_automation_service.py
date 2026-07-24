@@ -103,6 +103,17 @@ class AutomationServiceTest(unittest.TestCase):
         self.assertEqual(len(self.service.list_runs()), 1)
         self.assertEqual(self.started_projects, ["agent"])
 
+    def test_user_stopped_run_is_recorded_as_interrupted(self):
+        schedule = self.service.create_schedule(self.schedule("agent"))
+        self.service.run_now(schedule["id"])
+
+        self.manager.running = False
+        self.callbacks[0](False, "stopped")
+
+        run = self.service.list_runs()[0]
+        self.assertEqual(run["status"], "interrupted")
+        self.assertEqual(run["error"], "")
+
     def test_enabled_schedule_requires_saved_login(self):
         self.service.login_state_reader = lambda _project: {"canSchedule": False}
         with self.assertRaisesRegex(Exception, "no usable BOSS login Cookie"):

@@ -132,6 +132,7 @@
     "processingPartial": "处理中断文件",
     "liveStatus": "核验岗位",
     "stopping": "终止中",
+    "stopped": "已停止",
     "failed": "失败",
     "ok": "匹配",
     "near": "接近",

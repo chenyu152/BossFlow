@@ -163,7 +163,7 @@ export type AgentAccess = {
   httpConfig: AgentMcpConfig | null;
 };
 
-export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'failed';
+export type Status = 'ready' | 'crawling' | 'login' | 'processing-partial' | 'live-status' | 'stopping' | 'stopped' | 'failed';
 
 export type ConfigPayload = {
   ok: boolean;

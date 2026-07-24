@@ -29,6 +29,7 @@ export function Logs({ status, logs }: { status: Status; logs: ParsedLog[] }) {
       'processing-partial': t('status.processingPartial'),
       'live-status': t('status.liveStatus'),
       stopping: t('status.stopping'),
+      stopped: t('status.stopped'),
       failed: t('status.failed'),
     };
     return map[s] || s;
@@ -39,7 +40,7 @@ export function Logs({ status, logs }: { status: Status; logs: ParsedLog[] }) {
       <div className="log-console__toolbar h-10 flex items-center justify-between px-3 shrink-0">
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${status === 'crawling' ? 'bg-indigo-500 animate-pulse' : status === 'ready' ? 'bg-zinc-500' : status === 'failed' ? 'bg-red-500' : 'bg-amber-500 animate-pulse'}`} />
+            <span className={`w-2 h-2 rounded-full ${status === 'crawling' ? 'bg-indigo-500 animate-pulse' : status === 'ready' || status === 'stopped' ? 'bg-zinc-500' : status === 'failed' ? 'bg-red-500' : 'bg-amber-500 animate-pulse'}`} />
             <span className="log-console__status capitalize">{getStatusLabel(status)}</span>
           </div>
           <div className="log-console__divider" />

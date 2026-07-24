@@ -28,7 +28,7 @@ export function useTasks({
 
   const parsedLogs = useMemo(() => logs.map(parseLog), [logs]);
   const recentLogs = parsedLogs.slice(-6);
-  const isRunning = status !== 'ready' && status !== 'failed';
+  const isRunning = status !== 'ready' && status !== 'stopped' && status !== 'failed';
 
   useEffect(() => {
     const timer = window.setInterval(async () => {

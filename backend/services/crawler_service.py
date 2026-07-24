@@ -7,7 +7,7 @@ from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialReq
 from backend.services.project_service import find_free_port, save_form_config
 from backend.services.login_state_service import record_login_verified
 from backend.services.task_service import TaskManager, capture_task_output
-from crawler.boss import BossCrawler
+from crawler.boss import BossCrawler, has_complete_job_detail
 from crawler.db import (
     load_existing_job_index,
     save_run,
@@ -132,8 +132,18 @@ def process_partial_task(payload: ProcessPartialRequest, task_manager: TaskManag
             raw_jobs = data.get("jobs", data if isinstance(data, list) else [])
             print(f"[INFO] 已读取中断文件: {partial}，共 {len(raw_jobs)} 条")
             if payload.autoSqlite:
+                complete_jobs = [
+                    job for job in raw_jobs
+                    if has_complete_job_detail(job)
+                ]
+                deferred_count = len(raw_jobs) - len(complete_jobs)
+                if deferred_count:
+                    print(
+                        f"[INFO] 跳过 {deferred_count} 条尚未完成详情采集的岗位；"
+                        "它们仍保留在中断文件中"
+                    )
                 cleaned = process_batch(
-                    raw_jobs,
+                    complete_jobs,
                     cat_rules=config.get("cat_rules"),
                     min_salary=float(config.get("min_salary", MIN_AVG_SALARY_K)),
                     relevance_keywords=config.get("relevance_keywords"),
@@ -147,7 +157,7 @@ def process_partial_task(payload: ProcessPartialRequest, task_manager: TaskManag
                     raw_count=len(raw_jobs),
                     cleaned_count=len(cleaned),
                     added_count=stats["inserted"],
-                    note=f"partial={partial}",
+                    note=f"partial={partial}, deferred_detail={deferred_count}",
                 )
                 print(f"[OK] 清洗 {len(cleaned)}，新增 {stats['inserted']}，刷新 {stats['updated']}")
 
