@@ -51,3 +51,5 @@ desktop/node_modules/
 .venv-release/
 
 image/backup_original/
+image/xiaohongshu_cards/
+render_xiaohongshu_cards.py
