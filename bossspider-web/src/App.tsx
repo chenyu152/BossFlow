@@ -19,7 +19,6 @@ import {
   Plus,
   Server,
   Sparkles,
-  SlidersHorizontal,
   Square,
   Settings as SettingsIcon,
   Tags,
@@ -112,7 +111,6 @@ export default function App() {
   const [creatingDirection, setCreatingDirection] = useState(false);
   const [scopeGuideAutoStartPending, setScopeGuideAutoStartPending] = useState(false);
   const [matchingGuideAutoStartPending, setMatchingGuideAutoStartPending] = useState(false);
-  const [returnToMatchingGuideAfterApiTest, setReturnToMatchingGuideAfterApiTest] = useState(false);
   const [crawlGuideOpen, setCrawlGuideOpen] = useState(false);
   const [resumeGuideAutoStartPending, setResumeGuideAutoStartPending] = useState(false);
   const [resumeGuideAfterCrawl, setResumeGuideAfterCrawl] = useState(false);
@@ -301,11 +299,11 @@ export default function App() {
 
   const pageTitleByTab: Record<Tab, string> = {
     Dashboard: t('nav.dashboard'), Scope: t('nav.scope'), MatchingRules: t('nav.matchingRules'),
-    ScoringRules: t('nav.scoringRules'), Jobs: t('nav.jobs'), Pipeline: t('nav.pipeline'),
+    Jobs: t('nav.jobs'), Pipeline: t('nav.pipeline'),
     Evidence: t('nav.evidence'), PersonalResume: t('nav.personalResume'), Resume: t('nav.resume'), Story: t('nav.story'), AccountActivity: t('accountActivity.title', { defaultValue: 'BOSS 求职记录' }),
     Interview: t('nav.interview'), Logs: t('nav.logs'), Settings: t('nav.settings'),
   };
-  const discoveryActive = activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'ScoringRules' || activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Logs';
+  const discoveryActive = activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Logs';
   const materialsActive = activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume';
   const interviewActive = activeTab === 'Interview' || activeTab === 'Story';
 
@@ -318,7 +316,6 @@ export default function App() {
           { tab: 'AccountActivity' as Tab, icon: <ListPlus size={16} />, label: t('accountActivity.menu', { defaultValue: 'BOSS 求职记录' }) },
           { tab: 'Scope' as Tab, icon: <Crosshair size={16} />, label: t('nav.scope') },
           { tab: 'MatchingRules' as Tab, icon: <Tags size={16} />, label: t('nav.matchingRules') },
-          { tab: 'ScoringRules' as Tab, icon: <SlidersHorizontal size={16} />, label: t('nav.scoringRules') },
           { tab: 'Logs' as Tab, icon: <Terminal size={16} />, label: t('nav.logs') },
         ],
       },
@@ -575,7 +572,6 @@ export default function App() {
               )}
               {activeTab === 'MatchingRules' && boss.config && (
                 <Rules
-                  mode="matching"
                   config={boss.config}
                   updateConfig={boss.updateConfig}
                   onSave={boss.saveConfig}
@@ -585,21 +581,11 @@ export default function App() {
                     setResumeGuideAfterCrawl(true);
                     setCrawlGuideOpen(true);
                   }}
-                  onGuidedLlmSetupRequired={() => setReturnToMatchingGuideAfterApiTest(true)}
                 />
-              )}
-              {activeTab === 'ScoringRules' && boss.config && (
-                <Rules mode="scoring" config={boss.config} updateConfig={boss.updateConfig} onSave={boss.saveConfig} />
               )}
               {activeTab === 'Settings' && (
                 <Settings
                   onUpdated={() => undefined}
-                  returnToMatchingGuideAfterTest={returnToMatchingGuideAfterApiTest}
-                  onReturnToMatchingGuide={() => {
-                    setReturnToMatchingGuideAfterApiTest(false);
-                    setMatchingGuideAutoStartPending(true);
-                    setActiveTab('MatchingRules');
-                  }}
                 />
               )}
               {activeTab === 'Jobs' && (

@@ -71,6 +71,7 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager, on_comple
                         min_salary=float(config.get("min_salary", MIN_AVG_SALARY_K)),
                         relevance_keywords=config.get("relevance_keywords"),
                         blacklist_keywords=config.get("blacklist_keywords"),
+                        target_keywords=keywords,
                     )
                     stats = upsert_jobs(cleaned, paths["dbPath"])
                 save_run(
@@ -137,6 +138,7 @@ def process_partial_task(payload: ProcessPartialRequest, task_manager: TaskManag
                     min_salary=float(config.get("min_salary", MIN_AVG_SALARY_K)),
                     relevance_keywords=config.get("relevance_keywords"),
                     blacklist_keywords=config.get("blacklist_keywords"),
+                    target_keywords=config.get("keywords") or [],
                 )
                 stats = upsert_jobs(cleaned, paths["dbPath"])
                 save_run(

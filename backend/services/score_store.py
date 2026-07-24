@@ -10,11 +10,15 @@ DATA_DIR = workspace_path("data")
 SCORES_PATH = workspace_path("data/job_scores.json")
 
 SCORE_FIELDS = [
+    "scoringVersion",
     "score",
     "fitLevel",
     "coverage",
     "jdQuality",
     "salarySignal",
+    "salaryRisk",
+    "salaryMatch",
+    "keywordCoverage",
     "experienceSignal",
     "experienceRisk",
     "experienceLabel",
@@ -26,6 +30,9 @@ SCORE_FIELDS = [
     "requiredEducation",
     "matchedTerms",
     "missingTerms",
+    "confidence",
+    "reasons",
+    "reasonCodes",
     "scoredAt",
 ]
 

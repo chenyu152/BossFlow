@@ -198,6 +198,7 @@ def config_payload(project_dir: Path) -> Dict[str, Any]:
         "newJobTarget": max(1, new_job_target),
         "maxJobs": max(1, max_jobs),
         "minSalary": float(config.get("min_salary", MIN_AVG_SALARY_K)),
+        "experienceGapYears": int(config.get("experience_gap_years", 1) or 1),
         "headlessMode": bool(config.get("headless_mode", True)),
         "autoSqlite": bool(config.get("auto_sqlite", True)),
     }
@@ -243,6 +244,7 @@ def save_form_config(
         "max_jobs": int(payload.maxJobs or DEFAULT_SCRAPE_LIMITS["max_jobs"]),
     }
     config["min_salary"] = float(payload.minSalary or MIN_AVG_SALARY_K)
+    config["experience_gap_years"] = int(payload.experienceGapYears)
     config.pop("strategy_index", None)
     config.pop("quick_mode", None)
     config["headless_mode"] = bool(payload.headlessMode)

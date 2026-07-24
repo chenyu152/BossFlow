@@ -27,7 +27,7 @@ from backend.services.project_service import paths_for_project, resolve_project
 from backend.storage.paths import BASE_DIR
 from crawler.boss import load_config
 from crawler.db import JOB_DETAIL_ID_RE, load_existing_job_index, upsert_jobs
-from crawler.pipeline import matching_rules_are_enabled, process_one
+from crawler.pipeline import admission_decision, process_one
 
 logger = logging.getLogger(__name__)
 
@@ -488,13 +488,17 @@ def _match_job(row: sqlite3.Row, project_dir: Path) -> dict[str, Any]:
     if cities and not any(name in city or city in name for name in cities):
         return {"relevance": "mismatched", "confidence": "high", "reason": "城市不在当前求职目标范围"}
     raw = {"title": title, "company": company, "city": city, "salary": row["salary"], "url": row["detail_url"], "desc": json.loads(row["raw_summary_json"] or "{}").get("desc", "")}
-    cat_rules = config.get("cat_rules") or {}
     relevance = config.get("relevance_keywords") or []
     blacklist = config.get("blacklist_keywords") or []
-    enabled = matching_rules_are_enabled(cat_rules, relevance, blacklist, config.get("min_salary"))
-    if enabled and process_one(raw, cat_rules, config.get("min_salary"), relevance, blacklist) is None:
-        return {"relevance": "mismatched", "confidence": "medium", "reason": "未通过当前目标的确定性岗位规则"}
-    return {"relevance": "matched", "confidence": "medium", "reason": "城市与当前目标确定性规则匹配"}
+    decision = admission_decision(
+        raw,
+        relevance_keywords=relevance,
+        blacklist_keywords=blacklist,
+        target_keywords=config.get("keywords") or [],
+    )
+    if not decision["accepted"]:
+        return {"relevance": "mismatched", "confidence": "medium", "reason": decision["reason"]}
+    return {"relevance": "matched", "confidence": "medium", "reason": decision["reason"]}
 
 
 def _existing_project_id(row: sqlite3.Row, project_dir: Path) -> int | None:
@@ -704,6 +708,7 @@ def import_account_activity(project: str, account_job_ids: list[int], mode: str 
                     config.get("min_salary"),
                     config.get("relevance_keywords") or [],
                     config.get("blacklist_keywords") or [],
+                    config.get("keywords") or [],
                 )
                 if not cleaned:
                     failed.append({"id": raw_id, "reason": "岗位详情未通过确定性规则，未写入岗位库"})

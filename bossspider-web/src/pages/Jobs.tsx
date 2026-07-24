@@ -637,18 +637,17 @@ export function Jobs({
                         <Loader2 size={12} className="animate-spin" />
                         {t('jobs.scoring')}
                       </span>
-                    ) : job.score ? (
+                    ) : job.scoringVersion && job.score ? (
                       <div className="space-y-1">
-                        <span className={`jobs-fit-badge ${job.score >= 4.3 ? 'jobs-fit-badge--high' : job.score >= 3.5 ? 'jobs-fit-badge--review' : 'jobs-fit-badge--weak'}`}>
-                          {job.score.toFixed(1)}
+                        <span className={`jobs-fit-badge ${job.fitLevel === '优先查看' ? 'jobs-fit-badge--high' : job.fitLevel === '可以看看' ? 'jobs-fit-badge--review' : 'jobs-fit-badge--weak'}`}>
                           <span className="jobs-fit-badge__label">{job.fitLevel}</span>
                         </span>
-                        <div className="text-[10px] text-zinc-500">
-                          {t('pipeline.experience')} {riskText(job.experienceRisk)} / {t('pipeline.education')} {riskText(job.educationRisk)}
+                        <div className="text-[10px] leading-relaxed text-zinc-500">
+                          {(job.reasons || []).slice(0, 2).join(' · ')}
                         </div>
                       </div>
                     ) : (
-                      <span className="text-zinc-600">-</span>
+                      <span className="text-xs text-amber-400">{job.score ? t('jobs.scoringOutdated') : '-'}</span>
                     )}
                   </td>
                   <td className="px-4 py-2 text-zinc-400 truncate">{job.avg.toFixed(1)}</td>
@@ -720,14 +719,15 @@ export function Jobs({
                 <div className="rounded border border-zinc-800 bg-zinc-900/50 p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-zinc-500">{t('jobs.scoreThisJob')}</span>
-                    <span className="text-sm font-semibold text-zinc-100">{selectedJob.score.toFixed(1)} / 5.0</span>
+                    <span className="text-sm font-semibold text-zinc-100">{selectedJob.fitLevel || t('jobs.scoringOutdated')}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                    <div>{t('jobs.coverage')} {selectedJob.coverage ?? 0}%</div>
-                    <div>{t('jobs.jd')} {selectedJob.jdQuality ?? 0}%</div>
+                    <div>{t('jobs.coverage')} {selectedJob.keywordCoverage?.coverage ?? selectedJob.coverage ?? '-'}%</div>
+                    <div>{t('pipeline.confidence')} {selectedJob.confidence || '-'}</div>
                     <div>{t('pipeline.experience')} {riskText(selectedJob.experienceRisk)}</div>
                     <div>{t('pipeline.education')} {riskText(selectedJob.educationRisk)}</div>
                   </div>
+                  {!!selectedJob.reasons?.length && <div className="mt-3 text-xs leading-relaxed text-zinc-400"><div className="mb-1 text-zinc-500">{t('jobs.scoringReasons')}</div>{selectedJob.reasons.slice(0, 3).map((reason) => <div key={reason}>· {reason}</div>)}</div>}
                 </div>
               ) : (
                 <button

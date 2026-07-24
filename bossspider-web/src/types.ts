@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'ScoringRules' | 'Jobs' | 'AccountActivity' | 'Pipeline' | 'Evidence' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
+export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'Jobs' | 'AccountActivity' | 'Pipeline' | 'Evidence' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
 
 export type AccountActivityTab = 'all' | 'communicated' | 'applied' | 'interview' | 'favorited';
 export type AccountActivityItem = {
@@ -180,6 +180,7 @@ export type ConfigPayload = {
   newJobTarget: number;
   maxJobs: number;
   minSalary: number;
+  experienceGapYears: number;
   headlessMode: boolean;
   autoSqlite: boolean;
   jobCount: number;
@@ -225,10 +226,19 @@ export type Job = {
   recruitmentObservationRaw?: string;
   recruitmentObservedAt?: string;
   score?: number | null;
+  scoringVersion?: number | null;
   fitLevel?: string;
   coverage?: number | null;
   jdQuality?: number | null;
   salarySignal?: number | null;
+  salaryRisk?: string | null;
+  salaryMatch?: string | null;
+  keywordCoverage?: {
+    status: string;
+    matchedTerms: string[];
+    missingTerms: string[];
+    coverage: number | null;
+  } | null;
   experienceSignal?: number | null;
   experienceRisk?: string;
   experienceLabel?: string;
@@ -240,6 +250,9 @@ export type Job = {
   requiredEducation?: string;
   matchedTerms?: string[];
   missingTerms?: string[];
+  confidence?: string;
+  reasons?: string[];
+  reasonCodes?: string[];
   scoredAt?: string;
 };
 
@@ -282,10 +295,19 @@ export type PipelineItem = {
   addedAt: string;
   sourceKey: string;
   score: number | null;
+  scoringVersion?: number | null;
   fitLevel: string;
   coverage: number | null;
   jdQuality: number | null;
   salarySignal: number | null;
+  salaryRisk?: string | null;
+  salaryMatch?: string | null;
+  keywordCoverage?: {
+    status: string;
+    matchedTerms: string[];
+    missingTerms: string[];
+    coverage: number | null;
+  } | null;
   experienceSignal: number | null;
   experienceRisk: string;
   experienceLabel: string;
@@ -297,6 +319,9 @@ export type PipelineItem = {
   requiredEducation: string;
   matchedTerms: string[];
   missingTerms: string[];
+  confidence?: string;
+  reasons?: string[];
+  reasonCodes?: string[];
   scoredAt: string;
   reportPath: string;
   reportId: string;
@@ -359,9 +384,18 @@ export type EvaluatePipelineResponse = {
   fitLevel: string;
   metrics: {
     score: number;
+    scoringVersion?: number;
     coverage: number;
     jdQuality: number;
     salarySignal: number;
+    salaryRisk?: string | null;
+    salaryMatch?: string | null;
+    keywordCoverage?: {
+      status: string;
+      matchedTerms: string[];
+      missingTerms: string[];
+      coverage: number | null;
+    };
     experienceSignal: number;
     experienceRisk: string;
     experienceLabel: string;
@@ -374,6 +408,9 @@ export type EvaluatePipelineResponse = {
     fitLevel: string;
     matchedTerms: string[];
     missingTerms: string[];
+    confidence?: string;
+    reasons?: string[];
+    reasonCodes?: string[];
   };
   pipeline: PipelineResponse;
 };
@@ -383,25 +420,6 @@ export type ScorePipelineResponse = {
   scored: number;
   errors: Array<{ sourceKey: string; error: string }>;
   pipeline: PipelineResponse;
-};
-
-export type ScoringKeywordSuggestionResponse = {
-  ok: boolean;
-  project: string;
-  sampleCount: number;
-  keywords: string[];
-  rationale: string;
-};
-
-export type MatchingRulesSuggestionResponse = {
-  ok: boolean;
-  project: string;
-  basedOn: string[];
-  categoryRules: Record<string, string[]>;
-  relevanceKeywords: string[];
-  blacklistKeywords: string[];
-  rationale: string;
-  warnings: string[];
 };
 
 export type ScoreJobsResponse = {

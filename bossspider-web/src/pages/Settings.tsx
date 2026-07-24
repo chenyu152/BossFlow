@@ -1,7 +1,6 @@
 import { AlertTriangle, CalendarClock, Check, ChevronDown, Clock3, Copy, Eye, EyeOff, KeyRound, Languages, MonitorUp, Pencil, Play, PlugZap, Plus, RefreshCw, Save, Server, Settings2, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { bossApi } from '../api';
-import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { CitySelector } from '../components/CitySelector';
 import { KeywordInput } from '../components/KeywordInput';
 import { ThemeOptions } from '../components/ThemePicker';
@@ -130,12 +129,8 @@ function CompactSelect<T extends string>({
 
 export function Settings({
   onUpdated,
-  returnToMatchingGuideAfterTest = false,
-  onReturnToMatchingGuide,
 }: {
   onUpdated: (settings: LlmSettingsStatus) => void;
-  returnToMatchingGuideAfterTest?: boolean;
-  onReturnToMatchingGuide?: () => void;
 }) {
   const { t, i18n } = useAppTranslation();
   const currentLanguage = (i18n.resolvedLanguage || i18n.language).startsWith('en') ? 'en' : 'zh';
@@ -149,8 +144,6 @@ export function Settings({
   const [keyVisible, setKeyVisible] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [setupGuideOpen, setSetupGuideOpen] = useState(false);
-  const [setupGuideError, setSetupGuideError] = useState('');
   const [automation, setAutomation] = useState<AutomationResponse | null>(null);
   const [projects, setProjects] = useState<string[]>([]);
   const [loginStates, setLoginStates] = useState<Record<string, LoginState>>({});
@@ -170,14 +163,6 @@ export function Settings({
   const [agentAccessError, setAgentAccessError] = useState('');
   const [mcpClient, setMcpClient] = useState<McpClient>('claude');
   const [agentCopyState, setAgentCopyState] = useState<McpClient | ''>('');
-  const setupGuideSteps = useMemo<GuidedTourStep[]>(() => [
-    {
-      target: 'settings-test-api',
-      title: t('settings.llm.setupTour.title'),
-      body: t('settings.llm.setupTour.body'),
-    },
-  ], [t]);
-
   const mcpConfigText = useMemo(() => {
     const config = agentAccess?.stdioConfig;
     if (!config?.command) return '';
@@ -545,25 +530,11 @@ export function Settings({
     try {
       await bossApi.testLlmSettings({ apiKey, apiBase, model });
       setMessage(t('settings.llm.testSuccess'));
-      if (returnToMatchingGuideAfterTest) {
-        setSetupGuideError('');
-        setSetupGuideOpen(true);
-      }
     } catch (testError) {
       setError((testError as Error).message);
     } finally {
       setTesting(false);
     }
-  };
-
-  const finishSetupGuide = async () => {
-    setSetupGuideError('');
-    if (!await save()) {
-      setSetupGuideError(t('settings.llm.setupTour.saveFailed'));
-      return;
-    }
-    setSetupGuideOpen(false);
-    onReturnToMatchingGuide?.();
   };
 
   const selectedLoginState = loginStates[scheduleDraft.project];
@@ -872,22 +843,6 @@ export function Settings({
           </div>
         </div>
       </section>
-      {setupGuideOpen && (
-        <GuidedTour
-          steps={setupGuideSteps}
-          activeStep={0}
-          onStepChange={() => undefined}
-          onClose={() => { setSetupGuideError(''); setSetupGuideOpen(false); }}
-          onFinish={() => { void finishSetupGuide(); }}
-          finishing={saving}
-          error={setupGuideError}
-          nextLabel={t('settings.llm.setupTour.finish')}
-          previousLabel={t('settings.llm.setupTour.finish')}
-          finishLabel={saving ? t('settings.saving') : t('settings.llm.setupTour.finish')}
-          skipLabel={t('settings.llm.setupTour.skip')}
-          progressLabel={(current, total) => t('settings.llm.setupTour.progress', { current, total })}
-        />
-      )}
     </div>
   );
 }

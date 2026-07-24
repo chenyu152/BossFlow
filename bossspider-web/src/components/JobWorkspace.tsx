@@ -938,15 +938,16 @@ export function JobWorkspace({
           <div className="space-y-4">
             <Section title={t('jobWorkspace.coarseEvaluation')}>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">{t('pipeline.score')}</span>
-                <span className="text-sm font-semibold text-zinc-100">{item.score ? item.score.toFixed(1) : '-'} / 5.0</span>
+                <span className="text-xs text-zinc-500">{t('pipeline.conclusion')}</span>
+                <span className="text-sm font-semibold text-zinc-100">{item.scoringVersion === 2 ? item.fitLevel : t('jobs.scoringOutdated')}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                <div>{t('pipeline.coverage', { n: item.coverage ?? 0 })}</div>
-                <div>{t('pipeline.jdQuality', { n: item.jdQuality ?? 0 })}</div>
+                <div>{t('pipeline.coverage', { n: item.keywordCoverage?.coverage ?? item.coverage ?? 0 })}</div>
+                <div>{t('pipeline.confidence')} {item.confidence || '-'}</div>
                 <div>{t('pipeline.expRisk', { risk: riskText(item.experienceRisk) })}</div>
                 <div>{t('pipeline.eduRisk', { risk: riskText(item.educationRisk) })}</div>
               </div>
+              {!!item.reasons?.length && <div className="mt-3 space-y-1 text-xs leading-relaxed text-zinc-400"><div className="text-zinc-500">{t('jobs.scoringReasons')}</div>{item.reasons.slice(0, 3).map((reason) => <div key={reason}>· {reason}</div>)}</div>}
             </Section>
             <Section title={t('jobWorkspace.llmEvaluation')}>
               <div className="flex items-center justify-between">

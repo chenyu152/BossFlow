@@ -13,6 +13,7 @@ class ConfigUpdate(BaseModel):
     newJobTarget: int = Field(default=20, ge=1, le=5000)
     maxJobs: int = Field(default=100, ge=1, le=5000)
     minSalary: float = Field(default=MIN_AVG_SALARY_K, ge=0)
+    experienceGapYears: int = Field(default=1, ge=0, le=2)
     headlessMode: bool = True
     autoSqlite: bool = True
     catRulesText: str = "{}"

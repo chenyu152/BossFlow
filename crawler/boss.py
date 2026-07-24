@@ -475,39 +475,23 @@ class BossCrawler:
         """根据配置文件的规则过滤岗位"""
         try:
             config = load_config(self.config_file)
-            cat_rules = config.get('cat_rules')
             relevance_keywords = config.get('relevance_keywords')
             blacklist_keywords = config.get('blacklist_keywords')
+            target_keywords = config.get('keywords')
         except Exception:
-            cat_rules = None
+            config = {}
             relevance_keywords = None
             blacklist_keywords = None
+            target_keywords = None
 
-        from .pipeline import classify, matching_rules_are_enabled
+        from .pipeline import admission_decision
 
-        if not matching_rules_are_enabled(
-            cat_rules=cat_rules,
+        return admission_decision(
+            {'title': job_name},
             relevance_keywords=relevance_keywords,
             blacklist_keywords=blacklist_keywords,
-            min_salary=config.get('min_salary') if 'config' in locals() else None,
-        ):
-            return True
-
-        # 优先黑名单过滤
-        if blacklist_keywords:
-            if any(w.lower() in job_name.lower() for w in blacklist_keywords):
-                return False
-
-        if cat_rules or relevance_keywords:
-            text = f'{job_name} {skills}'
-            cats, _ = classify(text, cat_rules)
-            rel_kws = relevance_keywords if relevance_keywords is not None else ['AI', 'ai', 'AIGC', '大模型', '智能', '算法']
-            related = any(w.lower() in job_name.lower() for w in rel_kws) if rel_kws else False
-            return bool(cats or related)
-
-        # A configured salary or blacklist alone is applied during the batch
-        # ingestion step. It must not activate the legacy AI-only crawl filter.
-        return True
+            target_keywords=target_keywords,
+        )['accepted']
 
     def _add_jobs(self, api_jobs, combo_seen_keys=None, remaining_limit=None):
         """添加岗位，并返回本次搜索中新岗位与总岗位计数。"""
@@ -1130,8 +1114,8 @@ def main():
         relevance_keywords = config.get('relevance_keywords')
         blacklist_keywords = config.get('blacklist_keywords')
         min_salary = float(config.get('min_salary', MIN_AVG_SALARY_K))
-        cleaned = process_batch(raw_jobs, cat_rules=cat_rules, min_salary=min_salary, relevance_keywords=relevance_keywords, blacklist_keywords=blacklist_keywords)
-        print(f'[*] 清洗后: {len(cleaned)} 条 (过滤薪资<{min_salary}K / 非相关)')
+        cleaned = process_batch(raw_jobs, cat_rules=cat_rules, min_salary=min_salary, relevance_keywords=relevance_keywords, blacklist_keywords=blacklist_keywords, target_keywords=keywords)
+        print(f'[*] 清洗后: {len(cleaned)} 条')
 
         if args.merge:
             stats = upsert_jobs(cleaned, db_file)
@@ -1180,8 +1164,8 @@ def main():
         relevance_keywords = config.get('relevance_keywords')
         blacklist_keywords = config.get('blacklist_keywords')
         min_salary = float(config.get('min_salary', 17.0)) # default from package pipeline is MIN_AVG_SALARY_K
-        cleaned = process_batch(raw_jobs, cat_rules=cat_rules, min_salary=min_salary, relevance_keywords=relevance_keywords, blacklist_keywords=blacklist_keywords)
-        print(f'清洗后: {len(cleaned)} 条 (过滤最低薪资: {min_salary}K)')
+        cleaned = process_batch(raw_jobs, cat_rules=cat_rules, min_salary=min_salary, relevance_keywords=relevance_keywords, blacklist_keywords=blacklist_keywords, target_keywords=keywords)
+        print(f'清洗后: {len(cleaned)} 条')
 
         stats = upsert_jobs(cleaned, db_file)
         save_run(

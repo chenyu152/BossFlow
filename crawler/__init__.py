@@ -20,6 +20,7 @@ from .boss import BossCrawler, load_config, load_cities, load_keywords, load_scr
 from .pipeline import (
     process_batch,
     process_one,
+    admission_decision,
     parse_salary,
     classify,
     salary_tier,
@@ -53,6 +54,7 @@ __all__ = [
     # 数据清洗
     'process_batch',
     'process_one',
+    'admission_decision',
     'parse_salary',
     'classify',
     'salary_tier',

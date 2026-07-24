@@ -31,11 +31,9 @@ from backend.schemas.evidence import (
 from backend.schemas.greeting import GreetingDraftSaveRequest, GreetingPreflightRequest, GreetingPrepareRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
 from backend.schemas.jobs import JobCreateRequest, JobLiveStatusUpdateRequest
-from backend.schemas.matching import MatchingRulesSuggestionRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.project import ProjectCreateRequest
 from backend.schemas.resume import ResumeDraftRequest, ResumeDraftSaveRequest, ResumeSuggestionRequest
-from backend.schemas.scoring import ScoringKeywordSuggestionRequest
 from backend.schemas.system_settings import LlmSettingsUpdate
 from backend.mcp_security import DesktopRuntimeTokenMiddleware, McpSecurityMiddleware
 from backend.mcp_server import create_bossflow_mcp
@@ -75,7 +73,6 @@ from backend.services.interview_service import (
 from backend.services.job_service import create_job, export_jobs_response, get_job_by_id, query_jobs
 from backend.services.live_status_service import start_live_status_update_task
 from backend.services.login_state_service import login_state
-from backend.services.matching_suggestion_service import suggest_matching_rules
 from backend.services.llm_evaluation_service import llm_evaluate_pipeline_item
 from backend.services.pipeline_service import add_jobs_to_pipeline, delete_pipeline_item, read_pipeline, read_pipeline_report, update_pipeline_item_status
 from backend.services.project_service import (
@@ -89,7 +86,6 @@ from backend.services.project_service import (
 )
 from backend.services.resume_parser_service import get_parse_status, start_parse
 from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion, save_resume_draft
-from backend.services.scoring_suggestion_service import suggest_scoring_keywords
 from backend.services.task_service import TaskManager
 from backend.services.system_settings_service import llm_settings_status, reveal_llm_api_key, save_llm_settings, test_llm_connection
 from backend.services.workspace_service import project_from_source_key, project_workspace
@@ -339,18 +335,6 @@ def add_job(payload: JobCreateRequest):
 def score_job_rows(payload: ScoreJobsRequest):
     with project_workspace(_workspace_project(payload.project)):
         return score_jobs(payload.project, payload.jobIds)
-
-
-@app.post("/api/scoring/keyword-suggestions")
-def create_scoring_keyword_suggestions(payload: ScoringKeywordSuggestionRequest):
-    with project_workspace(_workspace_project(payload.project)):
-        return suggest_scoring_keywords(payload.project, payload.limit)
-
-
-@app.post("/api/matching-rules/suggestions")
-def create_matching_rules_suggestions(payload: MatchingRulesSuggestionRequest):
-    with project_workspace(_workspace_project(payload.project)):
-        return suggest_matching_rules(payload.project, payload.model_dump())
 
 
 @app.post("/api/jobs/live-status/update")

@@ -36,7 +36,6 @@ import type {
   LlmEvaluatePipelineResponse,
   LlmSettingsStatus,
   LoginState,
-  MatchingRulesSuggestionResponse,
   PipelineDeleteResponse,
   PipelineReportResponse,
   PipelineResponse,
@@ -48,7 +47,6 @@ import type {
   ResumeCapabilityImportSelection,
   ResumeItemsResponse,
   ResumeSuggestionResponse,
-  ScoringKeywordSuggestionResponse,
   ScoreJobsResponse,
   ScorePipelineResponse,
   TaskStatusResponse,
@@ -300,20 +298,6 @@ export const bossApi = {
     return request<ScoreJobsResponse>('/api/jobs/score', {
       method: 'POST',
       body: JSON.stringify({ project, jobIds }),
-    });
-  },
-
-  generateScoringKeywordSuggestions(project: string, limit = 80) {
-    return request<ScoringKeywordSuggestionResponse>('/api/scoring/keyword-suggestions', {
-      method: 'POST',
-      body: JSON.stringify({ project, limit }),
-    });
-  },
-
-  generateMatchingRulesSuggestion(project: string, snapshot: Pick<ConfigPayload, 'keywordsText' | 'catRulesText' | 'relevanceText' | 'blacklistText'>) {
-    return request<MatchingRulesSuggestionResponse>('/api/matching-rules/suggestions', {
-      method: 'POST',
-      body: JSON.stringify({ project, ...snapshot }),
     });
   },
 

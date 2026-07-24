@@ -248,6 +248,7 @@ def create_job(payload) -> dict[str, Any]:
         min_salary=min_salary,
         relevance_keywords=relevance_keywords,
         blacklist_keywords=blacklist_keywords,
+        target_keywords=config.get("keywords") or [],
     )
 
     if cleaned is None:

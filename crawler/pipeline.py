@@ -9,7 +9,7 @@ logger = logging.getLogger('pipeline')
 # 默认最低月薪 (K)
 MIN_AVG_SALARY_K = 17
 
-# 默认分类规则
+# 兼容历史分类配置
 DEFAULT_CAT_RULES = {
     'AI营销': ['营销', '广告', '投放', '增长', '获客', '私域', '品牌营销', '营销中台', '营销工具'],
     'AI内容': ['内容', '文案', '创作', '素材', '图文', '内容中台', '内容平台', '内容生成', '内容管理', '内容分发', '内容推荐', '内容审核', '内容电商'],
@@ -80,16 +80,83 @@ def matching_rules_are_enabled(
     saved, results returned for the user's collection keywords must be kept
     instead of falling back to the historical AI-only defaults.
     """
-    if cat_rules or relevance_keywords or blacklist_keywords:
-        return True
-    if min_salary is None:
-        return False
-    try:
-        # Old empty directions stored the former 17K default.  Treat that
-        # combination as unconfigured for backwards-compatible safety.
-        return float(min_salary) != MIN_AVG_SALARY_K
-    except (TypeError, ValueError):
-        return False
+    # Legacy category and salary arguments remain for compatibility, but do
+    # not participate in the current admission policy.
+    return bool(relevance_keywords or blacklist_keywords)
+
+
+def _normalise_rule_terms(values) -> list[str]:
+    """Return non-empty, trimmed rule terms with case-insensitive dedupe."""
+    if not values:
+        return []
+    if isinstance(values, str):
+        values = values.splitlines()
+    result = []
+    seen = set()
+    for value in values:
+        term = str(value or '').strip()
+        key = term.casefold()
+        if term and key not in seen:
+            seen.add(key)
+            result.append(term)
+    return result
+
+
+def admission_decision(
+    raw: dict,
+    relevance_keywords: list | None = None,
+    blacklist_keywords: list | None = None,
+    target_keywords: list | None = None,
+) -> dict:
+    """Apply the shared, title-based job-library admission policy."""
+    title = str((raw or {}).get('title') or '').strip()
+    title_folded = title.casefold()
+    blacklist = _normalise_rule_terms(blacklist_keywords)
+    target = _normalise_rule_terms(relevance_keywords)
+    if not target:
+        target = _normalise_rule_terms(target_keywords)
+
+    matched_blacklist = [term for term in blacklist if term.casefold() in title_folded]
+    if matched_blacklist:
+        return {
+            'accepted': False,
+            'matchedTargetTerms': [],
+            'matchedBlacklistTerms': matched_blacklist,
+            'reasonCode': 'blacklist_hit',
+            'reason': '岗位标题命中排除岗位词',
+        }
+    if not title:
+        return {
+            'accepted': False,
+            'matchedTargetTerms': [],
+            'matchedBlacklistTerms': [],
+            'reasonCode': 'missing_title',
+            'reason': '岗位缺少标题',
+        }
+    if not target:
+        return {
+            'accepted': True,
+            'matchedTargetTerms': [],
+            'matchedBlacklistTerms': [],
+            'reasonCode': 'no_target_rules',
+            'reason': '未配置目标岗位词，保留岗位',
+        }
+    matched_target = [term for term in target if term.casefold() in title_folded]
+    if matched_target:
+        return {
+            'accepted': True,
+            'matchedTargetTerms': matched_target,
+            'matchedBlacklistTerms': [],
+            'reasonCode': 'target_keyword_hit',
+            'reason': '岗位标题命中目标岗位词',
+        }
+    return {
+        'accepted': False,
+        'matchedTargetTerms': [],
+        'matchedBlacklistTerms': [],
+        'reasonCode': 'target_keyword_miss',
+        'reason': '岗位标题未命中目标岗位词',
+    }
 
 
 def salary_tier(avg: float) -> str:
@@ -136,6 +203,7 @@ def process_one(
     min_salary: float = None,
     relevance_keywords: list = None,
     blacklist_keywords: list = None,
+    target_keywords: list = None,
 ) -> dict:
     """
     清洗单条原始岗位数据。
@@ -152,34 +220,19 @@ def process_one(
     if not title or not company:
         return None
 
-    matching_enabled = matching_rules_are_enabled(
-        cat_rules,
-        relevance_keywords,
-        blacklist_keywords,
-        min_salary,
+    decision = admission_decision(
+        {'title': title},
+        relevance_keywords=relevance_keywords,
+        blacklist_keywords=blacklist_keywords,
+        target_keywords=target_keywords,
     )
-
-    # Blacklist, relevance and salary are all admission rules.  When a new
-    # direction has not configured them yet, retain search results as-is.
-    if matching_enabled and blacklist_keywords:
-        if any(w.lower() in title.lower() for w in blacklist_keywords):
-            return None
+    if not decision['accepted']:
+        return None
 
     text = f'{company} {title} {desc}'
-    cats, kw = classify(text, cat_rules) if matching_enabled else ([], [])
-
-    # 核心相关性过滤（若匹配到分类则直接保留；未匹配分类则标题中必须含有相关匹配词才予保留）
-    if matching_enabled and (cat_rules or relevance_keywords):
-        rel_kws = relevance_keywords or []
-        related = any(w.lower() in title.lower() for w in rel_kws)
-        if not cats and not related:
-            return None
+    cats, kw = classify(text, cat_rules) if cat_rules else ([], [])
 
     avg = parse_salary(salary)
-    if matching_enabled:
-        min_avg = min_salary if min_salary is not None else MIN_AVG_SALARY_K
-        if avg < min_avg:
-            return None
     tier = salary_tier(avg)
 
     url = str(raw.get('url') or '').strip()
@@ -195,6 +248,7 @@ def process_one(
         'edu': edu,
         'cats': cats if cats else ['通用'],
         'kw': kw,
+        'admission': decision,
         'desc': desc,
         '_key': dedup_key({'title': title, 'company': company, 'city': city}),
         'security_id': str(raw.get('security_id') or '').strip(),
@@ -212,12 +266,20 @@ def process_batch(
     min_salary: float = None,
     relevance_keywords: list = None,
     blacklist_keywords: list = None,
+    target_keywords: list = None,
 ) -> list:
     """批量清洗，自动去重"""
     results = []
     seen = set()
     for raw in raw_list:
-        job = process_one(raw, cat_rules, min_salary, relevance_keywords, blacklist_keywords)
+        job = process_one(
+            raw,
+            cat_rules,
+            min_salary,
+            relevance_keywords,
+            blacklist_keywords,
+            target_keywords,
+        )
         if job and job['_key'] not in seen:
             seen.add(job['_key'])
             results.append(job)

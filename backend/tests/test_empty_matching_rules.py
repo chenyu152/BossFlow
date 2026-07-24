@@ -33,7 +33,7 @@ class EmptyMatchingRulesTest(unittest.TestCase):
         self.assertIsNotNone(job)
         self.assertEqual(job["cats"], ["通用"])
 
-    def test_configured_rules_still_filter_unmatched_jobs(self):
+    def test_legacy_category_rules_do_not_filter_unmatched_jobs(self):
         job = process_one(
             self.game_job,
             cat_rules={"嵌入式": ["STM32"]},
@@ -41,12 +41,13 @@ class EmptyMatchingRulesTest(unittest.TestCase):
             blacklist_keywords=[],
             min_salary=0,
         )
-        self.assertIsNone(job)
+        self.assertIsNotNone(job)
 
     def test_live_crawler_keeps_jobs_before_matching_rules_exist(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.json"
             config_path.write_text(json.dumps({
+                "keywords": [],
                 "cat_rules": {},
                 "relevance_keywords": [],
                 "blacklist_keywords": [],

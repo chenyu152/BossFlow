@@ -16,12 +16,6 @@ from backend.services.workspace_service import workspace_path
 
 CV_PATH = workspace_path("cv.md")
 
-KEYWORD_HINTS = [
-    "agent", "llm", "rag", "langchain", "prompt", "openai", "deepseek", "ai", "大模型", "智能体",
-    "产品", "需求", "用户", "增长", "数据", "策略", "运营", "游戏", "系统", "数值", "策划",
-    "python", "java", "go", "react", "后端", "前端", "架构", "平台", "工具", "自动化",
-]
-
 EDU_LEVELS = {
     "不限": 0,
     "学历不限": 0,
@@ -55,42 +49,28 @@ def _load_cv() -> str:
     return CV_PATH.read_text(encoding="utf-8") if CV_PATH.exists() else ""
 
 
-def _cfg_number(config: dict[str, Any], section: str, key: str, fallback: float) -> float:
-    value = config.get(section, {}).get(key) if isinstance(config.get(section), dict) else None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _cfg_weight(config: dict[str, Any], key: str, fallback: float) -> float:
-    weights = config.get("weights") if isinstance(config.get("weights"), dict) else {}
-    try:
-        return float(weights.get(key))
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _extract_terms(job: dict[str, Any], scoring_config: dict[str, Any]) -> list[str]:
+def _extract_terms(
+    job: dict[str, Any],
+    scoring_config: dict[str, Any],
+    target_keywords: list[str] | None = None,
+) -> list[str]:
     text = "\n".join(
         str(part or "")
         for part in [
             job.get("title"),
-            job.get("company"),
             job.get("desc"),
-            " ".join(job.get("cats") or []),
-            job.get("tier"),
         ]
     ).lower()
     terms: list[str] = []
-    keyword_hints = scoring_config.get("keywordHints") if isinstance(scoring_config.get("keywordHints"), list) else KEYWORD_HINTS
-    for hint in keyword_hints:
-        if hint.lower() in text and hint not in terms:
-            terms.append(hint)
-    for token in re.findall(r"[A-Za-z][A-Za-z0-9+#.]{2,}", text):
-        token_l = token.lower()
-        if token_l not in terms and len(terms) < 28:
-            terms.append(token_l)
+    keyword_hints = scoring_config.get("keywordHints") if isinstance(scoring_config.get("keywordHints"), list) else []
+    candidates = list(keyword_hints) + list(target_keywords or [])
+    seen = set()
+    for hint in candidates:
+        term = str(hint or "").strip()
+        key = term.casefold()
+        if term and key not in seen and key in text:
+            seen.add(key)
+            terms.append(term)
     return terms[:28]
 
 
@@ -165,14 +145,19 @@ def _candidate_education(cv_text: str) -> tuple[int | None, str]:
     return level, label
 
 
-def _gate_metrics(job: dict[str, Any], cv_text: str, scoring_config: dict[str, Any]) -> dict[str, Any]:
+def _gate_metrics(
+    job: dict[str, Any],
+    cv_text: str,
+    scoring_config: dict[str, Any] | None = None,
+    experience_gap_years: float = 1,
+) -> dict[str, Any]:
     candidate_years = _candidate_years(cv_text)
     required_years, exp_label = _required_years(job.get("exp") or "", job.get("desc") or "")
     candidate_edu, candidate_edu_label = _candidate_education(cv_text)
     required_edu, required_edu_label = _education_level(job.get("edu") or "")
 
     exp_risk = "unknown"
-    exp_signal = _cfg_number(scoring_config, "experience", "unknownSignal", 0.82)
+    exp_signal = None
     if required_years == 0:
         exp_risk = "matched"
         exp_signal = 1.0
@@ -181,15 +166,15 @@ def _gate_metrics(job: dict[str, Any], cv_text: str, scoring_config: dict[str, A
         if gap <= 0:
             exp_risk = "matched"
             exp_signal = 1.0
-        elif gap <= _cfg_number(scoring_config, "experience", "nearYears", 1):
+        elif gap <= max(0, float(experience_gap_years)):
             exp_risk = "near"
-            exp_signal = _cfg_number(scoring_config, "experience", "nearSignal", 0.72)
+            exp_signal = 0.6
         else:
             exp_risk = "risk"
-            exp_signal = _cfg_number(scoring_config, "experience", "riskSignal", 0.35)
+            exp_signal = 0.0
 
     edu_risk = "unknown"
-    edu_signal = _cfg_number(scoring_config, "education", "unknownSignal", 0.88)
+    edu_signal = None
     if required_edu == 0:
         edu_risk = "matched"
         edu_signal = 1.0
@@ -198,78 +183,129 @@ def _gate_metrics(job: dict[str, Any], cv_text: str, scoring_config: dict[str, A
         if gap <= 0:
             edu_risk = "matched"
             edu_signal = 1.0
-        elif gap <= _cfg_number(scoring_config, "education", "nearGap", 1):
+        elif gap <= 1:
             edu_risk = "near"
-            edu_signal = _cfg_number(scoring_config, "education", "nearSignal", 0.7)
+            edu_signal = 0.6
         else:
             edu_risk = "risk"
-            edu_signal = _cfg_number(scoring_config, "education", "riskSignal", 0.35)
+            edu_signal = 0.0
 
     return {
         "candidateYears": candidate_years,
         "requiredYears": required_years,
         "experienceLabel": exp_label,
         "experienceRisk": exp_risk,
-        "experienceSignal": round(exp_signal * 100, 1),
+        "experienceSignal": round(exp_signal * 100, 1) if exp_signal is not None else None,
         "candidateEducation": candidate_edu_label,
         "requiredEducation": required_edu_label,
         "educationRisk": edu_risk,
-        "educationSignal": round(edu_signal * 100, 1),
+        "educationSignal": round(edu_signal * 100, 1) if edu_signal is not None else None,
     }
 
 
-def _score(job: dict[str, Any], cv_text: str, terms: list[str], scoring_config: dict[str, Any]) -> dict[str, Any]:
-    cv_l = cv_text.lower()
-    matched = [term for term in terms if term.lower() in cv_l]
-    missing = [term for term in terms if term.lower() not in cv_l]
-    coverage = len(matched) / max(len(terms), 1)
-    desc_len = len(job.get("desc") or "")
-    jd_quality = (
-        _cfg_number(scoring_config, "jdQuality", "highSignal", 1.0)
-        if desc_len >= _cfg_number(scoring_config, "jdQuality", "highLength", 600)
-        else _cfg_number(scoring_config, "jdQuality", "midSignal", 0.72)
-        if desc_len >= _cfg_number(scoring_config, "jdQuality", "midLength", 200)
-        else _cfg_number(scoring_config, "jdQuality", "lowSignal", 0.45)
-    )
+def _score(
+    job: dict[str, Any],
+    cv_text: str,
+    terms: list[str],
+    scoring_config: dict[str, Any],
+    min_salary: float | None = None,
+    experience_gap_years: float = 1,
+    target_keywords: list[str] | None = None,
+) -> dict[str, Any]:
+    """Calculate explainable scoring v2 with fixed internal weights."""
+    cv_l = cv_text.casefold()
+    matched = [term for term in terms if term.casefold() in cv_l]
+    missing = [term for term in terms if term.casefold() not in cv_l]
+    keyword_known = bool(terms)
+    coverage = len(matched) / len(terms) if keyword_known else None
+
+    gates = _gate_metrics(job, cv_text, scoring_config, experience_gap_years)
     avg = float(job.get("avg") or 0)
-    salary_signal = (
-        _cfg_number(scoring_config, "salary", "highSignal", 1.0)
-        if avg >= _cfg_number(scoring_config, "salary", "highAvgK", 25)
-        else _cfg_number(scoring_config, "salary", "midSignal", 0.85)
-        if avg >= _cfg_number(scoring_config, "salary", "midAvgK", 15)
-        else _cfg_number(scoring_config, "salary", "lowSignal", 0.7)
-    )
-    gates = _gate_metrics(job, cv_text, scoring_config)
-    exp_signal = float(gates["experienceSignal"]) / 100
-    edu_signal = float(gates["educationSignal"]) / 100
-    try:
-        base_score = float(scoring_config.get("baseScore"))
-    except (TypeError, ValueError):
-        base_score = 1.0
-    raw = (
-        base_score
-        + coverage * _cfg_weight(scoring_config, "coverage", 2.0)
-        + jd_quality * _cfg_weight(scoring_config, "jdQuality", 0.45)
-        + salary_signal * _cfg_weight(scoring_config, "salary", 0.35)
-        + exp_signal * _cfg_weight(scoring_config, "experience", 0.75)
-        + edu_signal * _cfg_weight(scoring_config, "education", 0.45)
-    )
+    salary_known = bool(min_salary and float(min_salary) > 0 and avg > 0)
+    salary_match = None if not salary_known else ("matched" if avg >= float(min_salary) else "risk")
+
+    components: list[tuple[float, float]] = []
+    if coverage is not None:
+        components.append((coverage, 2.0))
+    if salary_match is not None:
+        components.append((1.0 if salary_match == "matched" else 0.0, 1.0))
+    if gates["experienceRisk"] != "unknown":
+        components.append((1.0 if gates["experienceRisk"] == "matched" else 0.6 if gates["experienceRisk"] == "near" else 0.0, 1.0))
+    if gates["educationRisk"] != "unknown":
+        components.append((1.0 if gates["educationRisk"] == "matched" else 0.6 if gates["educationRisk"] == "near" else 0.0, 1.0))
+    normalised = sum(value * weight for value, weight in components) / sum(weight for _, weight in components) if components else 0.0
+    final = max(1.0, min(5.0, round(1.0 + normalised * 4.0, 1)))
+
+    title = str(job.get("title") or "")
+    target_hits = [str(term).strip() for term in (target_keywords or []) if str(term).strip().casefold() in title.casefold()]
+    desc_len = len(job.get("desc") or "")
+    known_fields = sum([bool(avg), gates["experienceRisk"] != "unknown", gates["educationRisk"] != "unknown"])
+    confidence = "high" if desc_len >= 200 and known_fields >= 2 else "medium" if desc_len >= 80 or known_fields >= 1 else "low"
+
+    reasons: list[str] = []
+    reason_codes: list[str] = []
+    if target_hits:
+        reasons.append(f"命中 {'、'.join(target_hits[:3])}")
+        reason_codes.append("target_keyword_hit")
+    if matched:
+        reasons.append(f"简历命中 {'、'.join(matched[:3])}")
+        reason_codes.append("cv_keyword_match")
+    if missing:
+        reasons.append(f"简历缺少 {'、'.join(missing[:2])}")
+        reason_codes.append("cv_keyword_missing")
     if gates["experienceRisk"] == "risk":
-        raw = min(raw, _cfg_number(scoring_config, "experience", "riskCap", 3.1))
+        reasons.append(f"经验要求高于简历约 {max(1, round((gates['requiredYears'] or 0) - (gates['candidateYears'] or 0), 1))} 年")
+        reason_codes.append("experience_risk")
+    elif gates["experienceRisk"] == "near":
+        reasons.append("经验要求接近当前经历")
+        reason_codes.append("experience_near")
+    elif gates["experienceRisk"] == "unknown":
+        reasons.append("经验要求或简历经历信息不足")
+        reason_codes.append("experience_unknown")
     if gates["educationRisk"] == "risk":
-        raw = min(raw, _cfg_number(scoring_config, "education", "riskCap", 3.2))
-    final = max(1.0, min(5.0, raw))
-    fit = "Skip Unless Strategic"
-    for level in scoring_config.get("fitLevels") or []:
-        if final >= float(level.get("minScore") or 0):
-            fit = str(level.get("label") or fit)
-            break
+        reasons.append("学历要求存在差距")
+        reason_codes.append("education_risk")
+    elif gates["educationRisk"] == "unknown":
+        reasons.append("学历信息不足")
+        reason_codes.append("education_unknown")
+    if salary_match == "risk":
+        reasons.append("薪资低于期望")
+        reason_codes.append("salary_risk")
+    elif salary_match is None:
+        reasons.append("薪资缺失或面议")
+        reason_codes.append("salary_unknown")
+    if confidence != "high":
+        reasons.append("岗位信息不完整，判断可信度有限")
+        reason_codes.append("incomplete_job_info")
+
+    if gates["experienceRisk"] == "risk" or gates["educationRisk"] == "risk":
+        fit = "存在明显门槛"
+    elif normalised >= 0.7:
+        fit = "优先查看"
+    elif normalised >= 0.45:
+        fit = "可以看看"
+    else:
+        fit = "低相关"
+
+    keyword_coverage = {
+        "status": "known" if keyword_known else "unknown",
+        "matchedTerms": matched[:12],
+        "missingTerms": missing[:12],
+        "coverage": round(coverage * 100, 1) if coverage is not None else None,
+    }
     return {
-        "score": round(final, 1),
-        "coverage": round(coverage * 100, 1),
-        "jdQuality": round(jd_quality * 100, 1),
-        "salarySignal": round(salary_signal * 100, 1),
+        "scoringVersion": 2,
+        "score": final,
+        "coverage": keyword_coverage["coverage"],
+        "jdQuality": None,
+        "salarySignal": 100.0 if salary_match == "matched" else 0.0 if salary_match == "risk" else None,
+        "salaryRisk": salary_match,
+        "salaryMatch": salary_match,
+        "keywordCoverage": keyword_coverage,
         **gates,
+        "confidence": confidence,
+        "reasons": reasons[:5],
+        "reasonCodes": reason_codes[:8],
         "fitLevel": fit,
         "matchedTerms": matched,
         "missingTerms": missing[:12],
@@ -292,8 +328,19 @@ def score_pipeline_item(source_key: str) -> dict[str, Any]:
     job = jobs[0]
     cv_text = _load_cv()
     scoring_config = scoring_config_for_project(project_dir)
-    terms = _extract_terms(job, scoring_config)
-    metrics = _score(job, cv_text, terms, scoring_config)
+    from crawler.boss import load_config
+    project_config = load_config(str(project_dir))
+    target_keywords = project_config.get("relevance_keywords") or project_config.get("keywords") or []
+    terms = _extract_terms(job, scoring_config, target_keywords)
+    metrics = _score(
+        job,
+        cv_text,
+        terms,
+        scoring_config,
+        min_salary=project_config.get("min_salary"),
+        experience_gap_years=project_config.get("experience_gap_years", 1),
+        target_keywords=target_keywords,
+    )
     update_job_score(project_dir.name, int(job_id), metrics)
 
     update_pipeline_item_metadata(
@@ -315,6 +362,13 @@ def score_pipeline_item(source_key: str) -> dict[str, Any]:
             "requiredEducation": metrics["requiredEducation"],
             "matchedTerms": metrics["matchedTerms"][:12],
             "missingTerms": metrics["missingTerms"][:12],
+            "scoringVersion": metrics["scoringVersion"],
+            "keywordCoverage": metrics["keywordCoverage"],
+            "salaryRisk": metrics["salaryRisk"],
+            "salaryMatch": metrics["salaryMatch"],
+            "confidence": metrics["confidence"],
+            "reasons": metrics["reasons"],
+            "reasonCodes": metrics["reasonCodes"],
             "scoredAt": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         },
     )
@@ -334,11 +388,22 @@ def score_jobs(project: str, job_ids: list[int]) -> dict[str, Any]:
     found_ids = {int(job["id"]) for job in jobs}
     cv_text = _load_cv()
     scoring_config = scoring_config_for_project(project_dir)
+    from crawler.boss import load_config
+    project_config = load_config(str(project_dir))
+    target_keywords = project_config.get("relevance_keywords") or project_config.get("keywords") or []
     pending_updates: list[tuple[int, dict[str, Any]]] = []
     errors = []
     for job in jobs:
         try:
-            metrics = _score(job, cv_text, _extract_terms(job, scoring_config), scoring_config)
+            metrics = _score(
+                job,
+                cv_text,
+                _extract_terms(job, scoring_config, target_keywords),
+                scoring_config,
+                min_salary=project_config.get("min_salary"),
+                experience_gap_years=project_config.get("experience_gap_years", 1),
+                target_keywords=target_keywords,
+            )
             pending_updates.append((int(job["id"]), metrics))
         except Exception as exc:
             errors.append({"jobId": int(job["id"]), "error": str(exc)})

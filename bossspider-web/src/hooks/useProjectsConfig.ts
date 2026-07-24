@@ -13,6 +13,7 @@ function toRequestBody(config: ConfigPayload) {
     newJobTarget: config.newJobTarget,
     maxJobs: config.maxJobs,
     minSalary: config.minSalary,
+    experienceGapYears: config.experienceGapYears,
     headlessMode: config.headlessMode,
     autoSqlite: config.autoSqlite,
     catRulesText: config.catRulesText,
