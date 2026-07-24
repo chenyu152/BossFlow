@@ -10,18 +10,19 @@
     "北京": "101010100"
   },
   "scrape_limits": {
-    "max_pages": 3,
-    "max_scrolls_per_page": 2,
     "scroll_target": 500,
-    "scroll_max_scrolls": 200,
-    "greedy_max_pages": 0,
-    "max_jobs_per_city_round": 0
+    "scroll_max_scrolls": 200
   },
   "min_salary": 17.0,
   "cat_rules": {},
   "relevance_keywords": [
-    "AI产品经理",
-    "Agent产品经理"
+    "产品经理",
+    "产品专员",
+    "产品总监",
+    "策略产品",
+    "平台产品",
+    "AI产品",
+    "PM"
   ],
   "blacklist_keywords": [
     "美术",

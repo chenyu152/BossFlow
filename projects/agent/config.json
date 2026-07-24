@@ -5,17 +5,13 @@
   ],
   "cities": {
     "广州": "101280100",
-    "深圳": "101280600",
     "上海": "101020100",
-    "北京": "101010100"
+    "北京": "101010100",
+    "深圳": "101280600"
   },
   "scrape_limits": {
-    "max_pages": 3,
-    "max_scrolls_per_page": 2,
-    "scroll_target": 500,
-    "scroll_max_scrolls": 200,
-    "greedy_max_pages": 0,
-    "max_jobs_per_city_round": 0
+    "new_job_target": 20,
+    "max_jobs": 100
   },
   "cat_rules": {
     "大模型/LLM": [
@@ -171,10 +167,6 @@
     "AIGC",
     "大模型",
     "智能",
-    "算法",
-    "开发",
-    "工程师",
-    "程序",
     "Agent",
     "智能体"
   ],
@@ -195,5 +187,180 @@
     "销售",
     "行政",
     "人事"
-  ]
+  ],
+  "scoring": {
+    "keywordHints": [
+      "LLM",
+      "大模型",
+      "RAG",
+      "Agent",
+      "智能体",
+      "Prompt",
+      "Function Calling",
+      "ReAct",
+      "MCP",
+      "Tool Use",
+      "Tool Calling",
+      "Workflow",
+      "Memory",
+      "多Agent",
+      "Multi-Agent",
+      "微调",
+      "Fine-tuning",
+      "部署",
+      "SGLang",
+      "向量数据库",
+      "LangChain",
+      "LangGraph",
+      "Dify",
+      "Coze",
+      "PyTorch",
+      "TensorFlow",
+      "Kubernetes",
+      "Docker",
+      "CI/CD",
+      "知识库",
+      "智能客服",
+      "对话系统",
+      "多模态",
+      "全栈",
+      "后端",
+      "前端",
+      "客户端",
+      "分布式",
+      "高并发",
+      "微服务",
+      "容器化",
+      "架构设计",
+      "系统设计",
+      "性能优化",
+      "意图识别",
+      "上下文管理",
+      "评测",
+      "Harness",
+      "AI Coding",
+      "Cursor",
+      "Claude Code",
+      "Vibe Coding"
+    ],
+    "baseScore": 1,
+    "weights": {
+      "coverage": 1.65,
+      "jdQuality": 0.45,
+      "salary": 0.7,
+      "experience": 0.9,
+      "education": 0.8
+    },
+    "jdQuality": {
+      "highLength": 600,
+      "midLength": 200,
+      "highSignal": 1,
+      "midSignal": 0.72,
+      "lowSignal": 0.45
+    },
+    "salary": {
+      "highAvgK": 25,
+      "midAvgK": 15,
+      "highSignal": 1,
+      "midSignal": 0.85,
+      "lowSignal": 0.7
+    },
+    "experience": {
+      "unknownSignal": 0.82,
+      "nearYears": 1,
+      "nearSignal": 0.72,
+      "riskSignal": 0.35,
+      "riskCap": 3.1
+    },
+    "education": {
+      "unknownSignal": 0.88,
+      "nearGap": 1,
+      "nearSignal": 0.7,
+      "riskSignal": 0.35,
+      "riskCap": 3.2
+    },
+    "fitLevels": [
+      {
+        "label": "High Fit",
+        "minScore": 4.2
+      },
+      {
+        "label": "Worth Reviewing",
+        "minScore": 3.4
+      },
+      {
+        "label": "Weak Match",
+        "minScore": 2.6
+      },
+      {
+        "label": "Skip Unless Strategic",
+        "minScore": 1.0
+      }
+    ],
+    "customPresets": [
+      {
+        "id": "1783616010298-rq63q7",
+        "name": "自定义预设1",
+        "createdAt": "2026-07-09T16:53:30.298Z",
+        "settings": {
+          "baseScore": 1,
+          "weights": {
+            "coverage": 1.65,
+            "jdQuality": 0.45,
+            "salary": 0.7,
+            "experience": 0.9,
+            "education": 0.8
+          },
+          "jdQuality": {
+            "highLength": 600,
+            "midLength": 200,
+            "highSignal": 1,
+            "midSignal": 0.72,
+            "lowSignal": 0.45
+          },
+          "salary": {
+            "highAvgK": 25,
+            "midAvgK": 15,
+            "highSignal": 1,
+            "midSignal": 0.85,
+            "lowSignal": 0.7
+          },
+          "experience": {
+            "unknownSignal": 0.82,
+            "nearYears": 1,
+            "nearSignal": 0.72,
+            "riskSignal": 0.35,
+            "riskCap": 3.1
+          },
+          "education": {
+            "unknownSignal": 0.88,
+            "nearGap": 1,
+            "nearSignal": 0.7,
+            "riskSignal": 0.35,
+            "riskCap": 3.2
+          },
+          "fitLevels": [
+            {
+              "label": "High Fit",
+              "minScore": 4.2
+            },
+            {
+              "label": "Worth Reviewing",
+              "minScore": 3.4
+            },
+            {
+              "label": "Weak Match",
+              "minScore": 2.6
+            },
+            {
+              "label": "Skip Unless Strategic",
+              "minScore": 1
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "headless_mode": true,
+  "auto_sqlite": true
 }

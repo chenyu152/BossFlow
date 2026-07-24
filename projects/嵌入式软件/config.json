@@ -1,0 +1,102 @@
+{
+  "keywords": [
+    "嵌入式软件工程师",
+    "嵌入式开发工程师",
+    "单片机开发工程师",
+    "IoT 开发工程师"
+  ],
+  "cities": {
+    "全国": "100010000"
+  },
+  "scrape_limits": {
+    "scroll_target": 20,
+    "scroll_max_scrolls": 60
+  },
+  "min_salary": 17.0,
+  "headless_mode": true,
+  "auto_sqlite": true,
+  "cat_rules": {
+    "嵌入式 / IoT": [
+      "嵌入式软件工程师",
+      "嵌入式开发工程师",
+      "单片机开发工程师",
+      "IoT 开发工程师"
+    ]
+  },
+  "relevance_keywords": [
+    "嵌入式",
+    "单片机",
+    "IoT",
+    "驱动开发",
+    "STM32",
+    "FreeRTOS",
+    "ARM",
+    "固件"
+  ],
+  "blacklist_keywords": [],
+  "scoring": {
+    "keywordHints": [
+      "C/C++",
+      "STM32",
+      "FreeRTOS",
+      "Linux",
+      "嵌入式系统",
+      "通信协议"
+    ],
+    "baseScore": 1,
+    "weights": {
+      "coverage": 2,
+      "jdQuality": 0.45,
+      "salary": 0.35,
+      "experience": 0.75,
+      "education": 0.45
+    },
+    "jdQuality": {
+      "highLength": 600,
+      "midLength": 200,
+      "highSignal": 1,
+      "midSignal": 0.72,
+      "lowSignal": 0.45
+    },
+    "salary": {
+      "highAvgK": 25,
+      "midAvgK": 15,
+      "highSignal": 1,
+      "midSignal": 0.85,
+      "lowSignal": 0.7
+    },
+    "experience": {
+      "unknownSignal": 0.82,
+      "nearYears": 1,
+      "nearSignal": 0.72,
+      "riskSignal": 0.35,
+      "riskCap": 3.1
+    },
+    "education": {
+      "unknownSignal": 0.88,
+      "nearGap": 1,
+      "nearSignal": 0.7,
+      "riskSignal": 0.35,
+      "riskCap": 3.2
+    },
+    "fitLevels": [
+      {
+        "label": "High Fit",
+        "minScore": 4.2
+      },
+      {
+        "label": "Worth Reviewing",
+        "minScore": 3.4
+      },
+      {
+        "label": "Weak Match",
+        "minScore": 2.6
+      },
+      {
+        "label": "Skip Unless Strategic",
+        "minScore": 1.0
+      }
+    ]
+  },
+  "direction_setup_version": 2
+}
