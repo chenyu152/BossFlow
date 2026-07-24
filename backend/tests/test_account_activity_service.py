@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi import HTTPException
+
 from backend.services import account_activity_service as service
 from crawler.db import upsert_jobs
 
@@ -92,6 +94,146 @@ class AccountActivityServiceTests(unittest.TestCase):
             with self.assertRaises(service.AccountActivityBrowserBlocked):
                 service.discover_account_activity_pages("demo", "profile")
 
+    def test_browser_connection_starts_the_requested_profile_on_a_private_port(self):
+        captured = {}
+
+        class Crawler:
+            def __init__(self, profile_dir, chrome_port):
+                captured["profile_dir"] = profile_dir
+                captured["chrome_port"] = chrome_port
+                self.profile_dir = profile_dir
+                self.chrome_port = chrome_port
+                self.page = object()
+
+            def start_browser(self, headless=False):
+                self.headless = headless
+
+        profile = Path(self.temp.name) / "profile"
+        with patch("crawler.boss.BossCrawler", Crawler), patch("backend.services.project_service.find_free_port", return_value=9444):
+            page, owns = service._connect_logged_browser(str(profile))
+        self.assertTrue(owns)
+        self.assertIsNotNone(page)
+        self.assertEqual(captured["profile_dir"], profile.resolve())
+        self.assertEqual(captured["chrome_port"], 9444)
+
+    def test_import_requires_saved_login_only_when_new_detail_is_needed(self):
+        project_dir = Path(self.temp.name) / "project"
+        project_dir.mkdir()
+        (project_dir / "config.json").write_text(json.dumps({"keywords": ["Agent"]}), encoding="utf-8")
+        item = {"encryptJobId": "needs-detail", "title": "Agent", "company": "Company", "city": "上海", "detailUrl": "https://www.zhipin.com/job_detail/needs-detail.html"}
+        self._sync({"communicated": [{"items": [item], "hasNext": False}]}, tabs=["communicated"])
+        login_error = HTTPException(status_code=409, detail="BOSS 登录状态已失效，请前往系统设置重新登录。")
+        with patch.object(service, "resolve_project", return_value=project_dir), patch.object(service, "require_saved_login", side_effect=login_error), patch.object(service, "_connect_logged_browser") as connect:
+            with self.assertRaises(HTTPException) as raised:
+                service.import_account_activity("project", [1], profile_project="project", db_path=self.db)
+        self.assertEqual(raised.exception.status_code, 409)
+        connect.assert_not_called()
+        conn = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM project_job_links").fetchone()[0], 0)
+        finally:
+            conn.close()
+
+    def test_import_reuses_one_designated_profile_session_for_a_batch(self):
+        target_dir = Path(self.temp.name) / "target"
+        profile_dir = Path(self.temp.name) / "profile"
+        target_dir.mkdir(); profile_dir.mkdir()
+        (target_dir / "config.json").write_text(json.dumps({"keywords": ["Agent"], "relevance_keywords": ["Agent"], "blacklist_keywords": [], "cat_rules": {}}), encoding="utf-8")
+        (profile_dir / "config.json").write_text(json.dumps({"keywords": ["Agent"]}), encoding="utf-8")
+        items = [{"encryptJobId": f"detail-{index}", "title": f"Agent {index}", "company": "Company", "city": "上海", "detailUrl": f"https://www.zhipin.com/job_detail/detail-{index}.html"} for index in range(2)]
+        self._sync({"communicated": [{"items": items, "hasNext": False}]}, tabs=["communicated"])
+        browser = object()
+        fetched = []
+
+        def fetch(profile_path, row, page_browser=None):
+            fetched.append((profile_path, page_browser))
+            return {"title": row["title"], "company": "Company", "city": "上海", "salary": "20K", "url": row["detail_url"], "desc": "这是足够长的完整岗位描述内容"}
+
+        def resolve(name):
+            return target_dir if name == "target" else profile_dir
+
+        with patch.object(service, "resolve_project", side_effect=resolve), patch.object(service, "_match_job", return_value={"relevance": "matched", "confidence": "high", "reason": "matched"}), patch.object(service, "require_saved_login", return_value={"canSchedule": True}), patch.object(service, "_connect_logged_browser", return_value=(browser, True)) as connect, patch.object(service, "_verify_logged_session") as verify, patch.object(service, "_fetch_job_detail_with_browser", side_effect=fetch):
+            result = service.import_account_activity("target", [1, 2], profile_project="profile", db_path=self.db)
+
+        self.assertEqual(result["imported"], 2)
+        connect.assert_called_once()
+        verify.assert_called_once_with(browser)
+        self.assertEqual(len(fetched), 2)
+        self.assertEqual({page for _, page in fetched}, {browser})
+        self.assertTrue(all(Path(path).resolve() == Path(service.paths_for_project(profile_dir)["profilePath"]).resolve() for path, _ in fetched))
+
+    def test_truncated_or_login_detail_is_rejected_without_fallback_body(self):
+        class Tab:
+            url = "https://www.zhipin.com/job_detail/test.html"
+
+            def run_js(self, _script):
+                return {"title": "Agent", "description": "很短", "body": "统一登录系统开发", "loginIndicator": False, "loginText": ""}
+
+            def close(self):
+                return None
+
+        class Browser:
+            def new_tab(self, _url):
+                return Tab()
+
+        result = service._fetch_job_detail_with_browser("profile", {"detail_url": "https://www.zhipin.com/job_detail/test.html"}, page_browser=Browser())
+        self.assertIsNone(result)
+
+    def test_normal_jd_login_word_is_not_treated_as_login_page(self):
+        class Tab:
+            url = "https://www.zhipin.com/job_detail/test.html"
+
+            def run_js(self, _script):
+                return {"title": "Agent", "description": "负责统一登录系统开发与维护，参与服务治理和稳定性建设。", "body": "统一登录系统开发", "loginIndicator": False, "loginText": ""}
+
+            def close(self):
+                return None
+
+        class Browser:
+            def new_tab(self, _url):
+                return Tab()
+
+        result = service._fetch_job_detail_with_browser("profile", {"detail_url": "https://www.zhipin.com/job_detail/test.html", "title": "Agent", "company": "Company", "city": "上海"}, page_browser=Browser())
+        self.assertIsNotNone(result)
+
+    def test_explicit_login_container_is_rejected(self):
+        class Tab:
+            url = "https://www.zhipin.com/job_detail/test.html"
+
+            def run_js(self, _script):
+                return {"title": "Agent", "description": "这是足够长的描述文本，但页面实际展示的是登录容器。", "body": "", "loginIndicator": True, "loginText": ""}
+
+            def close(self):
+                return None
+
+        class Browser:
+            def new_tab(self, _url):
+                return Tab()
+
+        result = service._fetch_job_detail_with_browser("profile", {"detail_url": "https://www.zhipin.com/job_detail/test.html"}, page_browser=Browser())
+        self.assertIsNone(result)
+
+    def test_profile_connection_failure_is_a_batch_level_409(self):
+        project_dir = Path(self.temp.name) / "project"
+        project_dir.mkdir()
+        (project_dir / "config.json").write_text(json.dumps({"keywords": ["Agent"]}), encoding="utf-8")
+        item = {"encryptJobId": "profile-failure", "title": "Agent", "company": "Company", "city": "上海", "detailUrl": "https://www.zhipin.com/job_detail/profile-failure.html"}
+        self._sync({"communicated": [{"items": [item], "hasNext": False}]}, tabs=["communicated"])
+        with patch.object(service, "resolve_project", return_value=project_dir), patch.object(service, "require_saved_login", return_value={"canSchedule": True}), patch.object(service, "_connect_logged_browser", side_effect=service.AccountActivityBrowserBlocked("指定 Profile 无法启动")):
+            with self.assertRaises(HTTPException) as raised:
+                service.import_account_activity("project", [1], profile_project="project", db_path=self.db)
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertIn("Profile", raised.exception.detail)
+
+    def test_import_api_blocks_when_a_browser_task_is_running(self):
+        class RunningTask:
+            def snapshot(self):
+                return {"running": True}
+
+        with self.assertRaises(HTTPException) as raised:
+            service.import_account_activity("project", [], task_manager=RunningTask(), db_path=self.db)
+        self.assertEqual(raised.exception.status_code, 409)
+
     def test_boss_network_card_is_reduced_to_safe_job_summary(self):
         payload = {"code": 0, "zpData": {"cardList": [{"encryptJobId": "stable", "jobName": "Agent", "brandName": "Company", "cityName": "上海", "jobSalary": "20K", "jobValidStatus": 1}]}}
         normalized = service._normalize_boss_card(payload["zpData"]["cardList"][0])
@@ -148,6 +290,64 @@ class AccountActivityServiceTests(unittest.TestCase):
         self.assertEqual(result["total"], 45)
         self.assertEqual(len(result["items"]), 30)
         self.assertEqual(len(calls), 30)
+
+    def test_python_filtered_results_recount_and_repage(self):
+        project_dir = Path(self.temp.name) / "project"
+        project_dir.mkdir()
+        items = [{"encryptJobId": f"filtered-{index}", "title": f"Agent {index}", "company": "Company", "city": "上海"} for index in range(45)]
+        self._sync({"communicated": [{"items": items, "hasNext": False}]}, tabs=["communicated"])
+
+        def match(row, _path):
+            index = int(str(row["title"]).rsplit(" ", 1)[-1])
+            return {"relevance": "matched" if index < 12 else "mismatched", "confidence": "medium", "reason": "test"}
+
+        with patch.object(service, "resolve_project", return_value=project_dir), patch.object(service, "_match_job", side_effect=match):
+            result = service.list_account_activity("agent", account_key="account-1", page=2, page_size=10, match_status="matched", db_path=self.db)
+
+        self.assertEqual(result["total"], 12)
+        self.assertEqual(result["pages"], 2)
+        self.assertEqual(len(result["items"]), 2)
+        self.assertTrue({item["title"] for item in result["items"]}.issubset({f"Agent {index}" for index in range(12)}))
+
+    def test_actionable_pending_count_excludes_imported_closed_mismatched_and_incomplete(self):
+        project_dir = Path(self.temp.name) / "project"
+        project_dir.mkdir()
+        (project_dir / "config.json").write_text(json.dumps({"keywords": ["Agent"]}), encoding="utf-8")
+        baseline = {"encryptJobId": "baseline", "title": "Agent baseline", "company": "Company", "city": "上海", "closedStatus": "open"}
+        self._sync({"communicated": [{"items": [baseline], "hasNext": False}]}, tabs=["communicated"])
+        new_item = {"encryptJobId": "new", "title": "Agent new", "company": "Company", "city": "上海", "closedStatus": "open"}
+        mismatched = {"encryptJobId": "mismatch", "title": "Product manager", "company": "Company", "city": "上海", "closedStatus": "open"}
+        closed = {"encryptJobId": "closed", "title": "Agent closed", "company": "Company", "city": "上海", "closedStatus": "closed"}
+        self._sync({"communicated": [{"items": [baseline, new_item, mismatched, closed], "hasNext": False}]}, tabs=["communicated"])
+        with patch.object(service, "resolve_project", return_value=project_dir):
+            pending = service.list_account_activity(
+                "project",
+                account_key="account-1",
+                profile_project="project",
+                new_only=True,
+                import_status="pending",
+                job_status="open",
+                actionable_only=True,
+                db_path=self.db,
+            )
+        self.assertEqual((pending["total"], pending["summary"]["actionablePending"]), (1, 1))
+        conn = sqlite3.connect(self.db)
+        try:
+            new_id = conn.execute("SELECT id FROM account_jobs WHERE encrypt_job_id='new'").fetchone()[0]
+        finally:
+            conn.close()
+        detail = {"title": "Agent new", "company": "Company", "city": "上海", "salary": "20K", "url": "https://example/job_detail/new.html", "desc": "Agent"}
+        with patch.object(service, "resolve_project", return_value=project_dir):
+            imported = service.import_account_activity("project", [new_id], db_path=self.db, detail_provider=lambda _row: detail)
+            after_import = service.list_account_activity("project", account_key="account-1", profile_project="project", new_only=True, import_status="pending", job_status="open", actionable_only=True, db_path=self.db)
+        self.assertEqual(imported["imported"], 1)
+        self.assertEqual(after_import["total"], 0)
+
+        incomplete = {"encryptJobId": "incomplete", "title": "Agent incomplete", "company": "Company", "city": "上海", "closedStatus": "open"}
+        self._sync({"communicated": [{"items": [incomplete], "hasNext": False}]}, tabs=["communicated"], complete=False, error="stopped")
+        with patch.object(service, "resolve_project", return_value=project_dir):
+            after_incomplete = service.list_account_activity("project", account_key="account-1", profile_project="project", new_only=True, import_status="pending", job_status="open", actionable_only=True, db_path=self.db)
+        self.assertEqual(after_incomplete["total"], 0)
 
 
 if __name__ == "__main__":

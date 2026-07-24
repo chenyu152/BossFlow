@@ -8,12 +8,14 @@ type TaskRequestBody = Record<string, unknown>;
 export function useTasks({
   configReady,
   refreshJobs,
+  refreshDashboardJobs,
   requestBody,
   showNotice,
   t,
 }: {
   configReady: boolean;
   refreshJobs: () => Promise<void>;
+  refreshDashboardJobs: () => Promise<unknown>;
   requestBody: () => TaskRequestBody;
   showNotice: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
@@ -35,7 +37,9 @@ export function useTasks({
         setStatus(data.status || (data.running ? 'crawling' : 'ready'));
         setCrawlAuthenticated(Boolean(data.crawlAuthenticated));
         setLogs(data.logs || []);
-        if (!firstStatusLoad.current && wasRunningRef.current && !data.running) await refreshJobs();
+        if (!firstStatusLoad.current && wasRunningRef.current && !data.running) {
+          await Promise.allSettled([refreshJobs(), refreshDashboardJobs()]);
+        }
         wasRunningRef.current = data.running;
         firstStatusLoad.current = false;
       } catch {
@@ -44,7 +48,7 @@ export function useTasks({
     }, 1500);
 
     return () => window.clearInterval(timer);
-  }, [refreshJobs]);
+  }, [refreshDashboardJobs, refreshJobs]);
 
   const startCrawl = useCallback(async () => {
     if (!configReady) return false;

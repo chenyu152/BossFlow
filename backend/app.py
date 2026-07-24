@@ -400,10 +400,11 @@ def get_account_activity(
     matchStatus: str = "all",
     importStatus: str = "all",
     jobStatus: str = "all",
+    actionableOnly: bool = False,
 ):
     target = matchProject or project or default_project_name()
     profile = profileProject or project or default_project_name()
-    return list_account_activity(target, tab, page, pageSize, search, newOnly, accountKey, profile_project=profile, match_status=matchStatus, import_status=importStatus, job_status=jobStatus)
+    return list_account_activity(target, tab, page, pageSize, search, newOnly, accountKey, profile_project=profile, match_status=matchStatus, import_status=importStatus, job_status=jobStatus, actionable_only=actionableOnly)
 
 
 @app.post("/api/account-activity/sync")
@@ -414,7 +415,7 @@ def sync_account_activity(payload: AccountActivitySyncRequest):
 @app.post("/api/account-activity/import")
 def import_account_activity_jobs(payload: AccountActivityImportRequest):
     target = payload.matchProject or payload.project or default_project_name()
-    return import_account_activity(target, payload.accountJobIds, payload.mode, payload.allowUncertain, payload.accountKey, profile_project=payload.profileProject or payload.project or target)
+    return import_account_activity(target, payload.accountJobIds, payload.mode, payload.allowUncertain, payload.accountKey, profile_project=payload.profileProject or payload.project or target, task_manager=task_manager)
 
 
 @app.post("/api/pipeline/status")

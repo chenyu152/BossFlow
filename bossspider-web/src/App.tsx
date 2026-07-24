@@ -34,7 +34,7 @@ import { bossApi } from './api';
 import { buildTemplateSeed, JOB_DIRECTION_TEMPLATES, type JobDirectionTemplate } from './jobTemplates';
 import { chooseAccountProfileProject } from './projectSelection';
 import type { DashboardTaskTarget } from './pages/Dashboard';
-import type { ResumeNavigationTarget, Tab } from './types';
+import type { AccountActivityDataChange, ResumeNavigationTarget, Tab } from './types';
 
 type RailMenu = 'discovery' | 'materials' | 'interview';
 
@@ -116,6 +116,9 @@ export default function App() {
   const [resumeGuideAfterCrawl, setResumeGuideAfterCrawl] = useState(false);
   const [activeRailMenu, setActiveRailMenu] = useState<RailMenu | null>(null);
   const [accountActivityNewCount, setAccountActivityNewCount] = useState(0);
+  const [dashboardRefreshToken, setDashboardRefreshToken] = useState(0);
+  const previousActiveTabRef = useRef<Tab>('Dashboard');
+  const accountActivityRefreshRequestRef = useRef(0);
   const [accountProfileProject, setAccountProfileProject] = useState(() => window.localStorage.getItem('bossflow.accountProfileProject') || '');
   const railRef = useRef<HTMLElement>(null);
   const boss = useBossSpider();
@@ -201,14 +204,52 @@ export default function App() {
     if (rememberedProfile !== nextProfile) window.localStorage.setItem('bossflow.accountProfileProject', nextProfile);
   }, [accountProfileProject, activeProjectReady, boss.project, boss.projects]);
 
-  useEffect(() => {
-    if (!activeProjectReady || !accountProfileReady) { setAccountActivityNewCount(0); return; }
-    let cancelled = false;
-    void bossApi.getAccountActivity(boss.project, 'all', 1, 1, '', true, { profileProject: accountProfileProject })
-      .then((result) => { if (!cancelled) setAccountActivityNewCount(result.total || result.summary?.new || 0); })
-      .catch(() => { if (!cancelled) setAccountActivityNewCount(0); });
-    return () => { cancelled = true; };
+  const refreshAccountActivityNewCount = useCallback(async () => {
+    const requestId = ++accountActivityRefreshRequestRef.current;
+    if (!activeProjectReady || !accountProfileReady) {
+      setAccountActivityNewCount(0);
+      return;
+    }
+    const project = boss.project;
+    const profileProject = accountProfileProject;
+    try {
+      const result = await bossApi.getAccountActivity(project, 'all', 1, 1, '', true, {
+        profileProject,
+        importStatus: 'pending',
+        jobStatus: 'open',
+        actionableOnly: true,
+      });
+      if (requestId === accountActivityRefreshRequestRef.current && boss.project === project && accountProfileProject === profileProject) {
+        setAccountActivityNewCount(result.total);
+      }
+    } catch {
+      if (requestId === accountActivityRefreshRequestRef.current) setAccountActivityNewCount(0);
+    }
   }, [accountProfileProject, accountProfileReady, activeProjectReady, boss.project]);
+
+  useEffect(() => {
+    void refreshAccountActivityNewCount();
+  }, [refreshAccountActivityNewCount]);
+
+  useEffect(() => {
+    const enteredDashboard = activeTab === 'Dashboard' && previousActiveTabRef.current !== 'Dashboard';
+    previousActiveTabRef.current = activeTab;
+    if (!enteredDashboard || !activeProjectReady) return;
+    setDashboardRefreshToken((value) => value + 1);
+    void Promise.allSettled([
+      boss.refreshDashboardResources(),
+      refreshAccountActivityNewCount(),
+    ]);
+  }, [activeProjectReady, activeTab, boss.refreshDashboardResources, refreshAccountActivityNewCount]);
+
+  const handleAccountActivityDataChanged = useCallback(async (change: AccountActivityDataChange) => {
+    const refreshes: Promise<unknown>[] = [
+      refreshAccountActivityNewCount(),
+      boss.refreshDashboardJobs(),
+    ];
+    if (change.kind === 'import' && change.mode === 'candidate') refreshes.push(boss.refreshPipeline());
+    await Promise.allSettled(refreshes);
+  }, [boss.refreshDashboardJobs, boss.refreshPipeline, refreshAccountActivityNewCount]);
 
   const setActiveTabStable = useCallback((tab: Tab) => {
     navigateToTab(tab);
@@ -542,7 +583,7 @@ export default function App() {
               {activeTab === 'Dashboard' && boss.config && (
                 <Dashboard
                   config={boss.config}
-                  jobs={boss.jobs}
+                  jobs={boss.dashboardJobs}
                   pipeline={boss.pipeline}
                   evidenceOverview={boss.evidenceOverview}
                   setActiveTab={navigateToTab}
@@ -550,6 +591,7 @@ export default function App() {
                   recentLogs={boss.recentLogs}
                   onLoadStoryDrafts={boss.loadInterviewStoryDrafts}
                   accountActivityNewCount={accountActivityNewCount}
+                  refreshToken={dashboardRefreshToken}
                 />
               )}
               {activeTab === 'Scope' && boss.config && (
@@ -619,6 +661,9 @@ export default function App() {
                     onAddToPipeline={async (jobIds) => {
                       if (await boss.addJobsToPipeline(jobIds, true)) navigateToTab('Pipeline');
                     }}
+                    onDataChanged={handleAccountActivityDataChanged}
+                    onOpenLoginSettings={() => navigateToTab('Settings')}
+                    taskRunning={boss.isRunning}
                   />
                 ) : <PageLoading label="正在加载求职目标…" />
               )}

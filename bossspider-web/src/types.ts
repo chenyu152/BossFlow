@@ -33,11 +33,12 @@ export type AccountActivityResponse = {
   pages: number;
   tabs?: Record<AccountActivityTab, number>;
   account?: { accountKey: string; displayName: string; lastSyncAt: string | null } | null;
-  summary?: { new: number; matched: number; closed: number };
+  summary?: { new: number; actionablePending?: number; matched: number; closed: number };
   sync: { status: string; error: string; finishedAt: string; runId: number } | null;
 };
 export type AccountActivitySyncResponse = { ok: boolean; status: string; accountKey: string; message?: string; error?: string };
 export type AccountActivityImportResponse = { ok: boolean; mode: 'library' | 'candidate'; projectJobIds: number[]; imported: number; failed: { id: number; reason: string }[] };
+export type AccountActivityDataChange = { kind: 'import' | 'sync'; mode?: 'library' | 'candidate' };
 
 export type LlmSettingsStatus = {
   configured: boolean;

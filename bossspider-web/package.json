@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:project-selection": "node --test scripts/project-selection.test.mjs"
+    "test:project-selection": "node --test scripts/project-selection.test.mjs",
+    "test:dashboard-refresh": "node --test scripts/dashboard-refresh.test.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.4",

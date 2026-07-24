@@ -232,11 +232,12 @@ export const bossApi = {
     });
   },
 
-  getAccountActivity(project: string, tab: AccountActivityTab = 'all', page = 1, pageSize = 30, search = '', newOnly = false, options: { profileProject?: string; matchStatus?: string; importStatus?: string; jobStatus?: string } = {}) {
+  getAccountActivity(project: string, tab: AccountActivityTab = 'all', page = 1, pageSize = 30, search = '', newOnly = false, options: { profileProject?: string; matchStatus?: string; importStatus?: string; jobStatus?: string; actionableOnly?: boolean } = {}) {
     const params = new URLSearchParams({ project, matchProject: project, tab, page: String(page), pageSize: String(pageSize), search, newOnly: String(newOnly), profileProject: options.profileProject || project });
     if (options.matchStatus && options.matchStatus !== 'all') params.set('matchStatus', options.matchStatus);
     if (options.importStatus && options.importStatus !== 'all') params.set('importStatus', options.importStatus);
     if (options.jobStatus && options.jobStatus !== 'all') params.set('jobStatus', options.jobStatus);
+    if (options.actionableOnly) params.set('actionableOnly', 'true');
     return request<AccountActivityResponse>(`/api/account-activity?${params.toString()}`);
   },
 

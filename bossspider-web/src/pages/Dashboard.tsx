@@ -16,7 +16,7 @@ import {
   Terminal,
   UserRound,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppTranslation } from '../i18n';
 import { bossApi } from '../api';
 import type {
@@ -208,6 +208,7 @@ export function Dashboard({
   recentLogs,
   onLoadStoryDrafts,
   accountActivityNewCount = 0,
+  refreshToken = 0,
 }: {
   config: ConfigPayload;
   jobs: Job[];
@@ -218,6 +219,7 @@ export function Dashboard({
   recentLogs: ParsedLog[];
   onLoadStoryDrafts: () => Promise<InterviewStoryDraftsResponse | null>;
   accountActivityNewCount?: number;
+  refreshToken?: number;
 }) {
   const { t, i18n } = useAppTranslation();
   const isZh = (i18n.resolvedLanguage || i18n.language).startsWith('zh');
@@ -314,9 +316,9 @@ export function Dashboard({
     return () => {
       cancelled = true;
     };
-  }, [onLoadStoryDrafts]);
+  }, [config.project, onLoadStoryDrafts, refreshToken]);
 
-  const loadCvStatus = async () => {
+  const loadCvStatus = useCallback(async () => {
     setCvLoading(true);
     setCvError('');
     try {
@@ -326,11 +328,11 @@ export function Dashboard({
     } finally {
       setCvLoading(false);
     }
-  };
+  }, [config.project]);
 
   useEffect(() => {
     void loadCvStatus();
-  }, [config.project]);
+  }, [loadCvStatus, refreshToken]);
 
   const allTodayJobs = useMemo(
     () => jobs

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, Search, ShieldAlert, Upload } from 'lucide-react';
 import { bossApi } from '../api';
 import { useAppTranslation } from '../i18n';
-import type { AccountActivityItem, AccountActivityTab } from '../types';
+import type { AccountActivityDataChange, AccountActivityItem, AccountActivityTab, LoginState } from '../types';
 
 const tabs: { value: AccountActivityTab; label: string }[] = [
   { value: 'all', label: '全部' },
@@ -31,7 +31,16 @@ function matchLabel(value: string) {
   return value === 'matched' ? '匹配目标' : value === 'mismatched' ? '不匹配' : '信息不足';
 }
 
-export function AccountActivity({ project, profileProject, onAddToPipeline }: { project: string; profileProject: string; onAddToPipeline: (jobIds: number[]) => Promise<void> }) {
+function loginStatusLabel(state: LoginState | null, checking: boolean, failed: boolean) {
+  if (checking) return '检查中…';
+  if (failed || !state) return '无法确认';
+  if (state.status === 'available') return '可用';
+  if (state.status === 'refresh_recommended') return '建议刷新';
+  if (state.status === 'expired') return '已过期';
+  return '未保存 Cookie';
+}
+
+export function AccountActivity({ project, profileProject, onAddToPipeline, onDataChanged, onOpenLoginSettings, taskRunning }: { project: string; profileProject: string; onAddToPipeline: (jobIds: number[]) => Promise<void>; onDataChanged?: (change: AccountActivityDataChange) => void | Promise<void>; onOpenLoginSettings: () => void; taskRunning: boolean }) {
   const { t } = useAppTranslation();
   const [tab, setTab] = useState<AccountActivityTab>('all');
   const [page, setPage] = useState(1);
@@ -53,9 +62,41 @@ export function AccountActivity({ project, profileProject, onAddToPipeline }: { 
   const [busyImport, setBusyImport] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [loginState, setLoginState] = useState<LoginState | null>(null);
+  const [loginChecking, setLoginChecking] = useState(Boolean(profileProject));
+  const [loginCheckFailed, setLoginCheckFailed] = useState(false);
+  const syncPreviousRunIdRef = useRef(0);
+  const syncCompletionNotifiedRef = useRef(false);
+
+  const refreshLoginState = useCallback(async () => {
+    if (!profileProject) {
+      setLoginState(null);
+      setLoginCheckFailed(true);
+      setLoginChecking(false);
+      return null;
+    }
+    setLoginChecking(true);
+    setLoginCheckFailed(false);
+    try {
+      const result = await bossApi.getLoginState(profileProject);
+      setLoginState(result);
+      return result;
+    } catch (cause) {
+      setLoginState(null);
+      setLoginCheckFailed(true);
+      setError((cause as Error).message);
+      return null;
+    } finally {
+      setLoginChecking(false);
+    }
+  }, [profileProject]);
+
+  useEffect(() => {
+    void refreshLoginState();
+  }, [refreshLoginState]);
 
   const load = useCallback(async (background = false) => {
-    if (!project) return;
+    if (!project) return null;
     if (!background) setLoading(true);
     setError('');
     try {
@@ -67,8 +108,10 @@ export function AccountActivity({ project, profileProject, onAddToPipeline }: { 
       setAccount(result.account ? { displayName: result.account.displayName, lastSyncAt: result.account.lastSyncAt } : null);
       setSummary(result.summary || { new: 0, matched: 0, closed: 0 });
       setSync(result.sync ? { status: result.sync.status, error: result.sync.error } : null);
+      return result;
     } catch (cause) {
       setError((cause as Error).message);
+      return null;
     } finally {
       if (!background) setLoading(false);
     }
@@ -77,14 +120,33 @@ export function AccountActivity({ project, profileProject, onAddToPipeline }: { 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!syncing) return undefined;
-    const timer = window.setInterval(() => { void load(true); }, 1200);
+    let cancelled = false;
+    const poll = async () => {
+      const result = await load(true);
+      if (cancelled || !result?.sync) return;
+      const runId = result.sync.runId || 0;
+      const terminal = new Set(['succeeded', 'incomplete', 'failed']).has(result.sync.status);
+      if (!terminal || runId <= syncPreviousRunIdRef.current || syncCompletionNotifiedRef.current) return;
+      syncCompletionNotifiedRef.current = true;
+      setSyncing(false);
+      if (result.sync.status !== 'succeeded') await refreshLoginState();
+      await onDataChanged?.({ kind: 'sync' });
+    };
+    const timer = window.setInterval(() => { void poll(); }, 1200);
     const stop = window.setTimeout(() => setSyncing(false), 15000);
-    return () => { window.clearInterval(timer); window.clearTimeout(stop); };
-  }, [load, syncing]);
+    return () => { cancelled = true; window.clearInterval(timer); window.clearTimeout(stop); };
+  }, [load, onDataChanged, refreshLoginState, syncing]);
 
   const selectableItems = useMemo(() => items.filter((item) => item.closedStatus !== 'closed' && item.relevance !== 'mismatched'), [items]);
   const selectedItems = useMemo(() => items.filter((item) => selected.has(item.id)), [items, selected]);
   const allSelectableSelected = selectableItems.length > 0 && selectableItems.every((item) => selected.has(item.id));
+  const loginUnavailable = loginChecking || loginCheckFailed || !loginState?.canSchedule;
+  const browserActionsDisabled = taskRunning || syncing || busyImport || loginUnavailable;
+  const actionDisabledReason = taskRunning
+    ? '当前采集、登录或同步任务正在使用 BOSS 浏览器'
+    : loginUnavailable
+      ? '请先确认 BOSS 登录状态并保存 Cookie'
+      : undefined;
   const toggle = (id: number) => setSelected((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -93,11 +155,13 @@ export function AccountActivity({ project, profileProject, onAddToPipeline }: { 
 
   const startSync = async () => {
     setError(''); setNotice(''); setSyncing(true);
+    syncPreviousRunIdRef.current = sync?.runId || 0;
+    syncCompletionNotifiedRef.current = false;
     try {
       const result = await bossApi.startAccountActivitySync({ project, profileProject, matchProject: project });
       setNotice(result.message || '同步任务已加入队列');
     } catch (cause) {
-      setSyncing(false); setError((cause as Error).message);
+      setSyncing(false); setError((cause as Error).message); void refreshLoginState();
     }
   };
 
@@ -109,11 +173,12 @@ export function AccountActivity({ project, profileProject, onAddToPipeline }: { 
     try {
       const result = await bossApi.importAccountActivity({ project, matchProject: project, profileProject, accountJobIds: selectedItems.map((item) => item.id), mode, allowUncertain: uncertain });
       if (mode === 'candidate' && result.projectJobIds.length) await onAddToPipeline(result.projectJobIds);
+      await onDataChanged?.({ kind: 'import', mode });
       setSelected(new Set());
       setNotice(result.failed.length ? `已导入 ${result.imported} 个岗位；${result.failed.map((item) => item.reason).join('；')}` : `已导入 ${result.imported} 个岗位`);
       await load();
     } catch (cause) {
-      setError((cause as Error).message);
+      setError((cause as Error).message); void refreshLoginState();
     } finally { setBusyImport(false); }
   };
 
@@ -123,10 +188,12 @@ export function AccountActivity({ project, profileProject, onAddToPipeline }: { 
         <header className="account-activity-header">
           <div>
             <h1>{t('accountActivity.title', { defaultValue: 'BOSS 求职记录' })}</h1>
-            <div className="account-activity-meta"><span>登录账号：{account?.displayName || '当前 BOSS 账号'}</span><span>● 已登录</span><span>匹配目标：<strong>{project || '-'}</strong></span><span>上次同步：{formatTime(account?.lastSyncAt)}</span></div>
+            <div className="account-activity-meta"><span>登录账号：{account?.displayName || '当前 BOSS 账号'}</span><span className={`account-activity-login-status is-${loginState?.status || (loginChecking ? 'checking' : 'missing')}`}>● {loginStatusLabel(loginState, loginChecking, loginCheckFailed)}</span><span>匹配目标：<strong>{project || '-'}</strong></span><span>上次同步：{formatTime(account?.lastSyncAt)}</span></div>
           </div>
-          <button type="button" onClick={startSync} disabled={syncing} className="account-activity-sync"><RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />{syncing ? '同步中…' : '同步记录'}</button>
+          <button type="button" onClick={startSync} disabled={browserActionsDisabled} title={actionDisabledReason} className="account-activity-sync"><RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />{syncing ? '同步中…' : '同步记录'}</button>
         </header>
+
+        {loginUnavailable ? <div className="account-activity-login-alert account-activity-login-alert--error"><ShieldAlert size={18} /><div><strong>{loginChecking ? '正在检查 BOSS 登录状态' : '登录已失效/未保存 Cookie'}</strong><span>{loginChecking ? '正在确认指定账号 Profile，页面内容仍可查看。' : '导入新岗位无法获取完整 JD，请先登录并保存 Cookie。'}</span></div><button type="button" onClick={onOpenLoginSettings}>前往系统设置</button></div> : loginState?.status === 'refresh_recommended' ? <div className="account-activity-login-alert account-activity-login-alert--warning"><ShieldAlert size={18} /><div><strong>建议刷新 BOSS 登录</strong><span>当前 Cookie 仍可用，但已达到刷新建议时间。</span></div><button type="button" onClick={onOpenLoginSettings}>前往系统设置</button></div> : null}
 
         <div className="account-activity-summary"><span>新同步 <b>{summary.new}</b></span><span>匹配目标 <b>{summary.matched}</b></span><span>已关闭 <b>{summary.closed}</b></span><span className="account-activity-summary__status">{sync ? `同步状态：${sync.status}` : '尚未同步'}</span></div>
 
@@ -143,10 +210,10 @@ export function AccountActivity({ project, profileProject, onAddToPipeline }: { 
           </div>
         </div>
 
-        {(error || (sync?.status === 'failed' && sync.error)) && <div className="account-activity-alert account-activity-alert--error"><ShieldAlert size={17} /><span>{error || sync?.error}</span></div>}
+        {(error || ((sync?.status === 'failed' || sync?.status === 'incomplete') && sync.error)) && <div className="account-activity-alert account-activity-alert--error"><ShieldAlert size={17} /><span>{error || sync?.error}</span></div>}
         {notice && <div className="account-activity-alert account-activity-alert--success"><Check size={17} /><span>{notice}</span></div>}
 
-        {selectedItems.length > 0 && <div className="account-activity-bulk"><span>已选择 {selectedItems.length} 条记录</span><div><button type="button" disabled={busyImport} onClick={() => void importSelected('library')}><Upload size={14} />仅导入岗位库</button><button type="button" disabled={busyImport} onClick={() => void importSelected('candidate')} className="is-primary">{busyImport ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}导入并加入候选</button><button type="button" onClick={() => setSelected(new Set())}>取消选择</button></div></div>}
+        {selectedItems.length > 0 && <div className="account-activity-bulk"><span>已选择 {selectedItems.length} 条记录</span><div><button type="button" disabled={browserActionsDisabled} title={actionDisabledReason} onClick={() => void importSelected('library')}><Upload size={14} />仅导入岗位库</button><button type="button" disabled={browserActionsDisabled} title={actionDisabledReason} onClick={() => void importSelected('candidate')} className="is-primary">{busyImport ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}导入并加入候选</button><button type="button" onClick={() => setSelected(new Set())}>取消选择</button></div></div>}
 
         <div className="account-activity-table-wrap">
           {loading && !items.length ? <div className="account-activity-skeleton" aria-label="正在加载 BOSS 求职记录">{Array.from({ length: 8 }).map((_, index) => <div key={index} />)}</div> : <table className="account-activity-table"><thead><tr><th className="account-activity-select"><input type="checkbox" aria-label="选择当前页可导入记录" disabled={!selectableItems.length} checked={allSelectableSelected} onChange={(event) => setSelected(event.target.checked ? new Set(selectableItems.map((item) => item.id)) : new Set())} /></th><th>岗位 / 公司</th><th>BOSS 记录</th><th>城市 / 薪资</th><th>与当前目标</th><th>入库 / 候选</th><th>最近同步</th><th>详情</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className={item.closedStatus === 'closed' ? 'is-closed' : ''}><td className="account-activity-select"><input type="checkbox" aria-label={`选择 ${item.title || '岗位'}`} disabled={item.closedStatus === 'closed' || item.relevance === 'mismatched'} checked={selected.has(item.id)} onChange={() => toggle(item.id)} /></td><td><div className="account-activity-job-title">{item.title || '未命名岗位'}{item.isNew && <span className="account-activity-new">新增</span>}</div><div className="account-activity-company">{item.company || '未知公司'}</div></td><td><div className="account-activity-events">{item.eventTypes.map((event) => <span key={event}>{eventLabels[event] || event}</span>)}</div><div className="account-activity-muted">首次：{formatTime(item.firstSeenAt)}</div></td><td><div>{item.city || '未知城市'}</div><div className="account-activity-muted">{item.salary || '-'}</div></td><td><span className={badgeTone(item.relevance)}>{matchLabel(item.relevance)}</span><div className="account-activity-muted">{item.reason}</div></td><td><div>{item.imported ? '已入库' : '未入库'}</div><div className="account-activity-muted">{item.candidate ? '已加入候选' : item.closedStatus === 'closed' ? '岗位已关闭' : '-'}</div></td><td className="account-activity-muted">{formatTime(item.lastSeenAt)}</td><td>{item.detailUrl ? <a href={item.detailUrl} target="_blank" rel="noreferrer" aria-label={`查看 ${item.title || '岗位'} 详情`} className="account-activity-detail"><ExternalLink size={14} />查看</a> : '-'}</td></tr>)}</tbody></table>}

@@ -11,7 +11,6 @@ import hashlib
 import html
 import json
 import logging
-import os
 import random
 import re
 import sqlite3
@@ -343,23 +342,38 @@ def _normalize_boss_card(card: dict[str, Any]) -> dict[str, Any]:
 
 def _connect_logged_browser(profile_path: str):
     try:
-        from DrissionPage import ChromiumPage
+        from backend.services.project_service import find_free_port
+        from crawler.boss import BossCrawler
     except Exception as exc:
         raise AccountActivityBrowserBlocked("当前环境没有可用的浏览器连接组件。") from exc
-    port = int(os.environ.get("BOSSFLOW_CHROME_PORT") or os.environ.get("AI_PM_CHROME_PORT") or "9222")
+    resolved_profile = Path(profile_path).expanduser().resolve()
     try:
-        return ChromiumPage(addr_or_opts=f"127.0.0.1:{port}"), False
-    except Exception as attach_error:
-        try:
-            from backend.services.project_service import find_free_port
-            from crawler.boss import BossCrawler
-            crawler = BossCrawler(profile_dir=profile_path, chrome_port=find_free_port(max(9223, port + 1)))
-            crawler.start_browser(headless=False)
-            return crawler.page, True
-        except Exception as launch_error:
-            raise AccountActivityBrowserBlocked(
-                "未能连接到已登录的 BOSS 浏览器；请先保持 BossFlow 登录的 Chrome 窗口打开后重试。"
-            ) from launch_error
+        crawler = BossCrawler(profile_dir=resolved_profile, chrome_port=find_free_port(9222))
+        crawler.start_browser(headless=False)
+        return crawler.page, True
+    except Exception as launch_error:
+        raise AccountActivityBrowserBlocked(
+            f"未能启动指定 BOSS Profile（{resolved_profile}）；请先在系统设置中登录并保存 Cookie。"
+        ) from launch_error
+
+
+def _verify_logged_session(page_browser: Any) -> dict[str, Any]:
+    """Make one authenticated BOSS request before reading activity or JD detail."""
+    tab = None
+    try:
+        tab = page_browser.new_tab(ACTIVITY_ENDPOINTS["communicated"].format(page=1))
+        time.sleep(random.uniform(0.4, 0.8))
+        payload = _extract_json_document(tab.html)
+        if payload.get("code") not in (0, "0") or not isinstance(payload.get("zpData"), dict):
+            raise AccountActivityBrowserBlocked("BOSS 登录状态已失效，请前往系统设置重新登录。")
+        return payload
+    except AccountActivityBrowserBlocked:
+        raise
+    except Exception as exc:
+        raise AccountActivityBrowserBlocked("BOSS 登录状态已失效，请前往系统设置重新登录。") from exc
+    finally:
+        if tab is not None:
+            tab.close()
 
 
 def discover_account_activity_pages(
@@ -374,6 +388,7 @@ def discover_account_activity_pages(
     page_browser, owns_browser = _connect_logged_browser(profile_path)
     pages_by_event: dict[str, list[dict[str, Any]]] = {}
     try:
+        _verify_logged_session(page_browser)
         for event_type in selected:
             seen: set[str] = set()
             pages: list[dict[str, Any]] = []
@@ -410,11 +425,22 @@ def discover_account_activity_pages(
                 pass
 
 
-def _fetch_job_detail_with_browser(profile_path: str, row: dict[str, Any]) -> dict[str, Any] | None:
+def _fetch_job_detail_with_browser(profile_path: str, row: dict[str, Any], page_browser: Any | None = None) -> dict[str, Any] | None:
     detail_url = str(row.get("detail_url") or "").strip()
     if not detail_url:
         return None
-    page_browser, owns_browser = _connect_logged_browser(profile_path)
+    owns_browser = False
+    if page_browser is None:
+        page_browser, owns_browser = _connect_logged_browser(profile_path)
+        try:
+            _verify_logged_session(page_browser)
+        except Exception:
+            if owns_browser:
+                try:
+                    page_browser.quit()
+                except Exception:
+                    pass
+            raise
     tab = None
     try:
         tab = page_browser.new_tab(detail_url)
@@ -423,17 +449,23 @@ def _fetch_job_detail_with_browser(profile_path: str, row: dict[str, Any]) -> di
             "return {title: document.querySelector('.job-primary .name')?.innerText || '', "
             "description: document.querySelector('.job-sec-text')?.innerText || "
             "document.querySelector('.job-detail-section .text')?.innerText || '', "
-            "body: (document.body?.innerText || '').slice(0, 6000)};"
+            "body: (document.body?.innerText || '').slice(0, 6000), "
+            "loginIndicator: Boolean(document.querySelector('form[action*=\\\"login\\\"], .login-wrap, .login-content, .login-container, [data-testid=\\\"login\\\"]')), "
+            "loginText: (document.querySelector('.login-wrap, .login-content, .login-container')?.innerText || '').slice(0, 500)};"
         ) or {}
         body = str(data.get("body") or "")
         if any(marker in body for marker in ("职位已关闭", "职位已下线", "职位不存在")):
             return {"closedStatus": "closed"}
-        title = str(row.get("title") or "").strip()
+        page_title = str(data.get("title") or "").strip()
         description = str(data.get("description") or "").strip()
-        if not title or not description:
+        page_url = str(getattr(tab, "url", "") or "").lower()
+        login_text = str(data.get("loginText") or "")
+        if "login" in page_url or bool(data.get("loginIndicator")) or any(marker in login_text for marker in ("请先登录", "登录后继续", "扫码登录", "账号登录", "手机登录")):
+            return None
+        if not page_title or len(description) < 20:
             return None
         return {
-            "title": title,
+            "title": page_title,
             "company": str(row.get("company") or "").strip(),
             "city": str(row.get("city") or "").strip(),
             "salary": str(row.get("salary") or "").strip(),
@@ -562,7 +594,7 @@ def _legacy_list_account_activity(project: str, tab: str = "all", page: int = 1,
         conn.close()
 
 
-def list_account_activity(project: str, tab: str = "all", page: int = 1, page_size: int = 30, search: str = "", new_only: bool = False, account_key: str = "", db_path: str | Path | None = None, profile_project: str = "", match_status: str = "all", import_status: str = "all", job_status: str = "all") -> dict[str, Any]:
+def list_account_activity(project: str, tab: str = "all", page: int = 1, page_size: int = 30, search: str = "", new_only: bool = False, account_key: str = "", db_path: str | Path | None = None, profile_project: str = "", match_status: str = "all", import_status: str = "all", job_status: str = "all", actionable_only: bool = False) -> dict[str, Any]:
     """List one page of account facts with a project-specific live overlay.
 
     Account jobs/events are global to the selected BOSS profile. Matching and
@@ -611,11 +643,12 @@ def list_account_activity(project: str, tab: str = "all", page: int = 1, page_si
                 where.append("0")
         where_sql = " AND ".join(where)
         total = int(conn.execute(f"SELECT COUNT(*) FROM account_jobs j WHERE {where_sql}", params).fetchone()[0])
-        needs_match_filter = match_status != "all"
+        needs_match_filter = match_status != "all" or actionable_only or new_only
+        pagination = "" if needs_match_filter else " LIMIT ? OFFSET ?"
         rows = conn.execute(
             f"SELECT j.*, GROUP_CONCAT(e.event_type) AS event_types, GROUP_CONCAT(e.first_sync_run_id) AS event_runs "
             f"FROM account_jobs j LEFT JOIN account_job_events e ON e.account_job_id=j.id "
-            f"WHERE {where_sql} GROUP BY j.id ORDER BY j.last_seen_at DESC LIMIT ? OFFSET ?",
+            f"WHERE {where_sql} GROUP BY j.id ORDER BY j.last_seen_at DESC{pagination}",
             [*params, *([] if needs_match_filter else [safe_size, (safe_page - 1) * safe_size])],
         ).fetchall()
 
@@ -638,8 +671,12 @@ def list_account_activity(project: str, tab: str = "all", page: int = 1, page_si
             event_runs = [int(value) for value in str(row["event_runs"] or "").split(",") if value]
             event_complete = bool(event_runs) and all(bool(run_map.get(value) and run_map[value]["is_complete"]) for value in event_runs)
             is_new = bool(baseline and first_run and first_run["is_complete"] and event_complete and (int(row["first_sync_run_id"]) != int(baseline["id"]) or any(value != int(baseline["id"]) for value in event_runs)))
+            if (new_only or actionable_only) and not is_new:
+                continue
             match = _match_job(row, project_dir)
-            if needs_match_filter and match["relevance"] != match_status:
+            if match_status != "all" and match["relevance"] != match_status:
+                continue
+            if actionable_only and match["relevance"] not in ("matched", "uncertain"):
                 continue
             link = link_map.get(int(row["id"]))
             project_job_id = int(link["project_job_id"]) if link and link["project_job_id"] else _existing_project_id_from_index(row, existing_index)
@@ -647,8 +684,9 @@ def list_account_activity(project: str, tab: str = "all", page: int = 1, page_si
             items.append(item)
             conn.execute("INSERT INTO project_job_links(account_job_id, project, relevance, confidence, reason, project_job_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(account_job_id, project) DO UPDATE SET relevance=excluded.relevance, confidence=excluded.confidence, reason=excluded.reason, project_job_id=COALESCE(project_job_links.project_job_id, excluded.project_job_id)", (int(row["id"]), project, match["relevance"], match["confidence"], match["reason"], project_job_id))
         conn.commit()
+        filtered_total = total
         if needs_match_filter:
-            total = len(items)
+            filtered_total = len(items)
             start = (safe_page - 1) * safe_size
             items = items[start:start + safe_size]
         tabs_count = {"all": int(conn.execute("SELECT COUNT(*) FROM account_jobs WHERE account_id=?", (account_id,)).fetchone()[0])}
@@ -656,19 +694,36 @@ def list_account_activity(project: str, tab: str = "all", page: int = 1, page_si
             tabs_count[event] = int(conn.execute("SELECT COUNT(DISTINCT account_job_id) FROM account_job_events e JOIN account_jobs j ON j.id=e.account_job_id WHERE j.account_id=? AND e.event_type=?", (account_id, event)).fetchone()[0])
         sync = conn.execute("SELECT status, error, finished_at AS finishedAt, id AS runId FROM account_sync_runs WHERE account_id=? ORDER BY id DESC LIMIT 1", (account_id,)).fetchone()
         new_count = int(conn.execute("SELECT COUNT(*) FROM account_jobs WHERE account_id=? AND first_sync_run_id<>?", (account_id, int(baseline["id"]) if baseline else -1)).fetchone()[0]) if baseline else 0
-        return {"ok": True, "items": items, "total": total, "page": safe_page, "pageSize": safe_size, "pages": (total + safe_size - 1) // safe_size, "tabs": tabs_count, "account": {"accountKey": account["account_key"], "displayName": account["display_name"], "lastSyncAt": account["last_sync_at"]}, "sync": dict(sync) if sync else None, "summary": {"new": new_count, "matched": sum(item["relevance"] == "matched" for item in items), "closed": int(conn.execute("SELECT COUNT(*) FROM account_jobs WHERE account_id=? AND closed_status='closed'", (account_id,)).fetchone()[0])}}
+        return {"ok": True, "items": items, "total": filtered_total, "page": safe_page, "pageSize": safe_size, "pages": (filtered_total + safe_size - 1) // safe_size, "tabs": tabs_count, "account": {"accountKey": account["account_key"], "displayName": account["display_name"], "lastSyncAt": account["last_sync_at"]}, "sync": dict(sync) if sync else None, "summary": {"new": new_count, "actionablePending": filtered_total if actionable_only else None, "matched": sum(item["relevance"] == "matched" for item in items), "closed": int(conn.execute("SELECT COUNT(*) FROM account_jobs WHERE account_id=? AND closed_status='closed'", (account_id,)).fetchone()[0])}}
     finally:
         conn.close()
 
 
-def import_account_activity(project: str, account_job_ids: list[int], mode: str = "library", allow_uncertain: bool = False, account_key: str = "", db_path: str | Path | None = None, detail_provider: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None, profile_project: str = "") -> dict[str, Any]:
+def import_account_activity(project: str, account_job_ids: list[int], mode: str = "library", allow_uncertain: bool = False, account_key: str = "", db_path: str | Path | None = None, detail_provider: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None, profile_project: str = "", task_manager: Any | None = None) -> dict[str, Any]:
     if mode not in ("library", "candidate"):
         raise HTTPException(status_code=400, detail="Unsupported import mode")
+    if task_manager is not None and task_manager.snapshot().get("running"):
+        raise HTTPException(status_code=409, detail="当前采集、登录或同步任务正在使用 BOSS 浏览器，请稍后再导入。")
     project_dir = resolve_project(project)
+    browser_page = None
+    owns_browser = False
+    profile_path = ""
     if detail_provider is None:
         profile_dir = resolve_project(profile_project or project)
         profile_path = paths_for_project(profile_dir)["profilePath"]
-        detail_provider = lambda row: _fetch_job_detail_with_browser(profile_path, row)
+
+        def fetch_detail(row: dict[str, Any]) -> dict[str, Any] | None:
+            nonlocal browser_page, owns_browser
+            if browser_page is None:
+                require_saved_login(profile_project or project)
+                try:
+                    browser_page, owns_browser = _connect_logged_browser(profile_path)
+                    _verify_logged_session(browser_page)
+                except AccountActivityBrowserBlocked as exc:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
+            return _fetch_job_detail_with_browser(profile_path, row, page_browser=browser_page)
+
+        detail_provider = fetch_detail
     conn = _connect(db_path)
     imported: list[int] = []
     failed: list[dict[str, Any]] = []
@@ -695,6 +750,8 @@ def import_account_activity(project: str, account_job_ids: list[int], mode: str 
                     continue
                 try:
                     detail = detail_provider(dict(row))
+                except HTTPException:
+                    raise
                 except Exception as exc:
                     failed.append({"id": raw_id, "reason": f"岗位详情读取失败，未写入岗位库：{exc}"})
                     continue
@@ -723,6 +780,11 @@ def import_account_activity(project: str, account_job_ids: list[int], mode: str 
         conn.commit()
         return {"ok": not failed, "mode": mode, "projectJobIds": imported, "imported": len(imported), "failed": failed}
     finally:
+        if owns_browser and browser_page is not None:
+            try:
+                browser_page.quit()
+            except Exception:
+                pass
         conn.close()
 
 

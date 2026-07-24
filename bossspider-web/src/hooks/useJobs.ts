@@ -19,6 +19,7 @@ export function useJobs({
     const data = await bossApi.getJobs(targetProject, search);
     setJobs(data.items);
     setJobsTotal(data.total);
+    return data;
   }, []);
 
   const refreshJobs = useCallback(async (projectName?: string, search = jobSearch) => {

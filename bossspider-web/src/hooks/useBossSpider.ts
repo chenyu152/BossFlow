@@ -1,5 +1,7 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { bossApi } from '../api';
+import type { Job } from '../types';
 import { useInterview } from './useInterview';
 import { useEvidence } from './useEvidence';
 import { useJobs } from './useJobs';
@@ -15,6 +17,7 @@ export function useBossSpider() {
   const { t } = useTranslation('common');
   const { notice, showNotice } = useNotice();
   const activeProjectRef = useRef('');
+  const [dashboardJobs, setDashboardJobs] = useState<Job[]>([]);
   const getActiveProject = useCallback(() => activeProjectRef.current, []);
   const evidence = useEvidence(getActiveProject);
 
@@ -80,8 +83,12 @@ export function useBossSpider() {
 
   const loadInitialResources = useCallback(async (projectName: string) => {
     activeProjectRef.current = projectName;
+    const initialJobs = loadJobs(projectName, '').then((data) => {
+      if (activeProjectRef.current === projectName) setDashboardJobs(data.items || []);
+      return data;
+    });
     await Promise.all([
-      loadJobs(projectName, ''),
+      initialJobs,
       refreshPipeline(projectName),
       refreshResumeItems(projectName),
       refreshInterviewItems(projectName),
@@ -111,6 +118,24 @@ export function useBossSpider() {
     await refreshJobsForProject(config?.project, search);
   }, [config?.project, jobSearch, refreshJobsForProject]);
 
+  const refreshDashboardJobs = useCallback(async (projectName = config?.project) => {
+    if (!projectName) return null;
+    const data = await bossApi.getJobs(projectName, '', 20000);
+    if (activeProjectRef.current === projectName) setDashboardJobs(data.items || []);
+    return data;
+  }, [config?.project]);
+
+  const refreshDashboardResources = useCallback(async (projectName = config?.project) => {
+    if (!projectName) return [];
+    return Promise.allSettled([
+      refreshDashboardJobs(projectName),
+      refreshPipeline(projectName),
+      refreshResumeItems(projectName),
+      refreshInterviewItems(projectName),
+      evidence.refreshEvidenceOverview(projectName),
+    ]);
+  }, [config?.project, evidence.refreshEvidenceOverview, refreshDashboardJobs, refreshInterviewItems, refreshPipeline, refreshResumeItems]);
+
   const {
     status,
     crawlAuthenticated,
@@ -126,6 +151,7 @@ export function useBossSpider() {
   } = useTasks({
     configReady: Boolean(config),
     refreshJobs,
+    refreshDashboardJobs,
     requestBody,
     showNotice,
     t,
@@ -225,6 +251,7 @@ export function useBossSpider() {
     project,
     config,
     jobs,
+    dashboardJobs,
     jobsTotal,
     pipeline,
     resumeItems,
@@ -249,6 +276,8 @@ export function useBossSpider() {
     setSortPipelineByLlmScore,
     loadConfig,
     refreshJobs,
+    refreshDashboardJobs,
+    refreshDashboardResources,
     refreshPipeline,
     refreshResumeItems,
     refreshInterviewItems,

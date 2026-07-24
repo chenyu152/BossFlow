@@ -1305,8 +1305,22 @@ html[data-desktop-platform="linux"] .desktop-titlebar { padding-right: 9.5rem; }
 .account-activity-header h1 { margin:0; font-size:22px; font-weight:700; color:var(--text-primary, #f4f4f5); }
 .account-activity-meta { display:flex; flex-wrap:wrap; gap:12px; margin-top:6px; color:var(--text-muted, #a1a1aa); font-size:12px; }
 .account-activity-meta strong { color:var(--text-primary, #f4f4f5); }
+.account-activity-login-status { font-weight:600; }
+.account-activity-login-status.is-available { color:var(--status-success, #16a34a); }
+.account-activity-login-status.is-refresh_recommended, .account-activity-login-status.is-expired, .account-activity-login-status.is-missing { color:var(--status-pending, #d97706); }
+.account-activity-login-status.is-checking { color:var(--text-secondary, #a1a1aa); }
 .account-activity-sync { display:inline-flex; align-items:center; gap:7px; border:1px solid #4f46e5; border-radius:6px; background:#4f46e5; color:#fff; padding:8px 14px; font-size:13px; font-weight:600; }
 .account-activity-sync:disabled { opacity:.6; }
+.account-activity-login-alert { display:flex; align-items:center; gap:10px; border:1px solid var(--border-subtle); border-radius:7px; padding:10px 12px; }
+.account-activity-login-alert > svg { flex:0 0 auto; }
+.account-activity-login-alert > div { display:grid; gap:2px; min-width:0; flex:1; }
+.account-activity-login-alert strong { color:var(--text-primary); font-size:12px; }
+.account-activity-login-alert span { color:var(--text-secondary); font-size:11px; }
+.account-activity-login-alert button { flex:0 0 auto; border:1px solid var(--border-strong); border-radius:5px; padding:5px 9px; color:var(--action-primary); background:var(--surface-raised); font-size:11px; }
+.account-activity-login-alert--error { border-color:color-mix(in srgb, var(--status-danger) 35%, var(--border-subtle)); background:var(--status-danger-surface); }
+.account-activity-login-alert--error > svg { color:var(--status-danger); }
+.account-activity-login-alert--warning { border-color:color-mix(in srgb, var(--status-pending) 35%, var(--border-subtle)); background:var(--status-pending-surface); }
+.account-activity-login-alert--warning > svg { color:var(--status-pending); }
 .account-activity-summary { display:flex; flex-wrap:wrap; align-items:center; gap:18px; border:1px solid var(--border-color, #27272a); border-radius:7px; background:var(--panel-bg, #18181b); padding:9px 12px; color:var(--text-muted, #a1a1aa); font-size:12px; }
 .account-activity-summary b { color:var(--text-primary, #f4f4f5); font-size:14px; }
 .account-activity-summary__status { margin-left:auto; }
