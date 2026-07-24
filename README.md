@@ -1,41 +1,102 @@
-# BossFlow
+<div align="center">
 
-BossFlow 是一个**本地优先的求职工作台**。它把岗位采集、筛选评估、材料准备和面试准备组织为一条可回溯的工作流；LLM 负责分析与草稿生成，是否采用、如何修改，始终由用户决定。
+# 🚀 BossFlow
 
-> 当前数据按“求职方向”隔离。例如“Agent 应用开发”和“游戏策划”应分别创建方向，各自维护岗位库、基础简历、证据和故事，不会互相复用。
+**本地优先的 AI 求职工作台 | Local-First AI Job Search Workbench**
 
-## 当前能力
+*把岗位采集、筛选评估、材料准备和面试准备组织为一条可回溯、严谨不编造的工作流。*
 
-- 从 Boss 直聘按关键词和城市采集岗位。
-- 为每个求职方向保存独立的采集配置、SQLite 岗位库、浏览器配置和工作区材料。
-- 通过分类、兜底关键词、黑名单和最低薪资进行入库筛选；可让 LLM 生成**待确认**的入库规则草稿。
-- 在岗位库中进行搜索、浏览、导出和粗评分；有岗位样本后可让 LLM 生成评分技能词库建议。
-- 在候选岗位（Pipeline）中管理状态，生成 LLM 匹配报告，并在岗位档案内推进简历、沟通和面试准备。
-- 根据职位要求建立证据覆盖：区分已有简历线索、待确认的证据和缺口，避免把 AI 推测当作个人事实。
-- 生成简历修改建议、定制简历草稿、沟通草稿和面试准备；用户确认的证据才会用于后续材料。
-- 维护自由故事草稿与故事库，供面试准备复用。
-- 提供首次使用引导：采集配置 → 入库规则 → 开始采集 → 导入或编写基础简历。
-- 在系统设置中配置、显示/隐藏、测试 OpenAI 兼容的 LLM API；配置只保存在本机 `.env`，不属于任一求职方向。
-- 通过本地 MCP 把岗位、候选、精评、材料和故事草稿能力提供给外部 Agent，并附带三套可复用 Skills。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
+[![React](https://img.shields.io/badge/React-18.0+-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![MCP Powered](https://img.shields.io/badge/MCP-Supported-8A2BE2)](BOSSFLOW_MCP_SKILLS_SPEC.md)
+[![Privacy](https://img.shields.io/badge/Privacy-100%25%20Local-success)](#-设计边界与隐私承诺)
 
-## 设计边界
+[核心特性](#-核心特性) • [快速开始](#-快速开始) • [架构设计](#-架构设计) • [MCP--Agent-联动](#-mcp--agent-联动) • [贡献指南](#-贡献指南)
 
-- **本地优先**：岗位库与工作材料存放在本机；不会把简历或证据上传到本项目自己的服务端。
-- **用户在回路**：LLM 生成的入库规则、评分词库、简历建议、定制简历和故事都需要用户查看、编辑或确认。
-- **不编造经历**：没有来自简历、用户输入或用户确认事实的内容，不应进入简历或面试材料。
-- **方向间完全隔离**：切换求职方向时，不共享基础简历、证据、故事、岗位库或生成材料。
+<br/>
 
-## 快速开始
+<img src="./image/Dashboard.png" alt="BossFlow 仪表盘概览" width="100%" />
+
+</div>
+
+---
+
+## 💡 为什么选择 BossFlow？
+
+传统的求职方式常常面临 **海投效率低下**、**简历隐私泄露**、**AI 乱编履历被面试官戳穿** 等痛点。
+
+**BossFlow** 重新定义了个人求职流水线：
+- 🛡️ **数据完全本地存储**：岗位库、基础简历、证据库与 Cookie 全部保留在你的电脑上，不上传任何第三方云端。
+- 🔍 **事实约束型 AI**：AI 绝不假造未确认的经历，每一条简历建议与面试准备都严格基于你的实际证据。
+- 📦 **多求职方向隔离**：针对“AI 算法”、“前端开发”、“产品经理”等不同目标，独立隔离岗位库与简历版本。
+- 🤖 **本地 MCP 接口支持**：原生支持 MCP 协议，无缝联动 Claude Code, Trae, Codex 等 AI Agent。
+
+---
+
+## ✨ 界面预览与核心特性
+
+### 1. 自动化岗位发现与粗评分数
+支持 Boss 直聘自动化采集，设置多城市/关键词、黑名单与规则过滤，按命中技能与薪资匹配度自动粗评分数。
+
+<img src="./image/Job Board.png" alt="BossFlow 岗位库列表" width="100%" />
+
+### 2. 候选岗位与履历证据链核对
+自动比对 JD 要求与个人真实经历，区分“已有证据”、“待确认”与“技能缺口”，避免 AI 瞎编经历。
+
+<img src="./image/candidate.png" alt="BossFlow 候选岗位档案" width="100%" />
+
+### 3. 材料定制与能力档案库
+基于能力覆盖度生成匹配报告与定制简历 Markdown，能力档案直观展现各技能覆盖岗位数。
+
+<img src="./image/power.png" alt="BossFlow 能力档案" width="100%" />
+
+### 4. 针对性面试准备与 STAR 故事库
+按岗位考察能力点自动生成面试准备文档，将真实项目经历整理为可复用的 STAR 面试故事库。
+
+<img src="./image/Interview.png" alt="BossFlow 面试准备文档" width="100%" />
+
+### 5. 原生 MCP 服务支持与 Agent 联动
+内置 Streamable HTTP & stdio 桥接 MCP Server，支持 Claude Code, Trae 等工具直接调用岗位、简历与技能面板。
+
+<img src="./image/mcp.png" alt="BossFlow MCP 界面" width="100%" />
+
+---
+
+## 📐 架构设计与工作流
+
+```mermaid
+flowchart TD
+    A[岗位采集 Boss Crawler] -->|写入 SQLite| B[岗位库 Projects DB]
+    B -->|规则/黑名单过滤| C[候选岗位 Pipeline]
+    C -->|JD 要求拆解| D{证据覆盖度核对 Evidence Check}
+    
+    E[个人基础简历 cv.md] --> D
+    F[个人故事库 Story Bank] --> D
+    
+    D -->|仅使用用户确认的事实| G[材料生成 Engine]
+    G --> H[定制简历 Custom CV]
+    G --> I[沟通话术 Draft]
+    G --> J[面试准备 STAR]
+    
+    K[外部 Agent: Claude Code/Trae] <-->|MCP Protocol| B
+    K <-->|MCP Protocol| C
+```
+
+---
+
+## 🚀 快速开始
 
 ### 环境要求
+- **Python**: `3.10+`
+- **Node.js**: `18+`
+- **Chrome 浏览器**（用于岗位采集和登录 Cookie）
 
-- Python 3.10+
-- Node.js 18+
-- Chrome 浏览器（用于岗位采集和登录 Cookie）
-
-### 1. 获取代码并安装依赖
+### 1. 克隆项目与安装依赖
 
 ```bash
+# 克隆仓库
 git clone https://github.com/chenyu152/BossFlow.git
 cd BossFlow
 
@@ -50,29 +111,22 @@ cd ..
 
 ### 2. 启动服务
 
-在两个终端分别运行：
-
 ```bash
-# 终端 1：后端
+# 终端 1：后端 (FastAPI)
 python -m uvicorn backend.app:app --reload --port 8000
-```
 
-```bash
-# 终端 2：前端
+# 终端 2：前端 (Vite)
 cd bossspider-web
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-打开：
+打开浏览器访问：
+- Web 工作台: **`http://127.0.0.1:5173/`**
+- API 文档: **`http://127.0.0.1:8000/docs`**
 
-| 地址 | 用途 |
-| --- | --- |
-| `http://127.0.0.1:5173/` | BossFlow Web 工作台 |
-| `http://127.0.0.1:8000/docs` | FastAPI 接口文档 |
+### 3. Windows 桌面版 (Electron + Python sidecar)
 
-### Windows 桌面版（Electron + Python sidecar）
-
-日常功能开发仍使用上面的 Vite + Uvicorn 两个终端，不需要运行 Electron 或 PyInstaller。需要联调桌面窗口时，在后端和前端开发服务均已启动后另开终端运行：
+前端与后端开发服务已启动后，另开终端联调桌面窗口：
 
 ```bash
 cd desktop
@@ -80,165 +134,44 @@ npm ci
 npm run dev
 ```
 
-首次准备 Windows 发布包时，安装打包依赖并执行：
+构建 Windows 发布安装包 (`release/installer/`)：
 
 ```bash
-pip install -r packaging/requirements-build.txt
-cd desktop
-npm ci
-npm run dist:win
-```
-
-产物位于 `release/installer/`。发布模式下 Electron 会启动 PyInstaller 打包的 FastAPI sidecar，并让它同源提供 React 静态文件；用户数据默认保存在“文档/BossFlow”，不会写入安装目录。首次启动桌面版前，请确保系统已安装 Chrome（岗位采集与登录 Cookie 仍使用它）。
-
-建议在干净虚拟环境中生成正式发布包，避免 Anaconda 等开发环境把无关的预装包带入 sidecar：
-
-```powershell
-python -m venv .venv-release
-.\.venv-release\Scripts\python -m pip install -r requirements.txt -r packaging\requirements-build.txt
-$env:PYTHON = (Resolve-Path .\.venv-release\Scripts\python.exe)
 cd desktop
 npm run dist:win
 ```
 
-### 3. 配置 LLM（可稍后完成）
+---
 
-岗位采集与手动配置不依赖 LLM。需要生成入库规则、评分词库、匹配报告或材料时：
+## 🔒 设计边界与隐私承诺
 
-1. 打开左侧底部的 **设置**；
-2. 填写 API Key、API Base URL 和模型名；
-3. 点击 **测试 API**，确认可用后保存。
+1. **绝对本地化 (Local-First)**：所有数据（包含岗位库、基础简历、证据、Cookie）均存放在本机 `projects/` 目录下；不会把简历或证据上传到本项目自己的服务端。
+2. **用户在回路 (Human-in-the-Loop)**：LLM 生成的入库规则、评分词库、简历建议、定制简历和故事都需要用户查看、编辑或确认。
+3. **真实性第一 (Strict Grounding)**：没有来自简历、用户输入或用户确认事实的内容，不应进入简历或面试材料。
+4. **求职方向间完全隔离**：切换求职方向时，不共享基础简历、证据、故事、岗位库或生成材料。
 
-系统兼容 OpenAI 风格的 `chat/completions` 接口。也可先复制示例文件：
+---
 
-```bash
-cp .env.example .env
-```
+## 🧩 本地 MCP (Model Context Protocol) 联动
 
-示例中的 `DEEPSEEK_*` 配置仍可使用；通过界面保存后会写入 BossFlow 的系统级 LLM 配置。请勿提交 `.env`。
+桌面版打开“系统设置 → MCP”，可查看 Server 的实时状态、工具和资源数量，直接按说明复制对应配置。
 
-### 连接外部 Agent（MCP）
+仓库内置 3 套可复用 Skills (位于 `.agents/skills/`)：
+- 🎯 `triage-new-jobs`：评估新采集的岗位，对比求职目标并加入候选管线
+- 📝 `prepare-application`：评估候选角色，核对证据覆盖并准备简历修改建议
+- 📚 `import-story-bank`：从代码库或工作日志中提取证据确凿的 STAR 面试故事
 
-桌面版打开“系统设置 → MCP”，可查看 Server 的实时状态、工具和资源数量，再按 Claude Code、Codex 或 Trae 的说明复制对应配置。桌面端默认使用稳定的 **stdio 桥接**，即使后端端口变化也不需要重新设置；使用期间需保持 BossFlow 运行。
+详细规格与安全边界请参见 [MCP 与 Skills v1 规格](BOSSFLOW_MCP_SKILLS_SPEC.md)。
 
-源码开发时，可在启动后端前设置 `BOSSFLOW_AGENT_TOKEN`，再把 `http://127.0.0.1:8000/mcp/` 作为 Streamable HTTP MCP endpoint。所有写入、采集和付费 LLM 工具都会先返回一次性确认预览；只有用户在后续消息中明确同意，Agent 才能保持原参数并传入返回的 `confirmationId` 执行。
+---
 
-仓库内首批 Skills 位于 `.agents/skills/`：
+## 🤝 贡献与反馈
 
-- `triage-new-jobs`
-- `prepare-application`
-- `import-story-bank`
+欢迎提交 Issue 或 Pull Request！
+- 🐛 提交 Bug / 建议: [GitHub Issues](https://github.com/chenyu152/BossFlow/issues)
 
-完整接口与安全边界见 [MCP 与 Skills v1 规格](BOSSFLOW_MCP_SKILLS_SPEC.md)。
+---
 
-### 4. 创建第一个求职方向
+## 📜 开源协议
 
-在顶部“求职方向”旁点击 **新建求职方向**。新方向默认是空的、互相隔离的工作区：
-
-- 采集关键词会自动填入方向名称，可自行补充同类职位称呼；
-- 必须选择至少一个采集城市；
-- 新建方向的滚动目标条数默认是 **20**；
-- 入库匹配规则、评分技能词库、基础简历、证据和故事均从空白开始。
-
-创建后，系统会自动打开“采集配置”引导。按引导完成采集配置后，可前往“入库匹配规则”使用 LLM 草稿或手动配置，然后启动采集。采集期间可进入“我的简历”导入或编写该方向的基础简历。
-
-## 推荐工作流
-
-1. **采集配置**：填写岗位关键词、城市、抓取策略和上限；必要时登录并保存 Cookie。
-2. **岗位筛选与偏好**：配置目标岗位词和排除岗位词决定哪些岗位进入岗位库；再设置期望薪资与经验差距偏好，用于判断哪些岗位值得优先查看。
-3. **开始采集**：在顶部点击“开始采集”，随后在“岗位库”和“运行日志”查看结果与进度。
-4. **评分规则**：岗位库已有数据后，使用 LLM 从当前岗位样本生成评分技能词库建议，再由用户确认应用。
-5. **候选岗位**：把值得进一步处理的岗位加入 Pipeline，按状态推进并生成匹配报告。
-6. **匹配评估与证据**：核对职位要求的覆盖情况；已有简历可直接支持的内容无需重复填写，模糊或缺失的内容再由用户确认或补充。
-7. **材料准备**：基于已确认事实生成简历建议、定制简历草稿和沟通草稿。
-8. **面试准备**：生成岗位面试准备，将真实经历整理为故事草稿或故事库。
-
-## 页面说明
-
-| 阶段 | 页面 | 用途 |
-| --- | --- | --- |
-| 总览 | 仪表盘 | 查看当前方向的进度、提示和快捷入口。 |
-| 岗位发现 | 采集配置 | 管理关键词、城市、采集策略、Cookie 和抓取上限。 |
-| 岗位发现 | 入库匹配规则 | 管理分类、兜底和黑名单规则，支持 LLM 草稿。 |
-| 岗位发现 | 评分规则 | 配置粗评分指标与技能词库，支持基于岗位样本的 LLM 建议。 |
-| 岗位发现 | 岗位库 | 搜索、浏览、导出采集到的岗位。 |
-| 岗位发现 | 运行日志 | 查看采集、登录和任务日志。 |
-| 候选评估 | 候选岗位 | 用主从布局浏览候选岗位，进入岗位档案、匹配评估与状态推进。 |
-| 材料准备 | 我的简历 | 维护当前方向的基础简历。 |
-| 材料准备 | 简历材料 | 查看简历建议、定制简历和沟通草稿。 |
-| 面试准备 | 面试准备 | 生成和查看职位面试准备材料。 |
-| 面试准备 | 故事库 | 管理自由故事草稿和已确认故事。 |
-| 系统 | 设置 | 配置与测试系统级 LLM API。 |
-
-## 数据存储与隔离
-
-每个求职方向位于 `projects/<方向名>/`：
-
-```text
-projects/<方向名>/
-├── config.json              # 采集、入库与评分配置
-├── jobs_data.db             # 当前方向的岗位库
-├── .chrome_profile/         # 当前方向的浏览器 Profile / Cookie（本地）
-└── workspace/
-    ├── cv.md                # 当前方向的基础简历
-    ├── data/                # Pipeline、证据、故事等数据
-    ├── reports/jobs/        # 匹配报告
-    └── output/              # 定制简历、面试准备等生成材料
-```
-
-旧版本存放在根目录的 `cv.md`、`data/`、`reports/` 与 `output/` 会在首次访问默认方向时复制为恢复用副本；之后新的请求以方向工作区为准。
-
-下列文件或目录包含个人数据、密钥、Cookie、数据库或生成材料，默认被 `.gitignore` 忽略：`.env`、`projects/**/.chrome_profile/`、`projects/**/*.db`、`projects/*/workspace/`、`reports/`、`output/` 等。
-
-## 命令行采集（可选）
-
-Web 工作台是推荐入口。也可以直接运行爬虫：
-
-```bash
-# 使用某一方向的配置
-python -m crawler.boss --config projects/agent
-
-# 仅登录并保存 Cookie
-python -m crawler.boss --config projects/agent --login
-
-# 滚动模式，目标抓取 20 条
-python -m crawler.boss --config projects/agent --scroll 20
-
-# 从中断文件恢复
-python -m crawler.boss --config projects/agent --process-partial
-```
-
-将示例中的 `agent` 替换为实际方向名称。命令行参数会覆盖对应的配置项；使用 Web 配置更适合日常操作。
-
-## 开发与验证
-
-```bash
-# 后端测试
-python -m pytest backend/tests -q
-
-# 前端构建检查
-cd bossspider-web
-npm run build
-```
-
-主要目录：
-
-```text
-backend/             # FastAPI 接口、业务服务与测试
-bossspider-web/      # React + TypeScript + Vite 前端
-crawler/             # Boss 直聘采集与 SQLite 写入
-projects/            # 每个求职方向的本地配置和数据
-```
-
-## 技术栈
-
-- 后端：Python、FastAPI、Pydantic、Uvicorn
-- 前端：React 18、TypeScript、Vite、Tailwind CSS、i18next
-- 采集：DrissionPage、Chrome CDP
-- 存储：SQLite、Markdown、JSON
-- LLM：任意 OpenAI 兼容的 Chat Completions API
-
-## 相关文档
-
-- [环境变量示例](.env.example)
-- [MCP 与 Skills v1 规格](BOSSFLOW_MCP_SKILLS_SPEC.md)
+本项目采用 [MIT License](LICENSE) 协议开源。

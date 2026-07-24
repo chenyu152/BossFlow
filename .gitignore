@@ -49,3 +49,5 @@ projects/*/workspace/
 release/
 desktop/node_modules/
 .venv-release/
+
+image/backup_original/
