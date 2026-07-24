@@ -68,21 +68,22 @@
 
 ```mermaid
 flowchart TD
-    A[岗位采集 Boss Crawler] -->|写入 SQLite| B[岗位库 Projects DB]
-    B -->|规则/黑名单过滤| C[候选岗位 Pipeline]
-    C -->|JD 要求拆解| D{证据覆盖度核对 Evidence Check}
+    A["岗位采集 Boss Crawler"] -->|"写入 SQLite"| B["岗位库 Projects DB"]
+    B -->|"规则/黑名单过滤"| C["候选岗位 Pipeline"]
+    C -->|"JD 要求拆解"| D{"证据覆盖度核对 Evidence Check"}
     
-    E[个人基础简历 cv.md] --> D
-    F[个人故事库 Story Bank] --> D
+    E["个人基础简历 cv.md"] --> D
+    F["个人故事库 Story Bank"] --> D
     
-    D -->|仅使用用户确认的事实| G[材料生成 Engine]
-    G --> H[定制简历 Custom CV]
-    G --> I[沟通话术 Draft]
-    G --> J[面试准备 STAR]
+    D -->|"仅使用用户确认的事实"| G["材料生成 Engine"]
+    G --> H["定制简历 Custom CV"]
+    G --> I["沟通话术 Draft"]
+    G --> J["面试准备 STAR"]
     
-    K[外部 Agent: Claude Code/Trae] <-->|MCP Protocol| B
-    K <-->|MCP Protocol| C
+    K["外部 Agent (Claude Code / Trae)"] -->|"MCP Protocol"| B
+    K -->|"MCP Protocol"| C
 ```
+
 
 ---
 
