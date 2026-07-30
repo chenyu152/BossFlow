@@ -49,6 +49,7 @@ import type {
   ResumeSuggestionResponse,
   ScoreJobsResponse,
   ScorePipelineResponse,
+  SearchFilterOptionsResponse,
   TaskStatusResponse,
 } from './types';
 
@@ -81,6 +82,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const bossApi = {
+  getSearchFilterOptions() {
+    return request<SearchFilterOptionsResponse>('/api/search-filters/options');
+  },
+
   getLoginState(project: string) {
     return request<LoginState>(`/api/login-state?project=${encodeURIComponent(project)}`);
   },

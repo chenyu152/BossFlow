@@ -5,7 +5,7 @@ from pathlib import Path
 
 from backend.schemas.config import ConfigUpdate, CrawlRequest, ProcessPartialRequest
 from backend.services.project_service import find_free_port, save_form_config
-from backend.services.login_state_service import record_login_verified
+from backend.services.login_state_service import record_login_invalidated, record_login_verified
 from backend.services.task_service import TaskManager, capture_task_output
 from crawler.boss import BossCrawler, has_complete_job_detail
 from crawler.db import (
@@ -41,6 +41,9 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager, on_comple
                 record_login_verified(project_dir.name)
                 task_manager.mark_crawl_authenticated()
 
+            crawler.set_auth_failed_callback(
+                lambda: record_login_invalidated(project_dir.name, "server_auth_failed")
+            )
             crawler.set_crawl_started_callback(mark_authenticated)
             if payload.autoSqlite:
                 crawler.set_existing_job_index(load_existing_job_index(paths["dbPath"]))
@@ -52,6 +55,7 @@ def start_crawl_task(payload: CrawlRequest, task_manager: TaskManager, on_comple
                 headless=bool(payload.headlessMode),
                 new_job_target=int(payload.newJobTarget),
                 max_jobs=int(payload.maxJobs),
+                search_filters=config.get("search_filters"),
             )
             reused_count = 0
             if payload.autoSqlite:
@@ -108,6 +112,9 @@ def start_login_task(payload: ConfigUpdate, task_manager: TaskManager) -> dict:
                 scroll_max_scrolls=max(20, math.ceil(payload.maxJobs / 10) + 10),
             )
             task_manager.current_crawler = crawler
+            crawler.set_auth_failed_callback(
+                lambda: record_login_invalidated(project_dir.name, "server_auth_failed")
+            )
             crawler.start_browser(headless=False)
             first_city = next(iter(config.get("cities") or {"北京": "101010100"}.values()))
             if not crawler.ensure_login(first_city):

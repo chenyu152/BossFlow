@@ -8,6 +8,7 @@ import { CircleHelp, Clock3, PlayCircle, RefreshCw } from 'lucide-react';
 import { GuidedTour, type GuidedTourStep } from '../components/GuidedTour';
 import { useEffect, useMemo, useState } from 'react';
 import { collectionEstimate } from '../utils/collectionEstimate';
+import { JobSearchFilters } from '../components/JobSearchFilters';
 
 export function Scope({
   config,
@@ -107,6 +108,13 @@ export function Scope({
         <b>{estimate.estimatedMinutes
           ? (isZh ? `约 ${estimate.estimatedMinutes} 分钟` : `About ${estimate.estimatedMinutes} min`)
           : '—'}</b>
+      </div>
+
+      <div className="mb-5">
+        <JobSearchFilters
+          value={config.searchFilters}
+          onChange={(searchFilters) => updateConfig({ searchFilters })}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-5 flex-1 xl:grid-cols-2 xl:gap-6">

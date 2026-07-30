@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 from backend.schemas.automation import AutomationScheduleInput
 from backend.schemas.config import CrawlRequest
+from backend.schemas.search_filters import normalize_search_filters
 from backend.services.project_service import config_payload, resolve_project, text_to_cities
 from backend.services.login_state_service import login_state
 from backend.services.task_service import TaskManager
@@ -74,7 +75,8 @@ def _schedule_signature(
     cities_text: str,
     new_job_target: int,
     max_jobs: int,
-) -> tuple[str, str, tuple[int, ...], tuple[str, ...], tuple[str, ...], int, int]:
+    search_filters: object,
+) -> tuple:
     normalized_days = tuple(sorted(_schedule_days(cadence, days_of_week)))
     normalized_keywords = tuple(
         sorted({line.strip().casefold() for line in keywords_text.splitlines() if line.strip()})
@@ -90,7 +92,26 @@ def _schedule_signature(
         normalized_cities,
         int(new_job_target),
         int(max_jobs),
+        tuple(sorted(normalize_search_filters(search_filters).items())),
     )
+
+
+def _search_filters_json(value: object) -> str:
+    return json.dumps(
+        normalize_search_filters(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _parse_search_filters(value: object) -> dict[str, str]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value or "{}")
+        except (TypeError, ValueError):
+            value = {}
+    return normalize_search_filters(value)
 
 
 def _collection_estimate(
@@ -211,6 +232,7 @@ class AutomationService:
                     max_delay_minutes INTEGER NOT NULL DEFAULT 360,
                     keywords_text TEXT NOT NULL DEFAULT '',
                     cities_text TEXT NOT NULL DEFAULT '',
+                    search_filters_json TEXT NOT NULL DEFAULT '{}',
                     new_job_target INTEGER NOT NULL DEFAULT 20,
                     max_jobs INTEGER NOT NULL DEFAULT 100,
                     next_run_at TEXT NOT NULL,
@@ -242,6 +264,7 @@ class AutomationService:
             migrations = {
                 "keywords_text": "ALTER TABLE automation_schedules ADD COLUMN keywords_text TEXT NOT NULL DEFAULT ''",
                 "cities_text": "ALTER TABLE automation_schedules ADD COLUMN cities_text TEXT NOT NULL DEFAULT ''",
+                "search_filters_json": "ALTER TABLE automation_schedules ADD COLUMN search_filters_json TEXT NOT NULL DEFAULT '{}'",
                 "new_job_target": "ALTER TABLE automation_schedules ADD COLUMN new_job_target INTEGER NOT NULL DEFAULT 20",
                 "max_jobs": "ALTER TABLE automation_schedules ADD COLUMN max_jobs INTEGER NOT NULL DEFAULT 100",
             }
@@ -275,12 +298,14 @@ class AutomationService:
                     """
                     UPDATE automation_schedules
                     SET keywords_text = ?, cities_text = ?,
+                        search_filters_json = ?,
                         new_job_target = ?, max_jobs = ?
                     WHERE id = ?
                     """,
                     (
                         str(payload.get("keywordsText") or ""),
                         str(payload.get("citiesText") or ""),
+                        _search_filters_json(payload.get("searchFilters")),
                         int(payload.get("newJobTarget") or 20),
                         int(payload.get("maxJobs") or 100),
                         row["id"],
@@ -352,6 +377,7 @@ class AutomationService:
             "maxDelayMinutes": int(row["max_delay_minutes"]),
             "keywordsText": row["keywords_text"],
             "citiesText": row["cities_text"],
+            "searchFilters": _parse_search_filters(row["search_filters_json"]),
             "newJobTarget": int(row["new_job_target"]),
             "maxJobs": int(row["max_jobs"]),
             **estimate,
@@ -442,8 +468,9 @@ class AutomationService:
                 INSERT INTO automation_schedules (
                     id, project, enabled, cadence, time_of_day, days_of_week,
                     misfire_policy, max_delay_minutes, keywords_text, cities_text,
-                    new_job_target, max_jobs, next_run_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    search_filters_json, new_job_target, max_jobs,
+                    next_run_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     schedule_id,
@@ -456,6 +483,7 @@ class AutomationService:
                     payload.maxDelayMinutes,
                     payload.keywordsText,
                     payload.citiesText,
+                    _search_filters_json(payload.searchFilters),
                     payload.newJobTarget,
                     payload.maxJobs,
                     next_run_at,
@@ -490,7 +518,8 @@ class AutomationService:
                 UPDATE automation_schedules
                 SET project = ?, enabled = ?, cadence = ?, time_of_day = ?, days_of_week = ?,
                     misfire_policy = ?, max_delay_minutes = ?, keywords_text = ?,
-                    cities_text = ?, new_job_target = ?, max_jobs = ?,
+                    cities_text = ?, search_filters_json = ?,
+                    new_job_target = ?, max_jobs = ?,
                     next_run_at = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -504,6 +533,7 @@ class AutomationService:
                     payload.maxDelayMinutes,
                     payload.keywordsText,
                     payload.citiesText,
+                    _search_filters_json(payload.searchFilters),
                     payload.newJobTarget,
                     payload.maxJobs,
                     next_run_at,
@@ -544,6 +574,7 @@ class AutomationService:
                 "citiesText": str(current.get("citiesText") or ""),
                 "newJobTarget": int(current.get("newJobTarget") or payload.newJobTarget),
                 "maxJobs": int(current.get("maxJobs") or payload.maxJobs),
+                "searchFilters": current.get("searchFilters") or {},
             }
         )
 
@@ -572,6 +603,7 @@ class AutomationService:
             payload.citiesText,
             payload.newJobTarget,
             payload.maxJobs,
+            payload.searchFilters,
         )
         for row in rows:
             row_days = json.loads(row["days_of_week"] or "[]")
@@ -584,6 +616,7 @@ class AutomationService:
                 str(row["cities_text"] or ""),
                 int(row["new_job_target"] or 20),
                 int(row["max_jobs"] or 100),
+                _parse_search_filters(row["search_filters_json"]),
             ):
                 raise HTTPException(
                     status_code=409,
@@ -691,6 +724,7 @@ class AutomationService:
                         str(schedule["cities_text"] or ""),
                         int(schedule["new_job_target"] or 20),
                         int(schedule["max_jobs"] or 100),
+                        _parse_search_filters(schedule["search_filters_json"]),
                     )
                     is_legacy_duplicate = any(
                         candidate["id"] != schedule["id"]
@@ -703,6 +737,7 @@ class AutomationService:
                             str(candidate["cities_text"] or ""),
                             int(candidate["new_job_target"] or 20),
                             int(candidate["max_jobs"] or 100),
+                            _parse_search_filters(candidate["search_filters_json"]),
                         )
                         for candidate in duplicate_rows
                     )
@@ -744,6 +779,7 @@ class AutomationService:
             project=project,
             keywordsText=str(schedule["keywords_text"]),
             citiesText=str(schedule["cities_text"]),
+            searchFilters=_parse_search_filters(schedule["search_filters_json"]),
             newJobTarget=int(schedule["new_job_target"]),
             maxJobs=int(schedule["max_jobs"]),
             minSalary=payload["minSalary"],

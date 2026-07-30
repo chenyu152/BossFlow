@@ -52,6 +52,34 @@ export type AutomationCadence = 'daily' | 'weekdays' | 'weekly';
 export type AutomationMisfirePolicy = 'run_once' | 'skip';
 export type AutomationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'missed' | 'interrupted' | 'cancelled';
 
+export type JobSearchFilters = {
+  position: string;
+  jobType: string;
+  salary: string;
+  experience: string;
+  degree: string;
+  industry: string;
+  scale: string;
+  stage: string;
+};
+
+export type JobSearchFilterKey = keyof JobSearchFilters;
+
+export type SearchFilterOption = {
+  value: string;
+  label: string;
+  group?: string;
+};
+
+export type SearchFilterOptionsResponse = {
+  ok: boolean;
+  source: 'boss' | 'partial' | 'fallback';
+  fields: Record<JobSearchFilterKey, {
+    label: string;
+    options: SearchFilterOption[];
+  }>;
+};
+
 export type AutomationScheduleInput = {
   project: string;
   enabled: boolean;
@@ -64,6 +92,7 @@ export type AutomationScheduleInput = {
   citiesText: string;
   newJobTarget: number;
   maxJobs: number;
+  searchFilters: JobSearchFilters;
 };
 
 export type AutomationSchedule = AutomationScheduleInput & {
@@ -121,6 +150,8 @@ export type LoginState = {
   hasCookieDatabase: boolean;
   authCookieCount: number;
   verifiedByLiveSession?: boolean;
+  invalidatedAt?: string;
+  serverInvalidated?: boolean;
   lastSavedAt: string;
   daysSinceSaved: number | null;
   earliestClientExpiryAt: string;
@@ -180,6 +211,7 @@ export type ConfigPayload = {
   blacklistText: string;
   newJobTarget: number;
   maxJobs: number;
+  searchFilters: JobSearchFilters;
   minSalary: number;
   experienceGapYears: number;
   headlessMode: boolean;

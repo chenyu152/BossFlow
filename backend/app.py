@@ -86,6 +86,7 @@ from backend.services.project_service import (
 )
 from backend.services.resume_parser_service import get_parse_status, start_parse
 from backend.services.resume_service import generate_resume_draft, generate_resume_suggestions, list_resume_items, read_resume_draft, read_resume_suggestion, save_resume_draft
+from backend.services.search_filter_service import search_filter_options
 from backend.services.task_service import TaskManager
 from backend.services.system_settings_service import llm_settings_status, reveal_llm_api_key, save_llm_settings, test_llm_connection
 from backend.services.workspace_service import project_from_source_key, project_workspace
@@ -227,6 +228,11 @@ def run_automation_schedule(schedule_id: str):
 @app.get("/api/config")
 def get_config(project: Optional[str] = None):
     return config_payload(resolve_project(project))
+
+
+@app.get("/api/search-filters/options")
+def get_search_filter_options():
+    return search_filter_options()
 
 
 @app.post("/api/config")

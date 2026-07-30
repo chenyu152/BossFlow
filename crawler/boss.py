@@ -17,6 +17,7 @@ import io
 import os
 import time
 import json
+import html
 import random
 import logging
 import argparse
@@ -32,6 +33,7 @@ PACKAGE_DIR = Path(__file__).parent
 DEFAULT_CONFIG_FILE = PACKAGE_DIR / 'config' / 'keywords.json'
 DEFAULT_PROFILE_DIR = Path('.chrome_profile')
 DEFAULT_CHROME_PORT = 9222
+BOSS_AUTH_ENDPOINT = 'https://www.zhipin.com/wapi/zprelation/interaction/geekGetJob?page=1&tag=5&isActive=true'
 
 DEFAULT_KEYWORDS = [
     'AI应用开发工程师', 'Agent应用开发工程师', 'AI Agent工程师',
@@ -92,6 +94,13 @@ DETAIL_API = 'https://www.zhipin.com/wapi/zpgeek/job/detail.json'
 LEGACY_MIN_DETAIL_LENGTH = 100
 
 
+class BossAuthenticationError(RuntimeError):
+    """Raised when BOSS rejects the browser session required for collection."""
+
+    def __init__(self):
+        super().__init__('BOSS 登录状态已失效，请前往系统设置重新登录并保存 Cookie 后重试')
+
+
 # ==================== 工具函数 ====================
 
 def _normalize_keyword(text):
@@ -127,6 +136,39 @@ def has_complete_job_detail(job: dict) -> bool:
     if isinstance(desc, list):
         desc = ' '.join(str(item) for item in desc)
     return len(str(desc or '').strip()) >= LEGACY_MIN_DETAIL_LENGTH
+
+
+def parse_boss_auth_response(markup):
+    """Parse the authenticated activity response without depending on backend code."""
+    match = re.search(r'<pre[^>]*>(.*?)</pre>', str(markup or ''), flags=re.IGNORECASE | re.DOTALL)
+    raw = html.unescape(match.group(1) if match else str(markup or '')).strip()
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get('code') not in (0, '0'):
+        return None
+    if not isinstance(payload.get('zpData'), dict):
+        return None
+    return payload
+
+
+def verify_boss_authenticated_session(page):
+    """Return whether the current browser session can access a login-required API."""
+    tab = None
+    try:
+        tab = page.new_tab(BOSS_AUTH_ENDPOINT)
+        time.sleep(0.4)
+        return parse_boss_auth_response(tab.html) is not None
+    except Exception:
+        logger.debug('BOSS activity authentication check failed')
+        return False
+    finally:
+        if tab is not None:
+            try:
+                tab.close()
+            except Exception:
+                pass
 
 
 # ==================== 配置加载 ====================
@@ -226,9 +268,30 @@ def simulate_human(page):
             time.sleep(random.uniform(0.4, 1.2))
 
 
-def build_search_url(keyword: str, city_code: str, salary_code: str = '') -> str:
+SEARCH_FILTER_PARAM_KEYS = (
+    'position',
+    'jobType',
+    'salary',
+    'experience',
+    'degree',
+    'industry',
+    'scale',
+    'stage',
+)
+
+
+def build_search_url(
+    keyword: str,
+    city_code: str,
+    salary_code: str = '',
+    search_filters: dict = None,
+) -> str:
     params = {'query': keyword, 'city': city_code}
-    if salary_code:
+    for key in SEARCH_FILTER_PARAM_KEYS:
+        value = str((search_filters or {}).get(key) or '').strip()
+        if value and value.isdigit() and value != '0':
+            params[key] = value
+    if salary_code and 'salary' not in params:
         params['salary'] = str(salary_code)
     return f'https://www.zhipin.com/web/geek/job?{urlencode(params)}'
 
@@ -309,6 +372,7 @@ class BossCrawler:
         self._progress_cb = None
         self._keyword_done_cb = None
         self._crawl_started_cb = None
+        self._auth_failed_cb = None
         self._headless_requested = False
         self._partial_file = Path(partial_file) if partial_file else Path('crawl_partial.json')
         self._partial_results = []  # 已完成关键词的标准化结果
@@ -446,11 +510,8 @@ class BossCrawler:
 
         for attempt in range(8):
             try:
-                has_jobs = self.page.run_js(
-                    'return document.querySelectorAll("li[class*=job-card]").length > 0'
-                )
-                if has_jobs:
-                    print('[OK] 已登录，检测到岗位列表')
+                if verify_boss_authenticated_session(self.page):
+                    print('[OK] BOSS 鉴权成功，当前会话可用')
                     return True
                 is_verify = self.page.run_js(
                     'return document.title.includes("安全") || document.title.includes("验证")'
@@ -471,21 +532,24 @@ class BossCrawler:
         )
         if not confirmed:
             print('[WARN] 用户取消登录')
+            self._notify_auth_failed()
             return False
         print('[INFO] 用户确认已登录，正在验证 Cookie...')
         self.page.get(url)
         time.sleep(3)
-        try:
-            has_jobs = self.page.run_js(
-                'return document.querySelectorAll("li[class*=job-card]").length > 0'
-            )
-        except Exception:
-            has_jobs = False
-        if not has_jobs:
-            print('[WARN] 未能验证登录状态，请确认已完成登录后重试')
+        if not verify_boss_authenticated_session(self.page):
+            print('[WARN] BOSS 鉴权失败，请确认已完成登录后重试')
+            self._notify_auth_failed()
             return False
-        print('[OK] 登录已验证，Cookie 已保存')
+        print('[OK] BOSS 鉴权已验证，Cookie 可用')
         return True
+
+    def _notify_auth_failed(self):
+        if self._auth_failed_cb:
+            try:
+                self._auth_failed_cb()
+            except Exception:
+                logger.debug('BOSS auth failure callback failed')
 
     # ========== 核心抓取 ==========
 
@@ -554,6 +618,7 @@ class BossCrawler:
 
     def scrape_keyword_scroll(self, keyword: str, city_code: str, city_name: str = '',
                               salary_code: str = '', salary_label: str = '',
+                              search_filters: dict = None,
                               new_job_target: int = DEFAULT_NEW_JOB_TARGET,
                               max_jobs: int = DEFAULT_MAX_JOBS,
                               max_scrolls: int = None) -> dict:
@@ -572,7 +637,12 @@ class BossCrawler:
         if not self._safe_listen_start('wapi/zpgeek/search/joblist.json'):
             return {'added': 0, 'newJobs': 0, 'totalJobs': 0, 'stopReason': 'listener_failed'}
 
-        url = build_search_url(keyword, city_code, salary_code=salary_code)
+        url = build_search_url(
+            keyword,
+            city_code,
+            salary_code=salary_code,
+            search_filters=search_filters,
+        )
         self.page.get(url)
         random_delay(1.5, 3.0)
 
@@ -655,7 +725,8 @@ class BossCrawler:
     def run_keyword(self, keyword: str, cities: dict,
                     new_job_target: int = DEFAULT_NEW_JOB_TARGET,
                     max_jobs: int = DEFAULT_MAX_JOBS,
-                    salary_code: str = '', salary_label: str = '') -> list:
+                    salary_code: str = '', salary_label: str = '',
+                    search_filters: dict = None) -> list:
         """爬取单个关键词×所有城市，返回标准化结果"""
         if not self._browser_alive():
             logger.warning(f'浏览器已断连，跳过关键词 {keyword}')
@@ -678,6 +749,7 @@ class BossCrawler:
                 city_name,
                 salary_code=salary_code,
                 salary_label=salary_label,
+                search_filters=search_filters,
                 new_job_target=new_job_target,
                 max_jobs=max_jobs,
             )
@@ -928,6 +1000,7 @@ class BossCrawler:
         headless=False,
         new_job_target=DEFAULT_NEW_JOB_TARGET,
         max_jobs=DEFAULT_MAX_JOBS,
+        search_filters=None,
     ):
         """
         完整抓取流程。
@@ -940,6 +1013,8 @@ class BossCrawler:
             keywords = load_keywords(self.config_file)
         if cities is None:
             cities = load_cities(self.config_file)
+        if search_filters is None:
+            search_filters = load_config(self.config_file).get('search_filters') or {}
         limits = load_scrape_limits(self.config_file)
         if new_job_target is None:
             new_job_target = limits['new_job_target']
@@ -950,8 +1025,11 @@ class BossCrawler:
         self.start_browser(headless=headless)
         first_city = list(cities.values())[0]
         if not self.ensure_login(first_city):
-            self.page.quit()
-            return []
+            try:
+                self.page.quit()
+            except Exception:
+                pass
+            raise BossAuthenticationError()
 
         if headless and self._headless_requested:
             print('↻ 登录完成，切换为后台模式运行...')
@@ -995,6 +1073,7 @@ class BossCrawler:
                     cities,
                     new_job_target=new_job_target,
                     max_jobs=max_jobs,
+                    search_filters=search_filters,
                 )
                 all_results.extend(kw_results)
                 self._partial_results = list(all_results)  # 同步
@@ -1062,6 +1141,10 @@ class BossCrawler:
     def set_crawl_started_callback(self, cb):
         """登录完成并准备开始采集时的回调。"""
         self._crawl_started_cb = cb
+
+    def set_auth_failed_callback(self, cb):
+        """Called when the live BOSS authentication check fails."""
+        self._auth_failed_cb = cb
 
 
 # ==================== CLI ====================
@@ -1189,7 +1272,11 @@ def main():
     if args.login:
         crawler.start_browser(headless=False)
         first_city = list(cities.values())[0]
-        crawler.ensure_login(first_city)
+        if not crawler.ensure_login(first_city):
+            if crawler.page:
+                crawler.page.quit()
+            print('[WARN] BOSS 鉴权失败，未保存可用 Cookie')
+            return
         print('[OK] 登录完成，Cookie 已保存到持久化 Profile')
         print('   以后自动运行无需再登录')
         crawler.page.quit()

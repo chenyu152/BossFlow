@@ -77,6 +77,23 @@ def record_login_verified(project: str) -> dict[str, Any]:
     return login_state(project)
 
 
+def record_login_invalidated(project: str, reason: str = "server_auth_failed") -> dict[str, Any]:
+    """Persist a server-side auth failure until a later live verification succeeds."""
+    project_dir = resolve_project(project)
+    timestamp = _now().isoformat(timespec="seconds")
+    path = project_dir / LOGIN_STATE_FILE
+    path.write_text(
+        json.dumps(
+            {"invalidatedAt": timestamp, "invalidationReason": str(reason or "server_auth_failed")},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return login_state(project)
+
+
 def login_state(project: str) -> dict[str, Any]:
     project_dir = resolve_project(project)
     profile_path = Path(paths_for_project(project_dir)["profilePath"])
@@ -94,6 +111,16 @@ def login_state(project: str) -> dict[str, Any]:
             verified_at = dt.datetime.fromisoformat(str(marker["verifiedAt"])).astimezone()
         except ValueError:
             verified_at = None
+    invalidated_at = None
+    if marker.get("invalidatedAt"):
+        try:
+            invalidated_at = dt.datetime.fromisoformat(str(marker["invalidatedAt"])).astimezone()
+        except ValueError:
+            invalidated_at = None
+    server_invalidated = bool(
+        invalidated_at
+        and (not verified_at or invalidated_at >= verified_at)
+    )
     last_saved_at = verified_at or cookie_last_access
     days_since = int((now - last_saved_at).total_seconds() // 86400) if last_saved_at else None
     expiries = [row["expiresAt"] for row in valid_auth_rows if row["expiresAt"]]
@@ -109,9 +136,12 @@ def login_state(project: str) -> dict[str, Any]:
         and days_since is not None
         and days_since < REFRESH_RECOMMENDED_DAYS
     )
-    can_schedule = bool(valid_auth_rows) or recently_verified
+    can_schedule = not server_invalidated and (bool(valid_auth_rows) or recently_verified)
 
-    if recently_verified and not valid_auth_rows:
+    if server_invalidated:
+        status = "expired"
+        message = "BOSS server rejected the saved session. Sign in again and save the login Cookie."
+    elif recently_verified and not valid_auth_rows:
         status = "available"
         message = "The live BOSS session was recently verified; Cookie metadata may still be flushing."
     elif not cookie_path or not rows:
@@ -137,6 +167,8 @@ def login_state(project: str) -> dict[str, Any]:
         "hasCookieDatabase": bool(cookie_path),
         "authCookieCount": len(auth_rows),
         "verifiedByLiveSession": recently_verified,
+        "invalidatedAt": invalidated_at.isoformat(timespec="seconds") if invalidated_at else "",
+        "serverInvalidated": server_invalidated,
         "lastSavedAt": last_saved_at.isoformat(timespec="seconds") if last_saved_at else "",
         "daysSinceSaved": days_since,
         "earliestClientExpiryAt": earliest_expiry.isoformat(timespec="seconds") if earliest_expiry else "",

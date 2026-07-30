@@ -12,6 +12,7 @@ function toRequestBody(config: ConfigPayload) {
     citiesText: config.citiesText,
     newJobTarget: config.newJobTarget,
     maxJobs: config.maxJobs,
+    searchFilters: config.searchFilters,
     minSalary: config.minSalary,
     experienceGapYears: config.experienceGapYears,
     headlessMode: config.headlessMode,

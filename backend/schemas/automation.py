@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.schemas.search_filters import JobSearchFilters
+
 
 AutomationCadence = Literal["daily", "weekdays", "weekly"]
 AutomationMisfirePolicy = Literal["run_once", "skip"]
@@ -19,6 +21,7 @@ class AutomationScheduleInput(BaseModel):
     citiesText: str = Field(default="", max_length=12000)
     newJobTarget: int = Field(default=20, ge=1, le=5000)
     maxJobs: int = Field(default=100, ge=1, le=5000)
+    searchFilters: JobSearchFilters = Field(default_factory=JobSearchFilters)
 
     @field_validator("daysOfWeek")
     @classmethod

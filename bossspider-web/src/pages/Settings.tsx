@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { bossApi } from '../api';
 import { CitySelector } from '../components/CitySelector';
 import { KeywordInput } from '../components/KeywordInput';
+import { EMPTY_JOB_SEARCH_FILTERS, JobSearchFilters } from '../components/JobSearchFilters';
 import { ThemeOptions } from '../components/ThemePicker';
 import { useAppTranslation } from '../i18n';
 import type { AgentAccess, AutomationResponse, AutomationSchedule, AutomationScheduleInput, DesktopSettings, LlmSettingsStatus, LoginState } from '../types';
@@ -20,6 +21,7 @@ const defaultSchedule: AutomationScheduleInput = {
   citiesText: '',
   newJobTarget: 20,
   maxJobs: 100,
+  searchFilters: { ...EMPTY_JOB_SEARCH_FILTERS },
 };
 
 type McpClient = 'claude' | 'codex' | 'trae';
@@ -37,6 +39,7 @@ function scheduleInput(schedule: AutomationSchedule): AutomationScheduleInput {
     citiesText: schedule.citiesText,
     newJobTarget: schedule.newJobTarget,
     maxJobs: schedule.maxJobs,
+    searchFilters: schedule.searchFilters,
   };
 }
 
@@ -242,6 +245,7 @@ export function Settings({
             citiesText: config.citiesText,
             newJobTarget: config.newJobTarget,
             maxJobs: config.maxJobs,
+            searchFilters: config.searchFilters,
           });
     }).catch((configError) => setAutomationError((configError as Error).message));
     return () => { cancelled = true; };
@@ -286,6 +290,7 @@ export function Settings({
         citiesText: config.citiesText,
         newJobTarget: config.newJobTarget,
         maxJobs: config.maxJobs,
+        searchFilters: config.searchFilters,
         minSalary: config.minSalary,
         headlessMode: config.headlessMode,
         autoSqlite: config.autoSqlite,
@@ -664,7 +669,9 @@ export function Settings({
               <span><AlertTriangle size={15} /></span>
               <div>
                 <strong>{isZh ? `${scheduleDraft.project} · 登录 Cookie ${selectedLoginLabel}` : `${scheduleDraft.project} · Login Cookie ${selectedLoginLabel}`}</strong>
-                <p>{selectedLoginState.status === 'available'
+                <p>{selectedLoginState.serverInvalidated
+                  ? (isZh ? 'BOSS 服务端已拒绝当前会话，请重新登录并保存 Cookie。' : 'BOSS rejected the current session. Sign in again and save the login Cookie.')
+                  : selectedLoginState.status === 'available'
                   ? (isZh ? '当前可用于定时采集；执行前仍会再次检查。' : 'Available for scheduled collection; it will be checked again before execution.')
                   : selectedLoginState.status === 'refresh_recommended'
                     ? (isZh ? `已超过 ${selectedLoginState.refreshRecommendedAfterDays} 天刷新建议，建议先重新登录，服务端仍可能提前使 Cookie 失效。` : `Older than the ${selectedLoginState.refreshRecommendedAfterDays}-day refresh recommendation. Sign in again before unattended use.`)
@@ -725,7 +732,13 @@ export function Settings({
                     <CompactSelect
                       value={scheduleDraft.project}
                       options={projects.map((project) => ({ value: project, label: project }))}
-                      onChange={(project) => setScheduleDraft({ ...scheduleDraft, project, keywordsText: '', citiesText: '' })}
+                      onChange={(project) => setScheduleDraft({
+                        ...scheduleDraft,
+                        project,
+                        keywordsText: '',
+                        citiesText: '',
+                        searchFilters: { ...EMPTY_JOB_SEARCH_FILTERS },
+                      })}
                       ariaLabel={isZh ? '选择求职目标' : 'Select job target'}
                       placeholder={isZh ? '请选择求职目标' : 'Choose a job target'}
                     />
@@ -786,6 +799,11 @@ export function Settings({
                     </div>
                   </div>
                   <CitySelector value={scheduleDraft.citiesText} onChange={(citiesText) => setScheduleDraft({ ...scheduleDraft, citiesText })} showAdvanced={false} compact />
+                  <JobSearchFilters
+                    value={scheduleDraft.searchFilters}
+                    onChange={(searchFilters) => setScheduleDraft({ ...scheduleDraft, searchFilters })}
+                    compact
+                  />
                 </div>
                 {scheduleDraft.misfirePolicy === 'run_once' && <label className="automation-delay"><span>{isZh ? '最长补跑延迟（分钟）' : 'Maximum catch-up delay (minutes)'}</span><input type="number" min={0} max={10080} value={scheduleDraft.maxDelayMinutes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, maxDelayMinutes: Math.max(0, Number(event.target.value) || 0) })} /></label>}
               </div>

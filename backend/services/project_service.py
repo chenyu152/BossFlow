@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from backend.schemas.config import ConfigUpdate
+from backend.schemas.search_filters import normalize_search_filters
 from backend.services.scoring_config import DEFAULT_SCORING_CONFIG, normalize_scoring_config
 from backend.storage.paths import PROJECTS_DIR, RESOURCE_DIR
 from crawler.boss import DEFAULT_PROFILE_DIR, load_config
@@ -87,6 +88,7 @@ def create_project(name: str) -> Path:
         "keywords": [normalized_name],
         "cities": {},
         "scrape_limits": {**DEFAULT_SCRAPE_LIMITS},
+        "search_filters": normalize_search_filters({}),
         "min_salary": MIN_AVG_SALARY_K,
         "headless_mode": True,
         "auto_sqlite": True,
@@ -197,6 +199,7 @@ def config_payload(project_dir: Path) -> Dict[str, Any]:
         "blacklistText": "\n".join(config.get("blacklist_keywords") or []),
         "newJobTarget": max(1, new_job_target),
         "maxJobs": max(1, max_jobs),
+        "searchFilters": normalize_search_filters(config.get("search_filters")),
         "minSalary": float(config.get("min_salary", MIN_AVG_SALARY_K)),
         "experienceGapYears": int(config.get("experience_gap_years", 1) or 1),
         "headlessMode": bool(config.get("headless_mode", True)),
@@ -243,6 +246,7 @@ def save_form_config(
         "new_job_target": int(payload.newJobTarget or DEFAULT_SCRAPE_LIMITS["new_job_target"]),
         "max_jobs": int(payload.maxJobs or DEFAULT_SCRAPE_LIMITS["max_jobs"]),
     }
+    config["search_filters"] = normalize_search_filters(payload.searchFilters)
     config["min_salary"] = float(payload.minSalary or MIN_AVG_SALARY_K)
     config["experience_gap_years"] = int(payload.experienceGapYears)
     config.pop("strategy_index", None)

@@ -133,6 +133,12 @@ class AutomationServiceTest(unittest.TestCase):
         created = self.service.create_schedule(different)
         self.assertEqual(created["keywordsText"], "RAG 开发")
 
+        different_filter = self.schedule("agent").model_copy(
+            update={"searchFilters": {"experience": "104"}}
+        )
+        created_with_filter = self.service.create_schedule(different_filter)
+        self.assertEqual(created_with_filter["searchFilters"]["experience"], "104")
+
     def test_schedule_exposes_collection_estimate(self):
         created = self.service.create_schedule(self.schedule("agent"))
         self.assertEqual(created["combinationCount"], 1)

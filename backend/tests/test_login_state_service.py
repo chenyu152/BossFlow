@@ -89,6 +89,36 @@ class LoginStateServiceTest(unittest.TestCase):
         self.assertEqual(state["status"], "missing")
         self.assertFalse(state["canSchedule"])
 
+    def test_server_invalidation_overrides_unexpired_cookie_until_verified_again(self):
+        cookie_path = self.profile / "Default" / "Network" / "Cookies"
+        cookie_path.parent.mkdir(parents=True)
+        connection = sqlite3.connect(cookie_path)
+        connection.execute("CREATE TABLE cookies (host_key TEXT, name TEXT, expires_utc INTEGER, last_access_utc INTEGER)")
+        now = dt.datetime.now().astimezone()
+        connection.execute(
+            "INSERT INTO cookies VALUES (?, ?, ?, ?)",
+            (".zhipin.com", "zp_at", chromium_time(now + dt.timedelta(days=2)), chromium_time(now)),
+        )
+        connection.commit()
+        connection.close()
+
+        with (
+            patch.object(login_state_service, "resolve_project", return_value=self.project),
+            patch.object(login_state_service, "paths_for_project", return_value={"profilePath": str(self.profile)}),
+        ):
+            invalidated = login_state_service.record_login_invalidated("agent")
+            self.assertEqual(invalidated["status"], "expired")
+            self.assertFalse(invalidated["canSchedule"])
+            self.assertTrue(invalidated["serverInvalidated"])
+            self.assertTrue(invalidated["invalidatedAt"])
+
+            verified = login_state_service.record_login_verified("agent")
+            self.assertEqual(verified["status"], "available")
+            self.assertTrue(verified["canSchedule"])
+            self.assertFalse(verified["serverInvalidated"])
+            marker = json.loads((self.project / login_state_service.LOGIN_STATE_FILE).read_text(encoding="utf-8"))
+            self.assertNotIn("invalidatedAt", marker)
+
 
 if __name__ == "__main__":
     unittest.main()
