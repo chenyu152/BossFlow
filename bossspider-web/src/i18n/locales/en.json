@@ -1342,6 +1342,7 @@
   "notices": {
     "loadFailed": "Load failed: {{error}}",
     "refreshJobsFailed": "Refresh jobs failed: {{error}}",
+    "exportJobsFailed": "Export jobs failed: {{error}}",
     "backendConnectionFailed": "Backend connection failed: {{error}}",
     "configSaved": "Config saved",
     "saveFailed": "Save failed: {{error}}",

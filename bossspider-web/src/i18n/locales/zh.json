@@ -1343,6 +1343,7 @@
   "notices": {
     "loadFailed": "加载失败：{{error}}",
     "refreshJobsFailed": "刷新岗位失败：{{error}}",
+    "exportJobsFailed": "导出岗位失败：{{error}}",
     "backendConnectionFailed": "后端连接失败：{{error}}",
     "configSaved": "配置已保存",
     "saveFailed": "保存失败：{{error}}",
