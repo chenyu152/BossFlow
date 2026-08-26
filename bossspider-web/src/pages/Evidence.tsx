@@ -199,6 +199,8 @@ function createCopy(isZh: boolean) {
     sampleHint: (count: number) => count >= 3
       ? `已基于 ${count} 个精评岗位聚合，适合用于比较能力影响范围。`
       : `当前只有 ${count} 个精评岗位，建议至少精评 3 个岗位后再判断学习优先级。`,
+    qualityWarning: (capabilities: number, requirements: number, suggestions: number) =>
+      `能力档案可能存在碎片化：${requirements} 条要求形成 ${capabilities} 项能力${suggestions ? `，另有 ${suggestions} 组相近能力待核对` : ''}。系统不会自动合并相关或上下位能力。`,
     statuses: {
       mastered: '已掌握',
       adjacent: '相近可迁移',
@@ -339,6 +341,8 @@ function createCopy(isZh: boolean) {
     sampleHint: (count: number) => count >= 3
       ? `Aggregated from ${count} fine-reviewed jobs.`
       : `Only ${count} fine-reviewed jobs. Review at least 3 before prioritizing learning.`,
+    qualityWarning: (capabilities: number, requirements: number, suggestions: number) =>
+      `Possible profile fragmentation: ${requirements} requirements produced ${capabilities} capabilities${suggestions ? `, with ${suggestions} similar pairs to review` : ''}. Related or hierarchical concepts are never merged automatically.`,
     statuses: { mastered: 'Mastered', adjacent: 'Transferable', pending: 'Needs confirmation', gap: 'Confirmed gap' } as Record<CapabilityStatus, string>,
     proofStatuses: { none: 'No proof material', self_reported: 'Self-reported', resume_recorded: 'Recorded in resume', source_backed: 'Source-backed', external_verified: 'External credential' } as Record<CapabilityProfile['proofStatus'], string>,
     tiers: { core: 'Core', high_value: 'High value', common: 'Common', specialized: 'Specialized' } as Record<CapabilityImpactTier, string>,
@@ -797,6 +801,16 @@ export function Evidence({
       </header>
 
       <div className="capability-sample-hint"><TrendingUp size={15} /><span>{copy.sampleHint(reviewedJobCount)}</span></div>
+      {overview?.capabilityQuality?.needsReview && (
+        <div className="capability-quality-warning">
+          <CircleHelp size={15} />
+          <span>{copy.qualityWarning(
+            overview.capabilityQuality.capabilityCount,
+            overview.capabilityQuality.requirementCount,
+            overview.capabilityQuality.suggestedMergeCount,
+          )}</span>
+        </div>
+      )}
       {error && <div className="evidence-page__error">{error}</div>}
 
       <section className="capability-workspace">

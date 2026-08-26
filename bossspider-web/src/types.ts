@@ -1,4 +1,4 @@
-export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'Jobs' | 'AccountActivity' | 'Pipeline' | 'Evidence' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'Logs' | 'Settings';
+export type Tab = 'Dashboard' | 'Scope' | 'MatchingRules' | 'Jobs' | 'AccountActivity' | 'Pipeline' | 'Evidence' | 'PersonalResume' | 'Resume' | 'Story' | 'Interview' | 'MockInterview' | 'Logs' | 'Settings';
 
 export type AccountActivityTab = 'all' | 'communicated' | 'applied' | 'interview' | 'favorited';
 export type AccountActivityItem = {
@@ -650,6 +650,20 @@ export type InterviewStoryDraft = InterviewStory & {
   updatedAt: string;
   promotedAt?: string;
   promotedStoryId?: string;
+  sourceType?: string;
+  sessionId?: string;
+  questionIds?: string[];
+  rawAnswerSnapshot?: Array<{
+    questionId?: string;
+    question?: string;
+    answer?: string;
+    assisted?: boolean;
+  }>;
+  assisted?: boolean;
+  missingFields?: string[];
+  contradictionFlags?: string[];
+  linkedRequirementIds?: string[];
+  extractionConfidence?: number;
 };
 
 export type InterviewStoryDraftsResponse = {
@@ -664,6 +678,140 @@ export type InterviewStoryDraftPromoteResponse = {
   draft: InterviewStoryDraft;
   storyBank: InterviewStoryBankResponse;
   storyDrafts: InterviewStoryDraftsResponse;
+};
+
+export type MockInterviewMode = 'comprehensive' | 'project_deep_dive' | 'behavioral' | 'technical';
+export type MockInterviewDifficulty = 'auto' | 'basic' | 'advanced' | 'pressure';
+export type MockInterviewStatus =
+  | 'in_progress'
+  | 'ready_for_evaluation'
+  | 'evaluating'
+  | 'evaluated'
+  | 'evaluation_failed';
+
+export type MockInterviewTurn = {
+  turnId: string;
+  questionId: string;
+  parentTurnId: string;
+  category: string;
+  question: string;
+  rationale: string;
+  linkedRequirementIds: string[];
+  answerDraft: string;
+  answer: string;
+  skipped: boolean;
+  assisted: boolean;
+  status: 'pending' | 'answered' | 'skipped';
+  createdAt: string;
+  answeredAt: string;
+};
+
+export type MockInterviewTurnFeedback = {
+  questionId: string;
+  strengths?: string[];
+  missingInformation?: string[];
+  possibleFollowUps?: string[];
+  betterStructure?: string;
+  storyWorthy?: boolean;
+};
+
+export type MockInterviewStoryCandidate = InterviewStory & {
+  candidateId: string;
+  questionIds: string[];
+  rawAnswerSnapshot: Array<{
+    questionId?: string;
+    question?: string;
+    answer?: string;
+    assisted?: boolean;
+  }>;
+  assisted: boolean;
+  missingFields: string[];
+  contradictionFlags: string[];
+  extractionConfidence: number;
+};
+
+export type MockInterviewEvaluation = {
+  overallScore: number;
+  summary: string;
+  dimensionScores: Record<string, number>;
+  turnFeedback: MockInterviewTurnFeedback[];
+  strengths: string[];
+  improvements: string[];
+  storyCandidates: MockInterviewStoryCandidate[];
+  generatedAt: string;
+  fallback: boolean;
+  error: string;
+};
+
+export type MockInterviewSession = {
+  version: number;
+  sessionId: string;
+  project: string;
+  sourceKey: string;
+  jobId: number | null;
+  job: {
+    title: string;
+    company: string;
+    city: string;
+    salary: string;
+  };
+  mode: MockInterviewMode;
+  difficulty: MockInterviewDifficulty;
+  durationMinutes: 10 | 20 | 30;
+  userNotes: string;
+  outline: string;
+  status: MockInterviewStatus;
+  turns: MockInterviewTurn[];
+  evaluation: MockInterviewEvaluation | null;
+  evaluationError: string;
+  storyDraftIds: string[];
+  currentTurnId: string;
+  answeredCount: number;
+  skippedCount: number;
+  mainQuestionCount: number;
+  followUpCount: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string;
+};
+
+export type MockInterviewSessionSummary = Pick<
+  MockInterviewSession,
+  | 'sessionId'
+  | 'sourceKey'
+  | 'job'
+  | 'mode'
+  | 'difficulty'
+  | 'durationMinutes'
+  | 'status'
+  | 'answeredCount'
+  | 'mainQuestionCount'
+  | 'followUpCount'
+  | 'storyDraftIds'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'completedAt'
+> & {
+  overallScore: number | null;
+};
+
+export type MockInterviewSessionResponse = {
+  ok: boolean;
+  session: MockInterviewSession;
+  followUpAdded?: boolean;
+};
+
+export type MockInterviewSessionsResponse = {
+  ok: boolean;
+  sessions: MockInterviewSessionSummary[];
+};
+
+export type MockInterviewStoryDraftResponse = {
+  ok: boolean;
+  added: number;
+  drafts: InterviewStoryDraft[];
+  storyDrafts: InterviewStoryDraftsResponse;
+  session: MockInterviewSession;
 };
 
 export type InterviewPrepEvidenceContext = {
@@ -860,6 +1008,25 @@ export type EvidenceOverviewResponse = {
   tasks: EvidenceTask[];
   capabilities: CapabilityProfile[];
   constraints: EvidenceRequirement[];
+  capabilityQuality?: {
+    status: 'healthy' | 'review';
+    needsReview: boolean;
+    requirementCount: number;
+    capabilityCount: number;
+    singletonCapabilityCount: number;
+    capabilityToRequirementRatio: number;
+    singletonCapabilityRatio: number;
+    suggestedMergeCount: number;
+    mergeSuggestions: Array<{
+      leftCanonicalKey: string;
+      leftLabel: string;
+      rightCanonicalKey: string;
+      rightLabel: string;
+      category: EvidenceRequirementCategory;
+      similarity: number;
+      reason: string;
+    }>;
+  };
   updatedAt: string;
   counts: {
     requirements: number;

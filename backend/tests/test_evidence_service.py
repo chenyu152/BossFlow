@@ -32,6 +32,98 @@ class EvidenceServiceTest(unittest.TestCase):
         self.assertEqual(overview["counts"]["requirements"], 0)
         self.assertTrue(Path(overview["path"]).exists())
 
+    def test_reconciles_concurrent_synonyms_against_latest_catalog(self):
+        first = evidence_service.sync_requirement_assessment("demand:1", [{
+            "canonicalKey": "data-analysis",
+            "capabilityName": "数据分析",
+            "label": "负责业务数据分析与复盘",
+            "category": "skill",
+            "importance": "required",
+            "coverageStatus": "not_found",
+        }])
+        second = evidence_service.sync_requirement_assessment("demand:2", [{
+            "canonicalKey": "req-skill-data-analysis",
+            "capabilityName": "数据分析能力",
+            "label": "具备数据分析能力",
+            "category": "skill",
+            "importance": "required",
+            "coverageStatus": "not_found",
+        }])
+
+        self.assertEqual(first["requirements"][0]["canonicalKey"], "data-analysis-insights")
+        self.assertEqual(second["requirements"][0]["canonicalKey"], "data-analysis-insights")
+        capability = next(
+            item for item in second["overview"]["capabilities"]
+            if item["canonicalKey"] == "data-analysis-insights"
+        )
+        self.assertEqual(capability["jobCount"], 2)
+
+    def test_keeps_related_but_distinct_capabilities_separate(self):
+        result = evidence_service.sync_requirement_assessment("demand:3", [
+            {
+                "canonicalKey": "demand-forecasting",
+                "capabilityName": "需求预测",
+                "label": "负责需求预测",
+                "category": "skill",
+                "importance": "required",
+                "coverageStatus": "not_found",
+            },
+            {
+                "canonicalKey": "demand-planning-experience",
+                "capabilityName": "需求计划经验",
+                "label": "具有需求计划岗位经验",
+                "category": "experience",
+                "importance": "required",
+                "coverageStatus": "not_found",
+            },
+        ])
+
+        self.assertEqual(
+            {item["canonicalKey"] for item in result["requirements"]},
+            {"demand-forecasting", "demand-planning-experience"},
+        )
+
+    def test_catalog_uses_relevant_domain_capabilities_before_popular_unrelated_ones(self):
+        for index in range(90):
+            evidence_service.upsert_requirements([{
+                "requirementId": f"req-{index}",
+                "canonicalKey": f"unrelated-{index}",
+                "capabilityName": f"无关能力 {index}",
+                "label": f"无关能力 {index}",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": f"agent:{index}",
+            }])
+
+        catalog = evidence_service.read_capability_catalog(
+            limit=10,
+            context="负责需求预测、预测准确率和需求计划",
+        )
+
+        keys = {item["canonicalKey"] for item in catalog}
+        self.assertIn("demand-forecasting", keys)
+        self.assertIn("demand-planning", keys)
+
+    def test_reports_fragmented_capability_profile_without_auto_merging(self):
+        requirements = []
+        for index in range(20):
+            requirements.append({
+                "requirementId": f"req-fragment-{index}",
+                "canonicalKey": f"business-analysis-{index}",
+                "capabilityName": f"业务分析方向 {index}",
+                "label": f"业务分析方向 {index}",
+                "category": "skill",
+                "importance": "required",
+                "sourceKey": f"agent:{index}",
+            })
+        overview = evidence_service.upsert_requirements(requirements)
+
+        self.assertTrue(overview["capabilityQuality"]["needsReview"])
+        self.assertEqual(overview["capabilityQuality"]["capabilityCount"], 20)
+        self.assertEqual(overview["capabilityQuality"]["singletonCapabilityCount"], 20)
+        self.assertGreater(overview["capabilityQuality"]["suggestedMergeCount"], 0)
+        self.assertEqual(len(overview["capabilities"]), 20)
+
     def test_resume_capability_import_creates_standalone_confirmed_capabilities(self):
         content = """# 个人简历
 

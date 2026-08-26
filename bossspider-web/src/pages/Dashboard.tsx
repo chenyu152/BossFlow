@@ -560,7 +560,7 @@ export function Dashboard({
             <LauncherTile icon={<ListChecks size={17} />} title={isZh ? '提升计划' : 'Improvement plans'} detail={isZh ? '推进已选择的能力建设' : 'Advance chosen capability work'} count={evidenceTaskCount} onClick={() => evidenceTasks[0] ? onOpenTask('Evidence', evidenceTasks[0].target) : setActiveTab('Evidence')} />
             <LauncherTile icon={<UserRound size={17} />} title={t('nav.personalResume')} detail={isZh ? '维护可信基础档案' : 'Maintain your verified profile'} onClick={() => setActiveTab('PersonalResume')} />
             <LauncherTile icon={<Layers3 size={17} />} title={t('nav.resume')} detail={isZh ? '查看岗位定制材料' : 'Review tailored materials'} count={materialCount} onClick={() => setActiveTab('Resume')} />
-            <LauncherTile icon={<MessageSquareText size={17} />} title={t('nav.interview')} detail={isZh ? '准备面试与故事' : 'Prepare interviews and stories'} count={storyGapCount} onClick={() => setActiveTab('Interview')} />
+            <LauncherTile icon={<MessageSquareText size={17} />} title={t('nav.interview')} detail={isZh ? '准备面试与面试案例' : 'Prepare interviews and stories'} count={storyGapCount} onClick={() => setActiveTab('Interview')} />
           </div>
         </section>
       </div>

@@ -20,7 +20,7 @@ from backend.services.workspace_service import workspace_path
 CV_PATH = workspace_path("cv.md")
 PROFILE_PATH = workspace_path("profile.yml")
 REPORTS_DIR = workspace_path("reports/jobs")
-EVALUATION_PROFILE_VERSION = 2
+EVALUATION_PROFILE_VERSION = 3
 
 
 def _read_text(path: Path, limit: int | None = None) -> str:
@@ -122,7 +122,12 @@ def _prompt(job: dict[str, Any], item: dict[str, Any]) -> list[dict[str, str]]:
     cv_text = _read_text(CV_PATH, 12000)
     profile_text = _read_text(PROFILE_PATH, 6000)
     pre_score = item.get("score")
-    capability_catalog = read_capability_catalog()
+    capability_catalog = read_capability_catalog(
+        context=" ".join(
+            str(value or "")
+            for value in (job.get("title"), job.get("desc"), *(job.get("cats") or []))
+        )
+    )
     capability_catalog_text = json.dumps(capability_catalog, ensure_ascii=False, separators=(",", ":"))
     system = """你是 BossSpider 的求职岗位精评估助手。
 
@@ -505,10 +510,20 @@ def _structured_requirement_messages(job: dict[str, Any]) -> list[dict[str, str]
     """Ask for the machine-readable assessment without regenerating the report."""
     cv_text = _read_text(CV_PATH, 12000)
     profile_text = _read_text(PROFILE_PATH, 6000)
+    capability_catalog = read_capability_catalog(
+        context=" ".join(
+            str(value or "")
+            for value in (job.get("title"), job.get("desc"), *(job.get("cats") or []))
+        )
+    )
+    capability_catalog_text = json.dumps(capability_catalog, ensure_ascii=False, separators=(",", ":"))
     system = """你是 BossSpider 的岗位要求结构化提取器。
 只根据岗位 JD、cv.md 和 profile.yml 输出机器可读 requirement assessment。
 不要输出 Markdown、解释、代码围栏或任何 JSON 之外的内容。
 必须输出 5-16 条最重要的原子要求；同一能力可以合并，相关但不同的能力不能合并。
+canonicalKey 和 capabilityName 表示跨岗位复用的能力身份，不得包含熟练度、年限或岗位名称。
+先检索用户消息中的已有能力目录：语义完全相同时必须复用 canonicalKey；相关、上下位或包含关系不得强行复用。
+并列技能必须拆成多个元素；任一满足关系使用相同 requirementGroupId 和 any_of。
 candidateEvidenceRefs 只能引用 cv.md 中真实存在的内容；没有证据时必须为空数组并使用 not_found。
 coverageStatus 只能使用 supported、partial、not_found、unknown。
 输出格式必须是：
@@ -533,6 +548,11 @@ importance 使用 required|preferred|context；confidence 是 0 到 1 的数字�
 profile.yml：
 ```yaml
 {profile_text or "profile.yml not found"}
+```
+
+已有能力目录（只能复用语义完全相同的原子能力）：
+```json
+{capability_catalog_text}
 ```"""
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -613,6 +633,10 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     report_path.write_text(_strip_requirement_assessment_block(report_text), encoding="utf-8")
     evidence_sync = sync_requirement_assessment(source_key, requirement_assessment)
+    # Persist and return the commit-time identities.  Under concurrent fine
+    # reviews these may differ from the raw model keys because another review
+    # committed an equivalent capability while this LLM request was running.
+    committed_requirement_assessment = evidence_sync.get("requirements") or requirement_assessment
     evidence_summary = evidence_sync["summary"]
     json_path = report_path.with_suffix(".json")
     json_path.write_text(
@@ -625,7 +649,7 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
                 "generatedAt": dt.datetime.now().isoformat(),
                 "job": job,
                 "summary": summary,
-                "requirementAssessment": requirement_assessment,
+                "requirementAssessment": committed_requirement_assessment,
                 "evidenceSummary": evidence_summary,
                 "evidenceCoverages": evidence_sync["coverages"],
                 "reportPath": str(report_path),
@@ -659,7 +683,7 @@ def llm_evaluate_pipeline_item(source_key: str) -> dict[str, Any]:
         "reportPath": str(report_path),
         "jsonPath": str(json_path),
         "summary": summary,
-        "requirementAssessment": requirement_assessment,
+        "requirementAssessment": committed_requirement_assessment,
         "evidenceSummary": evidence_summary,
         "pipeline": read_pipeline(),
     }

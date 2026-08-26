@@ -33,7 +33,7 @@
 }
 .app-shell .bg-zinc-950 { background-color: var(--surface-panel) !important; }
 .app-shell .bg-zinc-900, .app-shell .bg-zinc-900\/50, .app-shell .bg-zinc-900\/40, .app-shell .bg-zinc-900\/35, .app-shell .bg-zinc-900\/60 { background-color: var(--surface-raised) !important; }
-.app-shell .bg-zinc-950\/40, .app-shell .bg-zinc-950\/70, .app-shell .bg-zinc-950\/30 { background-color: color-mix(in srgb, var(--surface-panel) 75%, transparent) !important; }
+.app-shell .bg-zinc-950\/95, .app-shell .bg-zinc-950\/40, .app-shell .bg-zinc-950\/70, .app-shell .bg-zinc-950\/30 { background-color: color-mix(in srgb, var(--surface-panel) 75%, transparent) !important; }
 .app-shell .border-zinc-900, .app-shell .border-zinc-800, .app-shell .border-zinc-800\/80 { border-color: var(--border-subtle) !important; }
 .app-shell .border-zinc-700 { border-color: var(--border-strong) !important; }
 .app-shell .text-zinc-100, .app-shell .text-zinc-200 { color: var(--text-primary) !important; }
@@ -234,6 +234,7 @@
  * editors and secondary screens from leaking near-black surfaces.
  */
 :root:not(.dark) .app-shell .bg-zinc-950,
+:root:not(.dark) .app-shell .bg-zinc-950\/95,
 :root:not(.dark) .app-shell .bg-zinc-950\/80,
 :root:not(.dark) .app-shell .bg-zinc-950\/70,
 :root:not(.dark) .app-shell .bg-zinc-950\/60,
@@ -1127,6 +1128,8 @@ html[data-desktop-platform="linux"] .desktop-titlebar { padding-right: 9.5rem; }
 .capability-summary strong { color: var(--text-primary); font-size: .84rem; }
 .capability-sample-hint { display: flex; min-height: 1.9rem; align-items: center; gap: .45rem; border: 1px solid color-mix(in srgb, var(--status-info) 24%, var(--border-subtle)); border-radius: .45rem; background: var(--status-info-surface); padding: .35rem .6rem; color: var(--text-secondary); font-size: .6rem; }
 .capability-sample-hint svg { flex: 0 0 auto; color: var(--status-info); }
+.capability-quality-warning { display: flex; min-height: 2rem; align-items: center; gap: .45rem; border: 1px solid color-mix(in srgb, var(--status-warning) 38%, var(--border-subtle)); border-radius: .45rem; background: var(--status-warning-surface); padding: .4rem .65rem; color: var(--text-secondary); font-size: .62rem; }
+.capability-quality-warning svg { flex: 0 0 auto; color: var(--status-warning); }
 .capability-workspace { display: grid; min-height: 0; flex: 1; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-subtle); border-radius: .65rem; background: var(--surface-panel); box-shadow: var(--shadow-card); }
 .capability-nav { display: flex; align-items: center; gap: .2rem; overflow-x: auto; border-bottom: 1px solid var(--border-subtle); padding: .4rem .55rem 0; }
 .capability-nav button { position: relative; display: flex; min-height: 2.1rem; flex: 0 0 auto; align-items: center; gap: .38rem; border-radius: .45rem .45rem 0 0; padding: 0 .68rem; color: var(--text-secondary); font-size: .63rem; font-weight: 650; }

@@ -1,4 +1,4 @@
-import { BookOpenText, BrainCircuit, ExternalLink, FileText, Loader2, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { BookOpenText, BrainCircuit, ExternalLink, FileText, History, Loader2, MessageSquareText, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -78,6 +78,7 @@ export function Interview({
   onOpenStoryDraft,
   onLoadPrep,
   onGeneratePrep,
+  onOpenMockInterview,
 }: {
   items: InterviewItem[];
   evidenceOverview: EvidenceOverviewResponse | null;
@@ -92,6 +93,7 @@ export function Interview({
   onOpenStoryDraft: (draftId: string) => void;
   onLoadPrep: (sourceKey: string) => Promise<InterviewPrepResponse | null>;
   onGeneratePrep: (sourceKey: string, userNotes: string) => Promise<InterviewPrepResponse | null>;
+  onOpenMockInterview: (sourceKey: string, view: 'setup' | 'history') => void;
 }) {
   const { t } = useAppTranslation();
   const [storyBank, setStoryBank] = useState<InterviewStoryBankResponse | null>(null);
@@ -241,13 +243,23 @@ export function Interview({
             {items.length.toLocaleString()} {t('interview.jobsWithMaterials')}
           </p>
         </div>
-        <button
-          onClick={onRefresh}
-          className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-900"
-        >
-          <RefreshCw size={14} />
-          {t('interview.refresh')}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenMockInterview(selectedItem?.sourceKey || '', 'history')}
+            className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-900"
+          >
+            <History size={14} />
+            {t('mockInterview.history')}
+          </button>
+          <button
+            onClick={onRefresh}
+            className="inline-flex items-center gap-2 rounded border border-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-900"
+          >
+            <RefreshCw size={14} />
+            {t('interview.refresh')}
+          </button>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/20">
@@ -287,6 +299,14 @@ export function Interview({
                       {selectedItem.llmRecommendation}
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => onOpenMockInterview(selectedItem.sourceKey, 'setup')}
+                    className="mt-4 inline-flex items-center gap-2 rounded bg-cyan-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-600"
+                  >
+                    <MessageSquareText size={15} />
+                    {t('mockInterview.start')}
+                  </button>
                 </div>
 
                 <div className="rounded border border-zinc-800 bg-zinc-950">

@@ -8,6 +8,7 @@ import os
 import re
 import uuid
 from collections import Counter
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from backend.services.capability_service import (
     PROFICIENCY_RANK,
     atomicize_requirement,
     canonical_capability_label,
+    capability_definition_category,
     canonicalize_capability_key,
     compact_requirement_text,
     highest_proficiency,
@@ -26,6 +28,7 @@ from backend.services.capability_service import (
     merge_requirement_assessments,
     normalize_canonical_key,
     normalize_proficiency,
+    reconcile_requirement_assessments,
 )
 from backend.storage.file_lock import exclusive_file_lock
 from backend.storage.paths import BASE_DIR
@@ -563,11 +566,16 @@ def _overview(store: dict[str, Any]) -> dict[str, Any]:
         and task.get("status") in {"pending", "in_progress"}
     )
     capability_summary = _capability_summary(store)
+    capability_quality = _capability_quality(
+        capability_summary["capabilities"],
+        sum(1 for item in store["requirements"] if item.get("active") is not False),
+    )
     return {
         "ok": True,
         "path": str(EVIDENCE_STORE_PATH),
         **store,
         **capability_summary,
+        "capabilityQuality": capability_quality,
         "counts": {
             "requirements": sum(1 for item in store["requirements"] if item.get("active") is not False),
             "evidenceItems": len(store["evidenceItems"]),
@@ -884,26 +892,180 @@ def _capability_summary(store: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _capability_quality(capabilities: list[dict[str, Any]], requirement_count: int) -> dict[str, Any]:
+    job_capabilities = [
+        item for item in capabilities
+        if item.get("origin") != "resume" and int(item.get("jobCount") or 0) > 0
+    ]
+    capability_count = len(job_capabilities)
+    singleton_count = sum(1 for item in job_capabilities if int(item.get("jobCount") or 0) == 1)
+    key_ratio = round(capability_count / max(1, requirement_count), 3)
+    singleton_ratio = round(singleton_count / max(1, capability_count), 3)
+    suggestions: list[dict[str, Any]] = []
+
+    def similarity(left: dict[str, Any], right: dict[str, Any]) -> float:
+        if left.get("category") != right.get("category"):
+            return 0.0
+        left_label = normalize_canonical_key(left.get("label"))
+        right_label = normalize_canonical_key(right.get("label"))
+        if not left_label or not right_label:
+            return 0.0
+        sequence_score = SequenceMatcher(None, left_label, right_label).ratio()
+        left_chinese = "".join(re.findall(r"[\u4e00-\u9fff]", left_label))
+        right_chinese = "".join(re.findall(r"[\u4e00-\u9fff]", right_label))
+        left_bigrams = {left_chinese[index:index + 2] for index in range(max(0, len(left_chinese) - 1))}
+        right_bigrams = {right_chinese[index:index + 2] for index in range(max(0, len(right_chinese) - 1))}
+        overlap_score = (
+            len(left_bigrams & right_bigrams) / max(1, min(len(left_bigrams), len(right_bigrams)))
+            if left_bigrams and right_bigrams
+            else 0.0
+        )
+        return max(sequence_score, overlap_score)
+
+    # This is a review queue, not an automatic merge.  Lower confidence
+    # semantic relations are deliberately surfaced to users instead of
+    # collapsing parent/child concepts and moving their evidence silently.
+    ranked = sorted(job_capabilities, key=lambda item: (-int(item.get("jobCount") or 0), str(item.get("label") or "")))
+    for index, left in enumerate(ranked):
+        for right in ranked[index + 1:]:
+            score = similarity(left, right)
+            if score < 0.72:
+                continue
+            suggestions.append({
+                "leftCanonicalKey": left.get("canonicalKey"),
+                "leftLabel": left.get("label"),
+                "rightCanonicalKey": right.get("canonicalKey"),
+                "rightLabel": right.get("label"),
+                "category": left.get("category"),
+                "similarity": round(score, 3),
+                "reason": "名称高度相近，建议确认是否为同一能力；不会自动合并。",
+            })
+    suggestions.sort(key=lambda item: (-float(item["similarity"]), str(item["leftLabel"]), str(item["rightLabel"])))
+    needs_review = (
+        requirement_count >= 20
+        and (key_ratio >= 0.55 or (capability_count >= 20 and singleton_ratio >= 0.7))
+    ) or bool(suggestions[:5])
+    return {
+        "status": "review" if needs_review else "healthy",
+        "needsReview": needs_review,
+        "requirementCount": requirement_count,
+        "capabilityCount": capability_count,
+        "singletonCapabilityCount": singleton_count,
+        "capabilityToRequirementRatio": key_ratio,
+        "singletonCapabilityRatio": singleton_ratio,
+        "suggestedMergeCount": len(suggestions),
+        "mergeSuggestions": suggestions[:20],
+    }
+
+
 def read_evidence_overview() -> dict[str, Any]:
     with exclusive_file_lock(EVIDENCE_LOCK_PATH):
         return _overview(_read_store_unlocked())
 
 
-def read_capability_catalog(limit: int = 80) -> list[dict[str, str]]:
-    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
-        summary = _capability_summary(_read_store_unlocked())
-    capabilities = sorted(
-        summary["capabilities"],
-        key=lambda item: (-int(item.get("jobCount") or 0), str(item.get("label") or "")),
-    )
+def _capability_catalog_from_store(store: dict[str, Any]) -> list[dict[str, Any]]:
+    summary = _capability_summary(store)
+    aliases_by_key: dict[str, set[str]] = {}
+    for requirement in store.get("requirements", []):
+        if not isinstance(requirement, dict) or requirement.get("active") is False:
+            continue
+        key = _capability_key(requirement.get("canonicalKey"), requirement.get("category"))
+        if not key:
+            continue
+        aliases = aliases_by_key.setdefault(key, set())
+        for value in (requirement.get("capabilityName"), requirement.get("label")):
+            if value:
+                aliases.add(str(value).strip())
     return [
         {
             "canonicalKey": str(item.get("canonicalKey") or ""),
             "capabilityName": str(item.get("label") or ""),
             "category": str(item.get("category") or "other"),
+            "aliases": sorted(aliases_by_key.get(str(item.get("canonicalKey") or ""), set())),
+            "jobCount": int(item.get("jobCount") or 0),
+        }
+        for item in summary["capabilities"]
+        if item.get("canonicalKey") and item.get("label")
+    ]
+
+
+def _built_in_capability_catalog() -> list[dict[str, Any]]:
+    from backend.services.capability_service import CAPABILITY_DEFINITIONS
+
+    return [
+        {
+            "canonicalKey": definition.key,
+            "capabilityName": definition.label,
+            "category": capability_definition_category(definition.key),
+            "aliases": list(definition.aliases),
+            "jobCount": 0,
+        }
+        for definition in CAPABILITY_DEFINITIONS
+    ]
+
+
+def _catalog_search_text(item: dict[str, Any]) -> str:
+    return " ".join(
+        str(value or "")
+        for value in (
+            item.get("canonicalKey"),
+            item.get("capabilityName"),
+            *(item.get("aliases") or []),
+        )
+    ).lower()
+
+
+def _catalog_relevance(item: dict[str, Any], context: str) -> int:
+    normalized_context = normalize_canonical_key(context)
+    context_tokens = {
+        token for token in re.split(r"[-\s，。；、/]+", normalized_context)
+        if len(token) >= 2
+    }
+    search_text = normalize_canonical_key(_catalog_search_text(item))
+    score = sum(1 for token in context_tokens if token in search_text)
+    for value in (
+        item.get("canonicalKey"),
+        item.get("capabilityName"),
+        *(item.get("aliases") or []),
+    ):
+        normalized_value = normalize_canonical_key(value)
+        if len(normalized_value) >= 2 and normalized_value in normalized_context:
+            score += 4
+        for token in re.split(r"[-\s，。；、/]+", normalized_value):
+            if len(token) >= 2 and token in normalized_context:
+                score += 2
+        chinese_value = "".join(re.findall(r"[\u4e00-\u9fff]", normalized_value))
+        chinese_context = "".join(re.findall(r"[\u4e00-\u9fff]", normalized_context))
+        value_bigrams = {chinese_value[index:index + 2] for index in range(max(0, len(chinese_value) - 1))}
+        context_bigrams = {chinese_context[index:index + 2] for index in range(max(0, len(chinese_context) - 1))}
+        score += len(value_bigrams & context_bigrams)
+    return score
+
+
+def read_capability_catalog(limit: int = 80, context: str = "") -> list[dict[str, Any]]:
+    with exclusive_file_lock(EVIDENCE_LOCK_PATH):
+        capabilities = _capability_catalog_from_store(_read_store_unlocked())
+    existing_keys = {str(item.get("canonicalKey") or "") for item in capabilities}
+    capabilities.extend(
+        item for item in _built_in_capability_catalog()
+        if str(item.get("canonicalKey") or "") not in existing_keys
+    )
+    capabilities.sort(
+        key=lambda item: (
+            -_catalog_relevance(item, context) if context else 0,
+            -int(item.get("jobCount") or 0),
+            str(item.get("capabilityName") or ""),
+        ),
+    )
+    return [
+        {
+            "canonicalKey": str(item.get("canonicalKey") or ""),
+            "capabilityName": str(item.get("capabilityName") or ""),
+            "category": str(item.get("category") or "other"),
+            "aliases": list(item.get("aliases") or [])[:6],
         }
         for item in capabilities[:max(1, min(limit, 120))]
-        if item.get("canonicalKey") and item.get("label")
+        if item.get("canonicalKey") and item.get("capabilityName")
     ]
 
 
@@ -1418,6 +1580,14 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
     assessed_at = _now()
     with exclusive_file_lock(EVIDENCE_LOCK_PATH):
         store = _read_store_unlocked()
+        # LLM evaluations run concurrently.  Reconcile only after acquiring the
+        # store lock so this result sees capabilities committed by evaluations
+        # that completed a moment earlier instead of trusting the stale catalog
+        # captured when the model request started.
+        reconciled_assessments = reconcile_requirement_assessments(
+            assessments,
+            [*_capability_catalog_from_store(store), *_built_in_capability_catalog()],
+        )
         existing_requirements = {
             (str(item.get("sourceKey") or ""), str(item.get("canonicalKey") or "")): item
             for item in store["requirements"]
@@ -1434,7 +1604,7 @@ def sync_requirement_assessment(source_key: str, assessments: list[dict[str, Any
             if requirement.get("sourceKey") == source_key:
                 requirement["active"] = False
 
-        for assessment in merge_requirement_assessments(assessments):
+        for assessment in reconciled_assessments:
             canonical_key = _capability_key(assessment.get("canonicalKey"), assessment.get("category"))
             if not canonical_key:
                 continue

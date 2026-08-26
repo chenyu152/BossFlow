@@ -149,7 +149,7 @@ class RequirementAssessmentParserTest(unittest.TestCase):
         )
 
         self.assertEqual(len(requirements), 1)
-        self.assertEqual(requirements[0]["canonicalKey"], "langgraph")
+        self.assertEqual(requirements[0]["canonicalKey"], "langgraph-framework")
 
     def test_splits_compound_requirement_into_atomic_capabilities(self):
         payload = [{
@@ -360,7 +360,7 @@ class LlmEvaluationIntegrationTest(unittest.TestCase):
                 result = llm_evaluation_service.llm_evaluate_pipeline_item("agent:1")
 
         self.assertEqual(call_llm.call_count, 3)
-        self.assertEqual(result["requirementAssessment"][0]["canonicalKey"], "langgraph")
+        self.assertEqual(result["requirementAssessment"][0]["canonicalKey"], "langgraph-framework")
 
     def test_writes_assessment_and_evidence_summary_to_report_and_pipeline(self):
         requirement = {

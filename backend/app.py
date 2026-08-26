@@ -30,6 +30,13 @@ from backend.schemas.evidence import (
 )
 from backend.schemas.greeting import GreetingDraftSaveRequest, GreetingPreflightRequest, GreetingPrepareRequest
 from backend.schemas.interview import InterviewPrepRequest, StoryBankSaveRequest, StoryDraftPromoteRequest, StoryDraftsSaveRequest
+from backend.schemas.mock_interview import (
+    MockInterviewAnswerDraftRequest,
+    MockInterviewAnswerRequest,
+    MockInterviewCompleteRequest,
+    MockInterviewCreateRequest,
+    MockInterviewStoryDraftRequest,
+)
 from backend.schemas.jobs import JobCreateRequest, JobLiveStatusUpdateRequest
 from backend.schemas.pipeline import AddJobsToPipelineRequest, EvaluatePipelineItemRequest, LlmEvaluatePipelineItemRequest, PipelineDeleteRequest, PipelineStatusRequest, ScoreJobsRequest, ScorePipelineRequest
 from backend.schemas.project import ProjectCreateRequest
@@ -69,6 +76,16 @@ from backend.services.interview_service import (
     promote_story_draft,
     save_story_bank,
     save_story_drafts,
+)
+from backend.services.mock_interview_service import (
+    complete_mock_interview_session,
+    create_mock_interview_session,
+    get_mock_interview_session,
+    list_mock_interview_sessions,
+    save_mock_interview_answer_draft,
+    stage_mock_interview_story_drafts,
+    stream_mock_interview_answer,
+    submit_mock_interview_answer,
 )
 from backend.services.job_service import create_job, export_jobs_response, get_job_by_id, query_jobs
 from backend.services.live_status_service import start_live_status_update_task
@@ -617,6 +634,89 @@ def create_interview_prep(payload: InterviewPrepRequest):
 def get_interview_prep(sourceKey: str):
     with project_workspace(_workspace_project(source_key=sourceKey)):
         return read_interview_prep(sourceKey)
+
+
+@app.post("/api/interview/mock/sessions")
+def create_mock_interview(payload: MockInterviewCreateRequest):
+    with project_workspace(_workspace_project(source_key=payload.sourceKey)):
+        return create_mock_interview_session(
+            payload.sourceKey,
+            payload.mode,
+            payload.difficulty,
+            payload.durationMinutes,
+            payload.userNotes,
+        )
+
+
+@app.get("/api/interview/mock/sessions")
+def get_mock_interview_sessions(project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return list_mock_interview_sessions()
+
+
+@app.get("/api/interview/mock/sessions/{session_id}")
+def get_mock_interview(session_id: str, project: Optional[str] = None):
+    with project_workspace(_workspace_project(project)):
+        return get_mock_interview_session(session_id)
+
+
+@app.put("/api/interview/mock/sessions/{session_id}/answer-draft")
+def update_mock_interview_answer_draft(session_id: str, payload: MockInterviewAnswerDraftRequest):
+    with project_workspace(_workspace_project(payload.project)):
+        return save_mock_interview_answer_draft(
+            session_id,
+            payload.turnId,
+            payload.answer,
+            payload.assisted,
+        )
+
+
+@app.post("/api/interview/mock/sessions/{session_id}/answers")
+def create_mock_interview_answer(session_id: str, payload: MockInterviewAnswerRequest):
+    with project_workspace(_workspace_project(payload.project)):
+        return submit_mock_interview_answer(
+            session_id,
+            payload.turnId,
+            payload.answer,
+            payload.assisted,
+            payload.skipped,
+        )
+
+
+@app.post("/api/interview/mock/sessions/{session_id}/answers/stream")
+def stream_mock_interview_answer_route(session_id: str, payload: MockInterviewAnswerRequest):
+    project = _workspace_project(payload.project)
+
+    def events():
+        with project_workspace(project):
+            yield from stream_mock_interview_answer(
+                session_id,
+                payload.turnId,
+                payload.answer,
+                payload.assisted,
+                payload.skipped,
+            )
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/interview/mock/sessions/{session_id}/complete")
+def complete_mock_interview(session_id: str, payload: MockInterviewCompleteRequest):
+    with project_workspace(_workspace_project(payload.project)):
+        return complete_mock_interview_session(session_id)
+
+
+@app.post("/api/interview/mock/sessions/{session_id}/story-drafts")
+def create_mock_interview_story_drafts(session_id: str, payload: MockInterviewStoryDraftRequest):
+    with project_workspace(_workspace_project(payload.project)):
+        return stage_mock_interview_story_drafts(session_id, payload.candidateIds)
 
 
 @app.post("/api/tasks/crawl")

@@ -28,6 +28,13 @@ STORY_DRAFTS_PATH = workspace_path("data/interview-prep/story-drafts.json")
 RESUME_OUTPUT_DIR = workspace_path("output/resumes")
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _next_interview_id() -> str:
     INTERVIEW_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     nums = []
@@ -280,6 +287,38 @@ def _clean_story_draft(draft: dict[str, Any]) -> dict[str, Any]:
         "updatedAt": str(draft.get("updatedAt") or "").strip(),
         "promotedAt": str(draft.get("promotedAt") or "").strip(),
         "promotedStoryId": str(draft.get("promotedStoryId") or "").strip(),
+        "sourceType": str(draft.get("sourceType") or "").strip(),
+        "sessionId": str(draft.get("sessionId") or "").strip(),
+        "questionIds": [
+            str(value).strip()
+            for value in (draft.get("questionIds") or [])
+            if str(value).strip()
+        ],
+        "rawAnswerSnapshot": [
+            value
+            for value in (draft.get("rawAnswerSnapshot") or [])
+            if isinstance(value, dict)
+        ],
+        "assisted": bool(draft.get("assisted")),
+        "missingFields": [
+            str(value).strip()
+            for value in (draft.get("missingFields") or [])
+            if str(value).strip()
+        ],
+        "contradictionFlags": [
+            str(value).strip()
+            for value in (draft.get("contradictionFlags") or [])
+            if str(value).strip()
+        ],
+        "linkedRequirementIds": [
+            str(value).strip()
+            for value in (draft.get("linkedRequirementIds") or [])
+            if str(value).strip()
+        ],
+        "extractionConfidence": max(
+            0.0,
+            min(1.0, _safe_float(draft.get("extractionConfidence"))),
+        ),
     }
 
 

@@ -30,6 +30,11 @@ import type {
   InterviewStoryDraft,
   InterviewStoryDraftPromoteResponse,
   InterviewStoryDraftsResponse,
+  MockInterviewDifficulty,
+  MockInterviewMode,
+  MockInterviewSessionResponse,
+  MockInterviewSessionsResponse,
+  MockInterviewStoryDraftResponse,
   Job,
   JobLiveStatusUpdateRequest,
   JobsResponse,
@@ -54,6 +59,13 @@ import type {
 } from './types';
 
 export const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+export type MockInterviewStreamCallbacks = {
+  onStatus?: (phase: string) => void;
+  onDelta?: (text: string) => void;
+  onWarning?: (message: string) => void;
+  onDone?: (data: MockInterviewSessionResponse & { followUpAdded?: boolean }) => void;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -534,6 +546,177 @@ export const bossApi = {
 
   getInterviewPrep(sourceKey: string) {
     return request<InterviewPrepResponse>(`/api/interview/prep?sourceKey=${encodeURIComponent(sourceKey)}`);
+  },
+
+  createMockInterviewSession(body: {
+    sourceKey: string;
+    mode: MockInterviewMode;
+    difficulty: MockInterviewDifficulty;
+    durationMinutes: 10 | 20 | 30;
+    userNotes?: string;
+  }) {
+    return request<MockInterviewSessionResponse>('/api/interview/mock/sessions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  getMockInterviewSessions(project: string) {
+    return request<MockInterviewSessionsResponse>(`/api/interview/mock/sessions?project=${encodeURIComponent(project)}`);
+  },
+
+  getMockInterviewSession(project: string, sessionId: string) {
+    return request<MockInterviewSessionResponse>(
+      `/api/interview/mock/sessions/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
+    );
+  },
+
+  saveMockInterviewAnswerDraft(
+    project: string,
+    sessionId: string,
+    turnId: string,
+    answer: string,
+    assisted = false,
+  ) {
+    return request<MockInterviewSessionResponse>(
+      `/api/interview/mock/sessions/${encodeURIComponent(sessionId)}/answer-draft`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ project, turnId, answer, assisted }),
+      },
+    );
+  },
+
+  submitMockInterviewAnswer(
+    project: string,
+    sessionId: string,
+    turnId: string,
+    answer: string,
+    assisted = false,
+    skipped = false,
+  ) {
+    return request<MockInterviewSessionResponse>(
+      `/api/interview/mock/sessions/${encodeURIComponent(sessionId)}/answers`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ project, turnId, answer, assisted, skipped }),
+      },
+    );
+  },
+
+  async submitMockInterviewAnswerStream(
+    project: string,
+    sessionId: string,
+    turnId: string,
+    answer: string,
+    assisted = false,
+    skipped = false,
+    callbacks: MockInterviewStreamCallbacks = {},
+  ) {
+    const controller = new AbortController();
+    let inactivityTimer = window.setTimeout(() => controller.abort(), 45_000);
+    const keepAlive = () => {
+      window.clearTimeout(inactivityTimer);
+      inactivityTimer = window.setTimeout(() => controller.abort(), 45_000);
+    };
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE}/api/interview/mock/sessions/${encodeURIComponent(sessionId)}/answers/stream`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project, turnId, answer, assisted, skipped }),
+          signal: controller.signal,
+        },
+      );
+    } catch (cause) {
+      window.clearTimeout(inactivityTimer);
+      if ((cause as Error).name === 'AbortError') {
+        throw new Error('The interview response timed out');
+      }
+      throw cause;
+    }
+    if (!response.ok) {
+      window.clearTimeout(inactivityTimer);
+      let message = `${response.status} ${response.statusText}`;
+      try {
+        const body = await response.json();
+        message = body.detail || body.message || message;
+      } catch {
+        // Keep the HTTP status when the server did not return JSON.
+      }
+      throw new Error(message);
+    }
+    if (!response.body) {
+      window.clearTimeout(inactivityTimer);
+      throw new Error('Streaming response body is unavailable');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let completed: (MockInterviewSessionResponse & { followUpAdded?: boolean }) | null = null;
+
+    const processEvent = (block: string) => {
+      let eventName = 'message';
+      const dataLines: string[] = [];
+      block.split(/\r?\n/).forEach((line) => {
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+      });
+      if (!dataLines.length) return;
+      const payload = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+      if (eventName === 'status') callbacks.onStatus?.(String(payload.phase || ''));
+      if (eventName === 'delta') callbacks.onDelta?.(String(payload.text || ''));
+      if (eventName === 'warning') callbacks.onWarning?.(String(payload.message || ''));
+      if (eventName === 'done') {
+        completed = payload as unknown as MockInterviewSessionResponse & { followUpAdded?: boolean };
+        callbacks.onDone?.(completed);
+      }
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        keepAlive();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const blocks = buffer.split(/\r?\n\r?\n/);
+        buffer = blocks.pop() || '';
+        blocks.forEach(processEvent);
+        if (done) break;
+      }
+    } catch (cause) {
+      if ((cause as Error).name === 'AbortError') {
+        throw new Error('The interview response timed out');
+      }
+      throw cause;
+    } finally {
+      window.clearTimeout(inactivityTimer);
+    }
+    if (buffer.trim()) processEvent(buffer);
+    if (!completed) throw new Error('Streaming response ended before the interview state was returned');
+    return completed;
+  },
+
+  completeMockInterviewSession(project: string, sessionId: string) {
+    return request<MockInterviewSessionResponse>(
+      `/api/interview/mock/sessions/${encodeURIComponent(sessionId)}/complete`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ project }),
+      },
+    );
+  },
+
+  stageMockInterviewStoryDrafts(project: string, sessionId: string, candidateIds: string[]) {
+    return request<MockInterviewStoryDraftResponse>(
+      `/api/interview/mock/sessions/${encodeURIComponent(sessionId)}/story-drafts`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ project, candidateIds }),
+      },
+    );
   },
 
   getTaskStatus() {

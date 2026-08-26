@@ -41,6 +41,7 @@ type RailMenu = 'discovery' | 'materials' | 'interview';
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Evidence = lazy(() => import('./pages/Evidence').then((module) => ({ default: module.Evidence })));
 const Interview = lazy(() => import('./pages/Interview').then((module) => ({ default: module.Interview })));
+const MockInterview = lazy(() => import('./pages/MockInterview').then((module) => ({ default: module.MockInterview })));
 const Jobs = lazy(() => import('./pages/Jobs').then((module) => ({ default: module.Jobs })));
 const AccountActivity = lazy(() => import('./pages/AccountActivity').then((module) => ({ default: module.AccountActivity })));
 const Logs = lazy(() => import('./pages/Logs').then((module) => ({ default: module.Logs })));
@@ -94,6 +95,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('Dashboard');
   const [dbPathExpanded, setDbPathExpanded] = useState(false);
   const [selectedInterviewKey, setSelectedInterviewKey] = useState('');
+  const [mockInterviewInitialView, setMockInterviewInitialView] = useState<'setup' | 'history'>('setup');
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [selectedPipelineKey, setSelectedPipelineKey] = useState('');
   const [selectedEvidenceRequirementId, setSelectedEvidenceRequirementId] = useState('');
@@ -122,7 +124,7 @@ export default function App() {
   const [accountProfileProject, setAccountProfileProject] = useState(() => window.localStorage.getItem('bossflow.accountProfileProject') || '');
   const railRef = useRef<HTMLElement>(null);
   const boss = useBossSpider();
-  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Pipeline' || activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'Logs';
+  const isWideWorkspace = activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Pipeline' || activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume' || activeTab === 'Story' || activeTab === 'Interview' || activeTab === 'MockInterview' || activeTab === 'Logs';
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
   const hasUnsavedChanges = boss.isConfigDirty || personalResumeDirty;
   const activeProjectReady = !boss.loading
@@ -342,11 +344,11 @@ export default function App() {
     Dashboard: t('nav.dashboard'), Scope: t('nav.scope'), MatchingRules: t('nav.matchingRules'),
     Jobs: t('nav.jobs'), Pipeline: t('nav.pipeline'),
     Evidence: t('nav.evidence'), PersonalResume: t('nav.personalResume'), Resume: t('nav.resume'), Story: t('nav.story'), AccountActivity: t('accountActivity.title', { defaultValue: 'BOSS 求职记录' }),
-    Interview: t('nav.interview'), Logs: t('nav.logs'), Settings: t('nav.settings'),
+    Interview: t('nav.interview'), MockInterview: t('nav.mockInterview'), Logs: t('nav.logs'), Settings: t('nav.settings'),
   };
   const discoveryActive = activeTab === 'Scope' || activeTab === 'MatchingRules' || activeTab === 'Jobs' || activeTab === 'AccountActivity' || activeTab === 'Logs';
   const materialsActive = activeTab === 'Evidence' || activeTab === 'PersonalResume' || activeTab === 'Resume';
-  const interviewActive = activeTab === 'Interview' || activeTab === 'Story';
+  const interviewActive = activeTab === 'Interview' || activeTab === 'MockInterview' || activeTab === 'Story';
 
   const renderRailFlyout = (menu: RailMenu) => {
     const definitions = {
@@ -372,6 +374,7 @@ export default function App() {
         title: t('nav.stages.interview'),
         items: [
           { tab: 'Interview' as Tab, icon: <MessageSquareText size={16} />, label: t('nav.interview') },
+          { tab: 'MockInterview' as Tab, icon: <Sparkles size={16} />, label: t('nav.mockInterview') },
           { tab: 'Story' as Tab, icon: <BookOpenText size={16} />, label: t('nav.story') },
         ],
       },
@@ -787,6 +790,24 @@ export default function App() {
                   }}
                   onLoadPrep={boss.loadInterviewPrep}
                   onGeneratePrep={boss.generateInterviewPrep}
+                  onOpenMockInterview={(sourceKey, view) => {
+                    if (sourceKey) setSelectedInterviewKey(sourceKey);
+                    setMockInterviewInitialView(view);
+                    setActiveTabStable('MockInterview');
+                  }}
+                />
+              )}
+              {activeTab === 'MockInterview' && (
+                <MockInterview
+                  project={boss.project}
+                  item={boss.interviewItems.find((item) => item.sourceKey === selectedInterviewKey) || boss.interviewItems[0] || null}
+                  initialView={mockInterviewInitialView}
+                  onBack={() => setActiveTabStable('Interview')}
+                  onOpenStoryDraft={(draftId) => {
+                    setDashboardTargetRequestId((value) => value + 1);
+                    setSelectedStoryDraftId(draftId);
+                    setActiveTabStable('Story');
+                  }}
                 />
               )}
               {activeTab === 'Logs' && <Logs status={boss.status} logs={boss.parsedLogs} />}

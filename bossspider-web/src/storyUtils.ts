@@ -65,7 +65,7 @@ export function extractStoryDraftsFromPrep(content: string): InterviewStory[] {
     drafts.push({
       ...emptyStory(title),
       theme: theme || 'CV 可沉淀故事',
-      source: '由面试准备 C. 故事库匹配生成，需用户确认',
+      source: '由面试准备 C. 面试案例库匹配生成，需收录为面试案例',
       tags: [theme].filter(Boolean),
       situation: why ? `待确认匹配背景：${why}` : '',
       task: angle ? `待调整角度：${angle}` : '',

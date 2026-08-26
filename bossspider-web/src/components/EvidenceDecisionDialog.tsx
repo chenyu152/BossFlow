@@ -205,7 +205,7 @@ export function EvidenceDecisionDialog({
             <>
               <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-3 text-xs leading-relaxed text-indigo-200">
                 {t('jobWorkspace.evidence.dialog.capabilityEvidenceHint', {
-                  defaultValue: '这里只确认能够证明该能力的事实和来源。职责、行动与结果属于故事库，不要求在这里重复填写。',
+                  defaultValue: '这里只确认能够证明该能力的事实和来源。职责、行动与结果属于面试案例库，不要求在这里重复填写。',
                 })}
               </div>
               <TextField label={t('jobWorkspace.evidence.dialog.experience')} value={experience} onChange={setExperience} placeholder={t('jobWorkspace.evidence.dialog.experiencePlaceholder')} />

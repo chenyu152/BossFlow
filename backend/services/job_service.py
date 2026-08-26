@@ -288,7 +288,7 @@ def export_jobs_response(rows: list[dict[str, Any]]) -> Response:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "岗位数据"
-    headers = ["岗位名称", "公司名称", "城市", "薪资", "平均薪资(K)", "经验", "学历", "分类", "最后活跃", "详情链接"]
+    headers = ["岗位名称", "公司名称", "城市", "薪资", "平均薪资(K)", "经验", "学历", "分类", "岗位详情", "最后活跃", "详情链接"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(name="Microsoft YaHei", size=11, bold=True, color="FFFFFF")
@@ -305,13 +305,19 @@ def export_jobs_response(rows: list[dict[str, Any]]) -> Response:
                 row["exp"],
                 row["edu"],
                 ", ".join(row["cats"]),
+                row.get("desc", ""),
                 row["lastSeen"],
                 row["url"],
             ]
         )
+    for cell in ws["I"][1:]:
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
     for col in ws.columns:
         width = max(len(str(cell.value or "")) for cell in col) + 3
-        ws.column_dimensions[col[0].column_letter].width = max(10, min(width, 42))
+        if col[0].column_letter == "I":
+            ws.column_dimensions[col[0].column_letter].width = 80
+        else:
+            ws.column_dimensions[col[0].column_letter].width = max(10, min(width, 42))
     out = io.BytesIO()
     wb.save(out)
     return Response(

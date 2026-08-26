@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Any
 
 
@@ -87,9 +88,112 @@ CAPABILITY_DEFINITIONS = (
     ),
     CapabilityDefinition("machine-learning", "机器学习", (), (r"机器学习", r"(?i)machine\s+learning")),
     CapabilityDefinition("deep-learning", "深度学习", (), (r"深度学习", r"(?i)deep\s+learning")),
+    # Demand planning and supply-chain capability pack.  These definitions are
+    # intentionally domain concepts rather than JD phrases, so multiple roles
+    # can reuse the same capability identity while retaining their original
+    # wording on each requirement.
+    CapabilityDefinition(
+        "data-analysis-insights",
+        "数据分析与业务洞察",
+        ("data-analysis", "skill-data-analysis", "req-skill-data-analysis", "business-data-analysis"),
+        (r"数据(?:复盘|处理|统计)?分析", r"业务(?:分析|洞察)", r"(?i)\bdata\s+analysis\b"),
+    ),
+    CapabilityDefinition(
+        "demand-forecasting",
+        "需求预测与预测准确率",
+        ("demand-forecasting-model", "forecast-accuracy", "sales-forecasting"),
+        (r"需求预测", r"销量预测", r"预测准确率", r"预测模型", r"(?i)\bdemand\s+forecast"),
+    ),
+    CapabilityDefinition(
+        "demand-planning",
+        "需求计划编制与滚动管理",
+        ("demand-plan", "rolling-demand-plan", "demand-planning-management"),
+        (
+            r"需求计划(?![^，。；]{0,8}(?:经验|背景))",
+            r"滚动计划",
+            r"滚动预测",
+            r"(?i)\bdemand\s+planning\b(?!\s+experience)",
+        ),
+    ),
+    CapabilityDefinition(
+        "demand-planning-experience",
+        "需求计划经验",
+        ("demand-planner-experience",),
+        (r"需求计划.{0,8}(?:经验|背景)", r"(?i)demand\s+planning\s+experience"),
+    ),
+    CapabilityDefinition(
+        "inventory-management",
+        "库存管理与补货优化",
+        ("inventory-health-management", "inventory-control", "replenishment-management"),
+        (r"库存(?:管理|控制|健康|周转|优化)", r"补货(?:管理|计划|优化)", r"(?i)\binventory\s+(?:management|control|optimization)"),
+    ),
+    CapabilityDefinition(
+        "supply-planning-balancing",
+        "供应计划与供需平衡",
+        ("supply-planning", "supply-demand-balancing", "supply-demand-matching"),
+        (r"供应计划", r"供需(?:平衡|匹配|协同)", r"(?i)\bsupply\s+planning\b"),
+    ),
+    CapabilityDefinition(
+        "sop-ibp",
+        "S&OP / IBP 产销协同",
+        ("sales-operations-planning", "integrated-business-planning", "production-sales-coordination"),
+        (r"(?i)(?<![a-z])s\s*&\s*op(?![a-z])", r"(?i)(?<![a-z])ibp(?![a-z])", r"产销协同"),
+    ),
+    CapabilityDefinition(
+        "order-delivery-logistics",
+        "订单、交付与物流协同",
+        ("order-fulfillment", "delivery-management", "logistics-coordination"),
+        (r"订单(?:履约|管理|交付)", r"交付(?:管理|协同|跟进)", r"物流(?:管理|协同|跟进)"),
+    ),
+    CapabilityDefinition(
+        "supply-chain-risk-management",
+        "供应链风险与异常管理",
+        ("supply-chain-risk", "supply-chain-exception-management", "risk-exception-closure"),
+        (r"供应链.{0,8}(?:风险|异常)", r"(?:风险|异常).{0,8}(?:识别|管理|处理|闭环)"),
+    ),
+    CapabilityDefinition(
+        "cross-functional-collaboration",
+        "跨部门沟通、协同与推动",
+        ("cross-functional-communication", "cross-department-communication", "communication-influence", "cross-functional-coordination"),
+        (r"跨部门(?:沟通|协同|协调|推动)", r"跨团队(?:沟通|协同|协调|推动)", r"(?i)cross[-\s]*functional.{0,12}(?:communication|collaboration|coordination)"),
+    ),
+    CapabilityDefinition(
+        "excel",
+        "Excel",
+        ("excel-proficiency", "skill-excel-advanced", "req-excel-skills", "advanced-excel"),
+        (r"(?i)(?<![a-z])excel(?![a-z])",),
+    ),
+    CapabilityDefinition(
+        "business-intelligence",
+        "BI 可视化工具",
+        ("bi-tools", "data-visualization", "power-bi", "tableau"),
+        (r"(?i)(?<![a-z])power\s*bi(?![a-z])", r"(?i)(?<![a-z])tableau(?![a-z])", r"BI\s*(?:工具|报表|可视化)", r"数据可视化"),
+    ),
+    CapabilityDefinition(
+        "erp-systems",
+        "ERP / SAP / Oracle",
+        ("erp", "sap", "oracle-erp"),
+        (r"(?i)(?<![a-z])erp(?![a-z])", r"(?i)(?<![a-z])sap(?![a-z])", r"(?i)oracle\s*(?:erp|系统)"),
+    ),
+    CapabilityDefinition(
+        "supplier-procurement-collaboration",
+        "供应商与采购协同",
+        ("supplier-management", "procurement-collaboration"),
+        (r"供应商(?:管理|协同|沟通)", r"采购(?:协同|配合|管理)"),
+    ),
+    CapabilityDefinition(
+        "promotion-new-product-forecasting",
+        "促销、新品与活动预测",
+        ("promotion-forecasting", "new-product-forecasting", "event-forecasting"),
+        (r"促销.{0,8}(?:预测|计划)", r"新品.{0,8}(?:预测|计划)", r"活动.{0,8}(?:预测|备货)"),
+    ),
 )
 
 DEFINITION_BY_KEY = {definition.key: definition for definition in CAPABILITY_DEFINITIONS}
+CAPABILITY_DEFINITION_CATEGORIES = {
+    "cross-functional-collaboration": "behavior",
+    "demand-planning-experience": "experience",
+}
 
 CAPABILITY_KEY_ALIASES: dict[str, str] = {
     alias: definition.key
@@ -118,6 +222,10 @@ CAPABILITY_KEY_ALIASES.update(
         "high-concurrency-availability": "high-concurrency",
     }
 )
+
+
+def capability_definition_category(key: str) -> str:
+    return CAPABILITY_DEFINITION_CATEGORIES.get(key, "skill")
 
 PROFICIENCY_PATTERNS = (
     ("expert", (r"精通", r"专家级", r"(?i)\bexpert\b")),
@@ -201,6 +309,148 @@ def canonicalize_capability_key(value: Any, category: Any = "", capability_name:
         return "education-background"
     key = normalize_canonical_key(value or capability_name)
     return CAPABILITY_KEY_ALIASES.get(key, key)
+
+
+_GENERIC_KEY_PARTS = {"req", "requirement", "capability", "ability"}
+_GENERIC_NAME_SUFFIXES = (
+    "相关开发经验", "相关工作经验", "项目实践经验", "项目经验", "开发经验", "工作经验",
+    "实践经验", "相关经验", "经验", "相关能力", "能力", "技能",
+)
+
+
+def capability_identity_fingerprint(value: Any, category: Any = "") -> str:
+    """Return a conservative identity fingerprint for exact alias reuse.
+
+    This intentionally does not collapse arbitrary parent/child concepts.  It
+    only removes presentation noise (req/skill prefixes, proficiency wording,
+    and generic suffixes) so concurrent evaluations cannot create trivial
+    variants such as ``skill-data-analysis`` and ``req-data-analysis``.
+    """
+    text = unicodedata.normalize("NFKC", str(value or "")).strip().lower()
+    text = re.sub(
+        r"^(?:熟练掌握|熟练使用|深入掌握|精通|熟练|掌握|熟悉|了解|具备|拥有|具有)\s*",
+        "",
+        text,
+    )
+    for suffix in _GENERIC_NAME_SUFFIXES:
+        if text.endswith(suffix) and len(text) > len(suffix):
+            text = text[:-len(suffix)].strip()
+            break
+    key = normalize_canonical_key(text)
+    parts = [part for part in key.split("-") if part]
+    category_value = str(category or "").strip().lower()
+    removable = set(_GENERIC_KEY_PARTS)
+    if category_value == "skill":
+        removable.add("skill")
+    while parts and parts[0] in removable:
+        parts.pop(0)
+    while parts and parts[-1] in removable:
+        parts.pop()
+    return "-".join(parts)
+
+
+def find_catalog_capability(
+    requirement: dict[str, Any],
+    catalog: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Find a safe existing capability identity for a new requirement.
+
+    The result is deliberately high precision: deterministic definitions and
+    exact fingerprints are accepted, while fuzzy similarity is only used for
+    near-identical spelling variants.  Related or hierarchical concepts remain
+    separate and can be reviewed later.
+    """
+    category = str(requirement.get("category") or "other").strip().lower()
+    raw_key = canonicalize_capability_key(
+        requirement.get("canonicalKey"),
+        category,
+        str(requirement.get("capabilityName") or requirement.get("label") or ""),
+    )
+    if raw_key in DEFINITION_BY_KEY:
+        return {"canonicalKey": raw_key, "capabilityName": DEFINITION_BY_KEY[raw_key].label, "category": category}
+
+    fingerprints = {
+        capability_identity_fingerprint(requirement.get("canonicalKey"), category),
+        capability_identity_fingerprint(requirement.get("capabilityName"), category),
+    }
+    fingerprints.discard("")
+    best: tuple[float, dict[str, Any]] | None = None
+    for candidate in catalog:
+        candidate_category = str(candidate.get("category") or "other").strip().lower()
+        if category not in {"", "other"} and candidate_category not in {category, "other"}:
+            continue
+        candidate_values = [
+            candidate.get("canonicalKey"),
+            candidate.get("capabilityName"),
+            candidate.get("label"),
+            *(candidate.get("aliases") or []),
+        ]
+        candidate_fingerprints = {
+            capability_identity_fingerprint(value, candidate_category)
+            for value in candidate_values
+            if value
+        }
+        candidate_fingerprints.discard("")
+        if fingerprints & candidate_fingerprints:
+            return candidate
+        for left in fingerprints:
+            for right in candidate_fingerprints:
+                if min(len(left), len(right)) < 8:
+                    continue
+                score = SequenceMatcher(None, left, right).ratio()
+                if score >= 0.96 and (best is None or score > best[0]):
+                    best = (score, candidate)
+    return best[1] if best else None
+
+
+def reuse_catalog_capability(
+    requirement: dict[str, Any],
+    catalog: list[dict[str, Any]],
+) -> dict[str, Any]:
+    result = dict(requirement)
+    matched = find_catalog_capability(result, catalog)
+    if not matched:
+        return result
+    canonical_key = canonicalize_capability_key(
+        matched.get("canonicalKey"),
+        matched.get("category"),
+        str(matched.get("capabilityName") or matched.get("label") or ""),
+    )
+    if not canonical_key:
+        return result
+    result["canonicalKey"] = canonical_key
+    result["capabilityName"] = canonical_capability_label(
+        canonical_key,
+        str(matched.get("capabilityName") or matched.get("label") or result.get("capabilityName") or result.get("label") or ""),
+    )
+    return result
+
+
+def reconcile_requirement_assessments(
+    items: list[dict[str, Any]],
+    catalog: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Atomicize and reconcile assessments against the latest catalog.
+
+    Callers should build ``catalog`` while holding the evidence-store lock.  In
+    that position this becomes a commit-time uniqueness check: concurrent LLM
+    calls may start with the same stale prompt catalog, but each completed
+    result is reconciled against everything committed before it.
+    """
+    reconciled: list[dict[str, Any]] = []
+    working_catalog = [dict(item) for item in catalog]
+    for item in items:
+        for atom in atomicize_requirement(item):
+            normalized = reuse_catalog_capability(atom, working_catalog)
+            reconciled.append(normalized)
+            key = str(normalized.get("canonicalKey") or "")
+            if key and not any(str(existing.get("canonicalKey") or "") == key for existing in working_catalog):
+                working_catalog.append({
+                    "canonicalKey": key,
+                    "capabilityName": str(normalized.get("capabilityName") or normalized.get("label") or key),
+                    "category": str(normalized.get("category") or "other"),
+                })
+    return merge_requirement_assessments(reconciled)
 
 
 def matching_capability_definitions(text: str) -> list[tuple[CapabilityDefinition, tuple[int, int]]]:
@@ -330,6 +580,7 @@ def atomicize_requirement(requirement: dict[str, Any]) -> list[dict[str, Any]]:
     if len(matches) > 1:
         atoms: list[dict[str, Any]] = []
         for definition, span in matches:
+            atom_category = capability_definition_category(definition.key)
             level = _proficiency_near(
                 source_text,
                 span,
@@ -338,25 +589,38 @@ def atomicize_requirement(requirement: dict[str, Any]) -> list[dict[str, Any]]:
             atoms.append(
                 _finalize_requirement_semantics({
                     **raw,
+                    "category": atom_category,
                     "canonicalKey": definition.key,
                     "capabilityName": definition.label,
                     "requiredProficiency": level,
                     "requiredProficiencySource": str(raw.get("requiredProficiencySource") or "").strip(),
                     "atomicizedFrom": str(raw.get("canonicalKey") or "").strip(),
-                }, category)
+                }, atom_category)
             )
         return atoms
 
     if matches:
         definition, span = matches[0]
+        category = capability_definition_category(definition.key)
         normalized_key = normalize_canonical_key(raw.get("canonicalKey"))
         mapped_key = CAPABILITY_KEY_ALIASES.get(normalized_key, normalized_key)
-        key = definition.key if mapped_key == definition.key else mapped_key
-        name = (
-            definition.label
-            if key == definition.key
-            else canonical_capability_label(key, capability_name or label)
-        )
+        exact_identity = capability_identity_fingerprint(
+            capability_name or label,
+            category,
+        ) in {
+            capability_identity_fingerprint(definition.key, category),
+            capability_identity_fingerprint(definition.label, category),
+        }
+        # Override a model key only for an explicit alias or an exact identity.
+        # A partial pattern match (Python in "Python + FastAPI", Go in
+        # "Go concurrency") is not enough and must retain the more specific
+        # atomic identity until a dedicated definition or review exists.
+        if mapped_key == definition.key or exact_identity:
+            key = definition.key
+            name = definition.label
+        else:
+            key = mapped_key
+            name = canonical_capability_label(key, capability_name or label)
         proficiency = _proficiency_near(source_text, span, raw.get("requiredProficiency"))
     else:
         key = canonicalize_capability_key(raw.get("canonicalKey"), category, capability_name or label)

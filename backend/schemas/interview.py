@@ -36,6 +36,15 @@ class InterviewStoryDraftPayload(InterviewStoryPayload):
     updatedAt: str = ""
     promotedAt: str = ""
     promotedStoryId: str = ""
+    sourceType: str = ""
+    sessionId: str = ""
+    questionIds: list[str] = []
+    rawAnswerSnapshot: list[dict] = []
+    assisted: bool = False
+    missingFields: list[str] = []
+    contradictionFlags: list[str] = []
+    linkedRequirementIds: list[str] = []
+    extractionConfidence: float = 0.0
 
 
 class StoryDraftsSaveRequest(BaseModel):
